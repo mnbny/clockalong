@@ -25,11 +25,13 @@ pub const CLINEAR_AUTH_STATE_CHANGED_EVENT: &str = "clinear-auth:state-changed";
 const CLOCKIFY_CURRENT_USER_URL: &str = "https://api.clockify.me/api/v1/user";
 const LINEAR_AUTHORIZE_URL: &str = "https://linear.app/oauth/authorize";
 const LINEAR_CLIENT_ID: &str = "1ef17fb4bbef1626a5f1f838843e067c";
+const LINEAR_REVOKE_URL: &str = "https://api.linear.app/oauth/revoke";
 const LINEAR_TOKEN_URL: &str = "https://api.linear.app/oauth/token";
 const LINEAR_CALLBACK_PORTS: [u16; 3] = [53682, 53683, 53684];
 const LINEAR_SCOPE: &str = "read";
 const LINEAR_ACCESS_TOKEN_REFRESH_SKEW_SECONDS: i64 = 300;
 const LINEAR_CALLBACK_TIMEOUT_SECONDS: u64 = 180;
+const LINEAR_REVOKE_TIMEOUT_SECONDS: u64 = 10;
 
 pub struct ClinearAuthState {
     snapshot: Mutex<ClinearAuthSnapshot>,
@@ -55,6 +57,14 @@ pub struct ClinearAuthStartResult {
 pub struct ClinearAuthConnectionResult {
     provider: &'static str,
     status: &'static str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClinearAuthDisconnectResult {
+    provider: &'static str,
+    status: &'static str,
+    revocation_status: &'static str,
 }
 
 #[derive(Clone, Serialize)]
@@ -271,6 +281,34 @@ pub async fn clinear_auth_get_linear_access_token<R: Runtime>(
             Err(error.to_string())
         }
     }
+}
+
+#[tauri::command]
+pub async fn clinear_auth_disconnect_linear<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<ClinearAuthDisconnectResult, String> {
+    auth_log("clinear_auth_disconnect_linear: disconnect requested");
+    let tokens = read_linear_tokens(&app)?;
+    let revocation_status = match tokens.as_ref() {
+        Some(tokens) => revoke_linear_tokens(tokens).await,
+        None => {
+            auth_log("clinear_auth_disconnect_linear: no stored tokens to revoke");
+            LinearRevocationStatus::Skipped
+        }
+    };
+
+    remove_stronghold_value(&app, StrongholdKey::LinearOAuthTokens)?;
+    set_linear_authenticated(&app, false)?;
+    auth_log(&format!(
+        "clinear_auth_disconnect_linear: local disconnect complete revocation_status={}",
+        revocation_status.as_str()
+    ));
+
+    Ok(ClinearAuthDisconnectResult {
+        provider: "linear",
+        status: "disconnected",
+        revocation_status: revocation_status.as_str(),
+    })
 }
 
 #[tauri::command]
@@ -842,6 +880,52 @@ fn is_invalid_linear_auth_status(status: StatusCode) -> bool {
     )
 }
 
+async fn revoke_linear_tokens(tokens: &LinearOAuthTokens) -> LinearRevocationStatus {
+    let mut revocation_status = LinearRevocationStatus::Confirmed;
+
+    if let Err(error) = revoke_linear_token(&tokens.refresh_token, "refresh_token").await {
+        auth_log(&format!(
+            "revoke_linear_tokens: refresh token revocation failed: {error}"
+        ));
+        revocation_status = LinearRevocationStatus::Failed;
+    }
+
+    if let Err(error) = revoke_linear_token(&tokens.access_token, "access_token").await {
+        auth_log(&format!(
+            "revoke_linear_tokens: access token revocation failed: {error}"
+        ));
+        revocation_status = LinearRevocationStatus::Failed;
+    }
+
+    revocation_status
+}
+
+async fn revoke_linear_token(token: &str, token_type_hint: &str) -> Result<(), String> {
+    auth_log(&format!(
+        "revoke_linear_token: revoking token_type_hint={token_type_hint} token_len={}",
+        token.len()
+    ));
+    let params = [("token", token), ("token_type_hint", token_type_hint)];
+    let response = reqwest::Client::new()
+        .post(LINEAR_REVOKE_URL)
+        .timeout(Duration::from_secs(LINEAR_REVOKE_TIMEOUT_SECONDS))
+        .form(&params)
+        .send()
+        .await
+        .map_err(to_error_message)?;
+    let status = response.status();
+
+    auth_log(&format!(
+        "revoke_linear_token: revoke response status={status} token_type_hint={token_type_hint}"
+    ));
+
+    if status.is_success() {
+        return Ok(());
+    }
+
+    Err(format!("Linear returned {status}"))
+}
+
 fn write_linear_tokens<R: Runtime>(
     app: &AppHandle<R>,
     token_response: LinearTokenResponse,
@@ -1143,6 +1227,22 @@ impl LinearAuthError {
 impl fmt::Display for LinearAuthError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.message)
+    }
+}
+
+enum LinearRevocationStatus {
+    Confirmed,
+    Failed,
+    Skipped,
+}
+
+impl LinearRevocationStatus {
+    const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Confirmed => "confirmed",
+            Self::Failed => "failed",
+            Self::Skipped => "skipped",
+        }
     }
 }
 

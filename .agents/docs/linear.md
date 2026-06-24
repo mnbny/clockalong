@@ -61,6 +61,10 @@ OAuth endpoints:
 - Token: `https://api.linear.app/oauth/token`
 - Revoke: `https://api.linear.app/oauth/revoke`
 
+During Linear disconnect, send the token in the `token` form field. Use `token_type_hint=refresh_token` for the stored
+refresh token and `token_type_hint=access_token` for the current access token. Local disconnect still wins if Linear
+revocation fails: clear local tokens, emit auth state, and show a warning toast.
+
 OAuth requirements and defaults relevant to Clinear:
 
 - Use `response_type=code`.

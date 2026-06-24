@@ -203,10 +203,13 @@ disconnected for the failed check, and surface the error.
 
 ## Disconnect
 
-Each provider should eventually have a disconnect action because it makes local testing and user recovery easier.
+Use "Disconnect" for provider auth removal rather than web-app "logout" language.
 
-Disconnect should clear local credentials, clear auth metadata, emit an auth-state change, and show a toast. Provider
-side revocation is useful but can come after the local credential-clearing path works.
+Linear disconnect is local-first and provider revocation is best effort. Rust should try to revoke the stored refresh
+token with `token_type_hint=refresh_token`, then try the current access token with `token_type_hint=access_token`. It
+should clear local Linear credentials, clear auth metadata, and emit an auth-state change even if provider revocation
+fails. The frontend should show a success toast when revocation is confirmed or skipped, and a warning toast when only
+the local disconnect is confirmed.
 
 ## Open implementation choices
 

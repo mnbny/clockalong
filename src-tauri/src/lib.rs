@@ -72,6 +72,7 @@ pub fn run() {
             app_initialization::app_get_initialization_state,
             clinear_auth::clinear_auth_clear_clockify_authentication,
             clinear_auth::clinear_auth_connect_clockify_api_key,
+            clinear_auth::clinear_auth_disconnect_linear,
             clinear_auth::clinear_auth_get_linear_access_token,
             clinear_auth::clinear_auth_get_state,
             clinear_auth::clinear_auth_get_clockify_api_key,
