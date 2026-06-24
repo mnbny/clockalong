@@ -1,0 +1,79 @@
+@import '@fontsource-variable/intel-one-mono';
+@import '@fontsource-variable/oxanium';
+@import 'tailwindcss';
+
+@plugin 'daisyui' {
+  themes:
+    night --default --prefersdark,
+    winter;
+}
+
+@theme {
+  --font-sans:
+    'Oxanium Variable', Oxanium, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono:
+    'Intel One Mono Variable', 'Intel One Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
+}
+
+@layer base {
+  html {
+    width: 100dvw;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  :root {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 400;
+
+    color: var(--color-base-content);
+    background-color: var(--color-base-100);
+
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    width: 100dvw;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  #root {
+    width: 100dvw;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  [data-tauri-drag-region] {
+    -webkit-app-region: drag;
+    app-region: drag;
+    user-select: none;
+  }
+
+  [data-tauri-drag-region] :is(a, button, input, label, select, textarea, [role='button'], .btn) {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+
+  a {
+    font-weight: 500;
+    text-decoration: inherit;
+  }
+
+  input,
+  button {
+    outline: none;
+  }
+
+  .tabler-icon {
+    flex-shrink: 0;
+    vertical-align: -0.125em;
+  }
+}
