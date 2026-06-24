@@ -1,8 +1,8 @@
-# Clinear
+<p align="center">
+  <img width="360" alt="Clinear logo" src="https://github.com/user-attachments/assets/7227bf3f-9ccb-4a81-8bd3-6ed619b94019" />
+</p>
 
-
-<img width="1254" height="1254" alt="clinear logo" src="https://github.com/user-attachments/assets/7227bf3f-9ccb-4a81-8bd3-6ed619b94019" />
-
+<h1 align="center">Clinear</h1>
 
 Clinear is a desktop app for tracking time against Linear issues in Clockify.
 
