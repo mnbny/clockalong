@@ -2,4 +2,5 @@
 set -eu
 
 asdf install
-pnpm setup
+pnpm install --config.confirmModulesPurge=false
+pnpm run tauri:prebuild
