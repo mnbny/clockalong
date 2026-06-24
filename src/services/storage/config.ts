@@ -1,3 +1,7 @@
+import {
+  defaultClockifyDescriptionTemplate,
+  defaultClockifyDescriptionTemplateFallback,
+} from '../clockify/descriptionTemplate'
 import { type StorageConfig, StorageService } from './storage'
 
 export const storagePath = 'settings.json'
@@ -31,6 +35,16 @@ const storageConfig = {
   desktopAlerts: {
     type: 'boolean',
     default: true,
+    version: 1,
+  },
+  clockifyDescriptionTemplate: {
+    type: 'string',
+    default: defaultClockifyDescriptionTemplate,
+    version: 1,
+  },
+  clockifyDescriptionTemplateFallback: {
+    type: 'string',
+    default: defaultClockifyDescriptionTemplateFallback,
     version: 1,
   },
   displayName: {

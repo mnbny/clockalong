@@ -12,6 +12,7 @@ import {
   type ClockifyDescriptionTemplateToken,
   clockifyDescriptionTemplateTokenGroups,
   defaultClockifyDescriptionTemplate,
+  defaultClockifyDescriptionTemplateFallback,
   formatClockifyDescriptionTemplate,
   getUnknownClockifyDescriptionTemplateTokens,
   sampleClockifyDescriptionTemplateValues,
@@ -42,6 +43,11 @@ function SettingsScreen() {
   const [density, setDensity] = useStorage('density')
   const [clockifyDescriptionTemplate, setClockifyDescriptionTemplate, resetClockifyDescriptionTemplate] =
     useStorage('clockifyDescriptionTemplate')
+  const [
+    clockifyDescriptionTemplateFallback,
+    setClockifyDescriptionTemplateFallback,
+    resetClockifyDescriptionTemplateFallback,
+  ] = useStorage('clockifyDescriptionTemplateFallback')
   const [appLogsDrawerOpen, setAppLogsDrawerOpen] = useState(false)
   const appLogs = useTauriAppLogs({ enabled: appLogsDrawerOpen })
   const displayedAppLogs = useMemo(() => filterDisplayedAppLogs(appLogs.value.contents), [appLogs.value.contents])
@@ -169,9 +175,13 @@ function SettingsScreen() {
                 label="Entry description"
                 description="Format used when creating time entries from Linear issues.">
                 <ClockifyDescriptionTemplateEditor
+                  fallback={clockifyDescriptionTemplateFallback}
                   value={clockifyDescriptionTemplate}
-                  onReset={resetClockifyDescriptionTemplate}
+                  onReset={async () => {
+                    await Promise.all([resetClockifyDescriptionTemplate(), resetClockifyDescriptionTemplateFallback()])
+                  }}
                   onSave={setClockifyDescriptionTemplate}
+                  onSaveFallback={setClockifyDescriptionTemplateFallback}
                 />
               </SettingsRow>
             </SettingsSection>
@@ -292,30 +302,45 @@ function SettingsScreen() {
 }
 
 type ClockifyDescriptionTemplateEditorProps = {
+  fallback: string
   value: string
   onReset: () => Promise<void>
   onSave: (value: string) => Promise<void>
+  onSaveFallback: (value: string) => Promise<void>
 }
 
-function ClockifyDescriptionTemplateEditor({ value, onReset, onSave }: ClockifyDescriptionTemplateEditorProps) {
+function ClockifyDescriptionTemplateEditor({
+  fallback,
+  value,
+  onReset,
+  onSave,
+  onSaveFallback,
+}: ClockifyDescriptionTemplateEditorProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [draft, setDraft] = useState(value)
+  const [fallbackDraft, setFallbackDraft] = useState(fallback)
   const normalizedDraft = draft.trim()
+  const normalizedFallbackDraft = fallbackDraft.trim()
   const unknownTokens = useMemo(() => getUnknownClockifyDescriptionTemplateTokens(draft), [draft])
   const preview = useMemo(
     () =>
       formatClockifyDescriptionTemplate(
         draft || defaultClockifyDescriptionTemplate,
         sampleClockifyDescriptionTemplateValues,
+        { fallback: normalizedFallbackDraft || defaultClockifyDescriptionTemplateFallback },
       ),
-    [draft],
+    [draft, normalizedFallbackDraft],
   )
   const invalid = !normalizedDraft || unknownTokens.length > 0
-  const changed = draft !== value
+  const changed = draft !== value || fallbackDraft !== fallback
 
   useEffect(() => {
     setDraft(value)
   }, [value])
+
+  useEffect(() => {
+    setFallbackDraft(fallback)
+  }, [fallback])
 
   const insertToken = (token: ClockifyDescriptionTemplateToken) => {
     const input = inputRef.current
@@ -344,7 +369,7 @@ function ClockifyDescriptionTemplateEditor({ value, onReset, onSave }: ClockifyD
     }
 
     try {
-      await onSave(normalizedDraft)
+      await Promise.all([onSave(normalizedDraft), onSaveFallback(normalizedFallbackDraft)])
       appToast.success('Clockify description format saved')
     } catch (error) {
       appToast.error('Could not save description format', {
@@ -357,6 +382,7 @@ function ClockifyDescriptionTemplateEditor({ value, onReset, onSave }: ClockifyD
     try {
       await onReset()
       setDraft(defaultClockifyDescriptionTemplate)
+      setFallbackDraft(defaultClockifyDescriptionTemplateFallback)
       appToast.success('Clockify description format reset')
     } catch (error) {
       appToast.error('Could not reset description format', {
@@ -367,15 +393,40 @@ function ClockifyDescriptionTemplateEditor({ value, onReset, onSave }: ClockifyD
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <label className={cx('textarea textarea-primary block h-auto w-full p-0', invalid && 'textarea-error')}>
+      <fieldset className="fieldset">
+        <legend className="fieldset-legend">Format</legend>
         <textarea
           ref={inputRef}
           aria-label="Clockify entry description format"
-          className="min-h-20 w-full resize-y bg-transparent p-3 font-mono text-sm outline-none"
+          className={cx(
+            'textarea textarea-primary min-h-20 w-full resize-y font-mono text-sm',
+            invalid && 'textarea-error',
+          )}
           value={draft}
           onChange={event => setDraft(event.currentTarget.value)}
         />
-      </label>
+
+        {unknownTokens.length > 0 ? (
+          <p className="fieldset-label text-error">
+            Unknown {unknownTokens.length === 1 ? 'variable' : 'variables'}:{' '}
+            {unknownTokens.map(token => `{${token}}`).join(', ')}
+          </p>
+        ) : null}
+
+        {!normalizedDraft ? <p className="fieldset-label text-error">Description format is required.</p> : null}
+      </fieldset>
+
+      <fieldset className="fieldset w-full max-w-xs">
+        <legend className="fieldset-legend">Fallback</legend>
+        <input
+          aria-label="Clockify entry description fallback"
+          className="input input-primary input-sm font-mono text-sm"
+          type="text"
+          value={fallbackDraft}
+          onChange={event => setFallbackDraft(event.currentTarget.value)}
+        />
+        <p className="fieldset-label">Used when a Linear value is missing or empty.</p>
+      </fieldset>
 
       <div className="bg-base-200 rounded-box min-w-0 p-3">
         <div className="text-base-content/60 text-xs leading-5 font-medium">Preview</div>
@@ -383,15 +434,6 @@ function ClockifyDescriptionTemplateEditor({ value, onReset, onSave }: ClockifyD
           {preview || defaultClockifyDescriptionTemplate}
         </div>
       </div>
-
-      {unknownTokens.length > 0 ? (
-        <p className="text-error text-xs leading-5">
-          Unknown {unknownTokens.length === 1 ? 'variable' : 'variables'}:{' '}
-          {unknownTokens.map(token => `{${token}}`).join(', ')}
-        </p>
-      ) : null}
-
-      {!normalizedDraft ? <p className="text-error text-xs leading-5">Description format is required.</p> : null}
 
       <div className="flex flex-col gap-3">
         {clockifyDescriptionTemplateTokenGroups.map(group => (

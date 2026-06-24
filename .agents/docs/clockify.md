@@ -54,6 +54,21 @@ Clockify permissions follow the authenticated user's Clockify role and workspace
 user key can manage that user's own timer and time entries. Admin-style workspace operations may fail unless the user has
 the required Clockify role.
 
+## Entry descriptions
+
+Clinear builds Clockify time-entry descriptions from the user-configured Linear issue template in
+`src/services/clockify/descriptionTemplate.ts`.
+
+- Default template: `{identifier}: {title}`.
+- Template variables use single braces and must be explicitly listed by `ClockifyDescriptionTemplateToken`.
+- The settings UI exposes the v1 token set that belongs in Clockify descriptions.
+- Missing, `null`, `undefined`, and empty string values use the configured fallback.
+- The default fallback is `n/a`; numeric `0` remains a real value.
+- Template and fallback preferences are stored through `useStorage` as `clockifyDescriptionTemplate` and
+  `clockifyDescriptionTemplateFallback`.
+- Timer creation should format from the assigned-issue list DTO when possible. Do not fetch full issue details only to
+  build the Clockify description.
+
 ## Client strategy
 
 Clockify does not publish an official TypeScript or Rust SDK for the API-key workflow. Clinear uses Zodios for the
