@@ -638,7 +638,7 @@ function getThemeLabel(theme: ThemeOption) {
   switch (theme.theme) {
     case 'abyss':
       return 'Dark'
-    case 'autumn':
+    case 'emerald':
       return 'Light'
   }
 }

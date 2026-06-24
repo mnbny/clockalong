@@ -40,6 +40,8 @@ The app exposes two narrow commands for diagnostics UI:
   aggregate counts, cursor presence, state-type counts, linked-ticket counts, and top identifiers. Do not log issue
   titles, descriptions, assignee names, or credential values.
 - `[clockify api]`: Clockify REST request diagnostics. Keep request bodies summarized and scrubbed to operational fields.
+  Time-tracking lifecycle and ticket-summary diagnostics use the same prefix with subphrases such as `timer ...` and
+  `ticket summaries ...`.
 
 ## Settings UI
 

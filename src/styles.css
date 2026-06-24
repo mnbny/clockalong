@@ -5,7 +5,7 @@
 @plugin 'daisyui' {
   themes:
     abyss --default --prefersdark,
-    autumn;
+    emerald;
 }
 
 @theme {
@@ -75,5 +75,28 @@
   .tabler-icon {
     flex-shrink: 0;
     vertical-align: -0.125em;
+  }
+}
+
+@layer components {
+  .time-tracking-action-button {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+    pointer-events: auto;
+  }
+
+  .tracking-active-row > :is(td, th) {
+    animation: tracking-active-row-background 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes tracking-active-row-background {
+  0%,
+  100% {
+    background-color: color-mix(in oklab, var(--color-accent) 50%, transparent);
+  }
+
+  50% {
+    background-color: color-mix(in oklab, var(--color-accent) 20%, transparent);
   }
 }

@@ -103,7 +103,7 @@ function RootLayout() {
                 void setTheme(
                   event.currentTarget.checked
                     ? { theme: 'abyss', appearance: 'dark' }
-                    : { theme: 'autumn', appearance: 'light' },
+                    : { theme: 'emerald', appearance: 'light' },
                 )
               }
             />

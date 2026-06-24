@@ -45,7 +45,8 @@ The API is broad and documented through Redoc plus an OpenAPI 3 spec. The endpoi
 - `GET /v1/workspaces/{workspaceId}/projects/{projectId}/tasks`: list tasks if Clinear maps Linear issues to tasks.
 - `POST /v1/workspaces/{workspaceId}/time-entries`: create or start a time entry.
 - `GET /v1/workspaces/{workspaceId}/time-entries/status/in-progress`: inspect running timers in a workspace.
-- `GET /v1/workspaces/{workspaceId}/user/{userId}/time-entries`: read a user's time entries when entry-level data is needed.
+- `GET /v1/workspaces/{workspaceId}/user/{userId}/time-entries`: read a user's time entries when entry-level data is
+  needed, including dashboard per-ticket `Tracked` and `Total` summaries.
 - `PATCH /v1/workspaces/{workspaceId}/user/{userId}/time-entries`: stop the currently running timer for a user.
 - `POST /v1/workspaces/{workspaceId}/reports/detailed`: generate detailed reports for reconciliation.
 - `POST /v1/workspaces/{workspaceId}/reports/summary`: generate grouped summaries.
@@ -110,6 +111,8 @@ The Clinear setup lives under `src/services/clockify/`:
 - `generated/clockify.ts`: generated Zodios client and exported schema/type definitions.
 - `generated/reports.ts`: generated Zodios client for Clockify's reports host.
 - `client.ts`: app-facing client factories and default client instances.
+- `projects.ts`: project-list helpers for selecting the default Clockify project.
+- `ticketSummaries.ts`: dashboard aggregation of linked Clockify time entries by Linear issue.
 - `index.ts`: public exports for Clockify service code.
 
 Polybot reference points:

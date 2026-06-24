@@ -62,8 +62,9 @@ Implementation constraints:
 - Fetch assignee display fields and avatar fields for the row avatar.
 
 The current dashboard row DTO is intentionally small: identifier, title, created/updated timestamps, status, assignee,
-and placeholder tracking fields. Full issue descriptions, labels, comments, and project/cycle detail should be fetched
-only for future detail surfaces that actually need them.
+and nullable tracking fields. Linear fetches initialize tracking fields as empty; the dashboard fills them by merging
+Clockify ticket summaries keyed by Linear issue ID. Full issue descriptions, labels, comments, and project/cycle detail
+belong in future detail surfaces that actually need them.
 
 Linear workflow states expose one `color` hex value. The API does not provide separate light/dark status tokens. Clinear
 uses that color directly for the status badge background and computes a contrasting foreground locally.

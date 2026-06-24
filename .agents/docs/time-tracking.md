@@ -57,7 +57,8 @@ Recency should stay functional and restrained. The important data is:
 - ticket status
 
 Use Day.js relative time for the ticket row's last-tracked value and `humanize-duration` for total tracked duration.
-Until Clockify entry aggregation is wired, these values remain placeholders on Linear rows.
+Clockify entry aggregation is wired through Clinear's local entry-link registry. Rows without linked Clockify entries
+show a restrained placeholder rather than guessing from Clockify descriptions.
 
 ## Dashboard ticket table
 
@@ -66,12 +67,17 @@ scanning.
 
 Current columns:
 
+- action: no visible heading. Shows a start button for inactive rows and a stop button for the row linked to the current
+  running Clockify timer.
 - `ID`: Linear identifier, bold monospace.
 - `Status`: Linear status name in a badge using Linear's status color with locally computed contrasting text.
 - `Ticket`: Linear title.
-- `Assignee`: avatar plus display name, using the same font weight as the ticket title.
 - `Tracked`: relative last tracked time.
 - `Total`: total tracked duration.
+
+Make the active tracked row visible without changing table density. Use a subtle accent background animation on the row
+and switch that row's action button to stop. Keep the stop control visually consistent with the start control; use
+DaisyUI's error color for the icon/hover treatment rather than a filled destructive button.
 
 ## Clockify dashboard widget
 
@@ -91,6 +97,14 @@ approval, profit, or reconciliation yet. Those concepts may matter later, but th
 Fetch the running timer from Clockify time entries with a tiny page size. Fetch today, week, and month totals from
 Clockify summary reports, not by loading broad time-entry pages and aggregating in the webview.
 
+The status badge has only two states:
+
+- `Running`: DaisyUI `badge-success`, pulsing.
+- `Not Running`: DaisyUI `badge-error`.
+
+Do not add separate loading or unavailable labels to this badge. The fallback visual state is `Not Running`; use logs,
+spinners, or toasts for errors and loading when they help.
+
 ## Clockify entry links
 
 Clockify does not provide a first-class Linear issue link. Treat Clinear's local link registry as the canonical mapping
@@ -109,6 +123,25 @@ Clockify and Linear fields from Linear. The registry only answers which Linear t
 
 Clockify descriptions should still include the Linear identifier for human readability and search, but descriptions are
 not the source of truth for links.
+
+## Per-ticket Clockify summaries
+
+`src/services/clockify/ticketSummaries.ts` owns the Clockify aggregation used by the dashboard's `Tracked` and `Total`
+columns.
+
+Current behavior:
+
+- Reads `clockifyLinearEntryLinks` to know which Clockify entry IDs belong to which Linear issue IDs.
+- Fetches user Clockify time entries from the earliest linked timestamp forward, plus the current running entry.
+- Matches only entries whose IDs exist in the local link registry.
+- Produces summaries keyed by Linear issue ID: `{ lastTrackedAt, totalTrackedSeconds }`.
+- The dashboard merges those summaries into the compact Linear ticket DTO before sorting and rendering.
+
+Do not parse Clockify descriptions to infer links in this path. Description parsing can be a future migration/import
+tool, but it should not become the normal source of truth for the table.
+
+The Linear table refresh button should refresh both assigned Linear tickets and Clockify ticket summaries. Refreshing
+only Linear leaves `Tracked` and `Total` stale.
 
 ## Controls
 

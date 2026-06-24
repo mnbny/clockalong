@@ -9,9 +9,10 @@ import { type StorageConfig, StorageService } from './storage'
 export const storagePath = 'settings.json'
 export const themeOptions = [
   { theme: 'abyss', appearance: 'dark' },
-  { theme: 'autumn', appearance: 'light' },
+  { theme: 'emerald', appearance: 'light' },
 ] as const
 export const defaultViewOptions = ['dashboard', 'recent', 'active'] as const
+export const linearTicketRefetchIntervalOptions = ['manual', '5m', '15m', '30m', '1h'] as const
 export const linearTicketSortByOptions = [PaginationOrderBy.CreatedAt, PaginationOrderBy.UpdatedAt] as const
 export const linearTicketSortOrderOptions = ['custom', 'status', 'created', 'updated', 'alphabetical'] as const
 export const refreshIntervalOptions = ['manual', '5m', '15m', '30m'] as const
@@ -21,8 +22,15 @@ export type ClockifyLinearEntryLink = {
   linkedAt: string
 }
 export type ClockifyLinearEntryLinkRegistry = Record<string, ClockifyLinearEntryLink>
+export type ClockifyDefaultProject = {
+  projectId: string
+  projectName: string
+  workspaceId: string
+  workspaceName: string
+} | null
 export type ThemeOption = (typeof themeOptions)[number]
 export type DefaultViewOption = (typeof defaultViewOptions)[number]
+export type LinearTicketRefetchIntervalOption = (typeof linearTicketRefetchIntervalOptions)[number]
 export type LinearTicketSortByOption = (typeof linearTicketSortByOptions)[number]
 export type LinearTicketSortOrderOption = (typeof linearTicketSortOrderOptions)[number]
 export type RefreshIntervalOption = (typeof refreshIntervalOptions)[number]
@@ -53,6 +61,11 @@ const storageConfig = {
     default: true,
     version: 1,
   },
+  clockifyDefaultProject: {
+    type: 'object',
+    default: null as ClockifyDefaultProject,
+    version: 1,
+  },
   clockifyDescriptionTemplate: {
     type: 'string',
     default: defaultClockifyDescriptionTemplate,
@@ -76,6 +89,11 @@ const storageConfig = {
   linearTicketFetchLimit: {
     type: 'number',
     default: 50,
+    version: 1,
+  },
+  linearTicketRefetchInterval: {
+    type: 'string',
+    default: '30m' as LinearTicketRefetchIntervalOption,
     version: 1,
   },
   linearTicketSortBy: {

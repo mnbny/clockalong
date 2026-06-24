@@ -1,8 +1,8 @@
 import type { TimeEntrySummaryReportDto } from '../services/clockify/generated/reports'
 
 import { formatCurrency } from '@automattic/format-currency'
-import { IconCalendarDue, IconCalendarMonth, IconCalendarWeek, IconClockHour4 } from '@tabler/icons-react'
-import { useQuery } from '@tanstack/react-query'
+import { IconCalendarDue, IconCalendarMonth, IconCalendarWeek, IconClockPlay, IconRefresh } from '@tabler/icons-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import humanizeDuration from 'humanize-duration'
 import { useMemo } from 'react'
 import { useStopwatch } from 'react-timer-hook'
@@ -16,14 +16,26 @@ type ClockifyPeriodStat = {
   time: string
 }
 
-type ClockifyRunningTimer = {
-  elapsed: string
-  title: string
-}
-
-type ClockifyWidgetData = {
+export type ClockifyWidgetData = {
   periodStats: ClockifyPeriodStat[]
   runningEntry: TimeEntryWithRatesDtoV1 | null
+}
+
+export const clockifyDashboardWidgetQueryKey = ['clockify', 'dashboard-widget'] as const
+
+function ClockifyRefreshButton({ fetching }: { fetching: boolean }) {
+  const queryClient = useQueryClient()
+
+  return (
+    <button
+      className="btn btn-square btn-ghost btn-sm"
+      type="button"
+      aria-label="Refresh Clockify"
+      disabled={fetching}
+      onClick={() => void queryClient.refetchQueries({ queryKey: clockifyDashboardWidgetQueryKey })}>
+      <IconRefresh className="size-4" />
+    </button>
+  )
 }
 
 const formatShortDuration = humanizeDuration.humanizer({
@@ -33,17 +45,18 @@ const formatShortDuration = humanizeDuration.humanizer({
     shortEn: {
       h: () => 'h',
       m: () => 'm',
+      s: () => 's',
     },
   },
-  largest: 2,
+  largest: 3,
   round: true,
   spacer: '',
-  units: ['h', 'm'],
+  units: ['h', 'm', 's'],
 })
 
 export function ClockifyWidget() {
   const widgetQuery = useQuery({
-    queryKey: ['clockify', 'dashboard-widget'],
+    queryKey: clockifyDashboardWidgetQueryKey,
     queryFn: getClockifyWidgetData,
     refetchInterval: 15 * 60_000,
     staleTime: 60_000,
@@ -51,47 +64,50 @@ export function ClockifyWidget() {
   const runningEntry = widgetQuery.data?.runningEntry ?? null
   const periodStats = widgetQuery.data?.periodStats ?? getEmptyPeriodStats()
 
-  const statusLabel = widgetQuery.isLoading ? 'Loading' : widgetQuery.isError ? 'Unavailable' : 'Ready'
-
   return (
     <section className="border-base-content/5 bg-base-100 rounded-box overflow-hidden border">
       <header className="border-base-content/5 flex min-w-0 items-center justify-between gap-3 border-b px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          <ClockifyIcon className="text-primary size-6" />
+          {widgetQuery.isFetching ? (
+            <span className="text-primary grid size-6 place-items-center">
+              <span className="loading loading-spinner size-6" />
+            </span>
+          ) : (
+            <ClockifyIcon className="text-primary size-6" />
+          )}
           <div className="min-w-0">
             <h2 className="text-base leading-6 font-semibold">Clockify</h2>
             <p className="text-base-content/60 truncate text-sm">Time tracker</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {widgetQuery.isFetching ? <span className="loading loading-spinner loading-xs" /> : null}
-          <span className="badge badge-soft badge-sm">{statusLabel}</span>
+          <ClockifyRefreshButton fetching={widgetQuery.isFetching} />
+          <ClockifyStatusBadge running={Boolean(runningEntry)} />
         </div>
       </header>
 
       <div className="divide-base-content/5 grid divide-y lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] lg:divide-x lg:divide-y-0">
-        <div className="grid min-h-44 content-between gap-4 p-4">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <IconClockHour4 className="text-base-content/60 size-4" />
-            Running timer
-          </div>
-
+        <div className="grid min-h-44 content-center gap-2 px-4 py-3">
           {runningEntry ? (
             <RunningTimerView
               key={runningEntry.id ?? runningEntry.timeInterval?.start ?? 'running-entry'}
               entry={runningEntry}
             />
           ) : (
-            <div className="grid gap-2">
-              <div className="text-base-content/45 text-3xl leading-none font-semibold tabular-nums">0h 00m</div>
+            <>
+              <div className="text-base-content/60 flex items-center gap-2 text-xs font-medium tracking-wide uppercase">
+                <IconClockPlay className="size-4" />
+                Timer
+              </div>
+              <div className="text-3xl leading-none font-semibold tabular-nums">0s</div>
               <div className="text-base-content/60 text-sm">No timer running</div>
-            </div>
+            </>
           )}
         </div>
 
         <div className="divide-base-content/5 grid grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           {periodStats.map(stat => (
-            <div key={stat.label} className="grid min-h-44 content-center gap-1 px-4 py-3">
+            <div key={stat.label} className="grid min-h-44 content-center gap-2 px-4 py-3">
               <div className="text-base-content/60 flex items-center gap-2 text-xs font-medium tracking-wide uppercase">
                 <PeriodStatIcon label={stat.label} />
                 {stat.label}
@@ -104,6 +120,14 @@ export function ClockifyWidget() {
       </div>
     </section>
   )
+}
+
+function ClockifyStatusBadge({ running }: { running: boolean }) {
+  if (running) {
+    return <span className="badge badge-success animate-pulse">Running</span>
+  }
+
+  return <span className="badge badge-error">Not Running</span>
 }
 
 function PeriodStatIcon({ label }: { label: string }) {
@@ -120,31 +144,32 @@ function PeriodStatIcon({ label }: { label: string }) {
 }
 
 function RunningTimerView({ entry }: { entry: TimeEntryWithRatesDtoV1 }) {
-  const stopwatchOffset = useMemo(
-    () => getStopwatchOffsetTimestamp(entry.timeInterval?.start),
-    [entry.timeInterval?.start],
+  return (
+    <>
+      <div className="text-base-content/60 flex items-center gap-2 text-xs font-medium tracking-wide uppercase">
+        <IconClockPlay className="size-4" />
+        Timer
+      </div>
+      <RunningTimerElapsed start={entry.timeInterval?.start} />
+      <div className="text-base-content/60 truncate text-sm">{getEntryTitle(entry)}</div>
+    </>
   )
+}
+
+function RunningTimerElapsed({ start }: { start: string | undefined }) {
+  const stopwatchOffset = useMemo(() => getStopwatchOffsetTimestamp(start), [start])
   const { totalSeconds } = useStopwatch({
     autoStart: Boolean(stopwatchOffset),
     interval: 1000,
     offsetTimestamp: stopwatchOffset ?? undefined,
   })
-  const runningTimer = formatRunningTimer(entry, totalSeconds)
 
   return (
-    <div className="grid gap-3">
-      <div className="text-3xl leading-none font-semibold tabular-nums">{runningTimer?.elapsed ?? '0m'}</div>
-      <div className="grid min-w-0 gap-1">
-        <div className="truncate font-medium">{runningTimer?.title ?? getEntryTitle(entry)}</div>
-        <div className="text-base-content/60 flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-sm">
-          <span>Clockify timer is active</span>
-        </div>
-      </div>
-    </div>
+    <div className="text-3xl leading-none font-semibold tabular-nums">{formatShortDuration(totalSeconds * 1000)}</div>
   )
 }
 
-async function getClockifyWidgetData(): Promise<ClockifyWidgetData> {
+export async function getClockifyWidgetData(): Promise<ClockifyWidgetData> {
   const [user, workspaces] = await Promise.all([clockify.getLoggedUser(), clockify.getWorkspacesOfUser()])
   const workspaceId = user.activeWorkspace ?? user.defaultWorkspace ?? workspaces[0]?.id
 
@@ -169,20 +194,6 @@ async function getClockifyWidgetData(): Promise<ClockifyWidgetData> {
 
   const runningEntry = runningEntries.find(entry => entry.userId === user.id) ?? runningEntries[0] ?? null
   return { periodStats, runningEntry }
-}
-
-function formatRunningTimer(
-  entry: TimeEntryWithRatesDtoV1 | null,
-  elapsedSeconds: number,
-): ClockifyRunningTimer | null {
-  if (!entry) {
-    return null
-  }
-
-  return {
-    elapsed: formatShortDuration(elapsedSeconds * 1000),
-    title: getEntryTitle(entry),
-  }
 }
 
 function getStopwatchOffsetTimestamp(startValue: string | undefined) {

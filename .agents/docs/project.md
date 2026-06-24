@@ -40,8 +40,8 @@ base Linear/Clockify workflow is solid.
 
 ## Open Research
 
-- Clockify workspace/project/task mapping decisions after the first authenticated API client is in place.
-- Local storage requirements for tokens, selected workspaces, issue mappings, recent timers, and preferences.
-- Whether Clinear should create Clockify projects/tasks from Linear data or only attach time entries with Linear issue
-  metadata.
+- Whether Clinear should support more than one default Clockify project or workspace, and whether task mapping is worth
+  adding after the default-project flow proves out.
+- Whether Clinear should ever create Clockify projects/tasks from Linear data or only attach time entries to a selected
+  Clockify project with Linear issue metadata in the description.
 - How to represent value-based billable time separately from raw tracked time.
