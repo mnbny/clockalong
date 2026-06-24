@@ -10,7 +10,9 @@
     "core:path:default",
     "log:default",
     "opener:default",
+    "process:default",
     "store:default",
+    "updater:default",
     "mcp-bridge:default"
   ]
 }

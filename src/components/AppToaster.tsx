@@ -6,6 +6,10 @@ import { toast, Toaster } from 'sonner'
 type AppToastLevel = 'error' | 'info' | 'success' | 'warning'
 
 type AppToastOptions = {
+  action?: {
+    label: ReactNode
+    onClick: () => Promise<void> | void
+  }
   description?: ReactNode
 }
 
@@ -28,6 +32,16 @@ function showAppToast(level: AppToastLevel, message: ReactNode, options?: AppToa
         <div className="text-sm leading-5 font-medium">{message}</div>
         {options?.description ? <div className="mt-1 text-xs leading-5">{options.description}</div> : null}
       </div>
+      {options?.action ? (
+        <button
+          className="btn btn-sm ml-2"
+          type="button"
+          onClick={() => {
+            void options.action?.onClick()
+          }}>
+          {options.action.label}
+        </button>
+      ) : null}
       <button className="btn btn-square btn-ghost btn-xs ml-auto" type="button" onClick={() => toast.dismiss(toastId)}>
         <IconX className="size-4" />
       </button>

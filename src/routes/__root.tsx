@@ -10,6 +10,7 @@ import { MoonBunnyLogo } from '../components/MoonBunnyLogo'
 import { useDevTools } from '../hooks/useDevTools'
 import { useTauriClinearAuthState } from '../hooks/useTauriClinearAuthState'
 import { useStorage } from '../services/storage/useStorage'
+import { appUpdates } from '../services/tauri/appUpdates'
 import { clinearAuth, isClinearAuthenticated } from '../services/tauri/authClient'
 
 export const Route = createRootRoute({
@@ -30,6 +31,67 @@ function RootLayout() {
   }, [setTheme])
 
   useHotkeys([['mod+shift+A', toggleTheme, { preventDefault: true }]])
+
+  useEffect(() => {
+    if (!isTauri()) {
+      return
+    }
+
+    let active = true
+    let notifiedVersion: string | null = null
+
+    const checkForUpdates = async () => {
+      try {
+        const update = await appUpdates.check()
+
+        if (!active || !update || notifiedVersion === update.version) {
+          return
+        }
+
+        notifiedVersion = update.version
+        appToast.info(`Clinear ${update.version} is available`, {
+          action: {
+            label: 'Install',
+            onClick: async () => {
+              try {
+                await appUpdates.install()
+                appToast.success('Update installed', {
+                  action: {
+                    label: 'Restart',
+                    onClick: appUpdates.relaunch,
+                  },
+                  description: 'Restart Clinear to finish.',
+                })
+              } catch (error) {
+                appToast.error('Could not install update', {
+                  description: getErrorMessage(error),
+                })
+              }
+            },
+          },
+          description: <Link to="/settings">Open Settings</Link>,
+        })
+      } catch (error) {
+        console.info('[app updates] update check failed', error)
+      }
+    }
+
+    const initialCheck = window.setTimeout(() => {
+      void checkForUpdates()
+    }, 10_000)
+    const interval = window.setInterval(
+      () => {
+        void checkForUpdates()
+      },
+      6 * 60 * 60 * 1000,
+    )
+
+    return () => {
+      active = false
+      window.clearTimeout(initialCheck)
+      window.clearInterval(interval)
+    }
+  }, [])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme.theme

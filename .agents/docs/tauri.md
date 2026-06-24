@@ -42,6 +42,18 @@ Hooks should:
 
 Frontend-to-Rust bridge calls should be grouped by domain in `src/services/tauri/`.
 
+## Updates
+
+Clinear uses Tauri's updater plugin for direct-download macOS updates. The updater is not automatic UI; frontend code
+must call the plugin and decide how to notify or install.
+
+- Updater configuration lives in `src-tauri/tauri.conf.json`.
+- Rust plugin initialization lives in `src-tauri/src/lib.rs`.
+- Frontend updater calls are wrapped in `src/services/tauri/appUpdates.ts`.
+- `src/routes/__root.tsx` owns app-wide periodic update checks and update-available toasts.
+- `src/routes/_app.settings.tsx` owns the manual update check/install/restart UI.
+- Do not auto-install or auto-restart. Active time tracking should stay user-controlled.
+
 ## Auth gate
 
 Rust owns the startup authentication snapshot. `src-tauri/src/clinear_auth.rs` reads provider credentials from

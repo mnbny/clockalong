@@ -42,6 +42,8 @@ The app exposes two narrow commands for diagnostics UI:
 - `[clockify api]`: Clockify REST request diagnostics. Keep request bodies summarized and scrubbed to operational fields.
   Time-tracking lifecycle and ticket-summary diagnostics use the same prefix with subphrases such as `timer ...` and
   `ticket summaries ...`.
+- `[app updates]`: Root-shell update check diagnostics. Log lifecycle/error state only; do not log release manifest raw
+  bodies or signature material.
 
 ## Settings UI
 

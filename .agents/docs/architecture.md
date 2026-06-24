@@ -35,4 +35,7 @@
 - `pnpm build`: run `tsr generate && tsc && vite build`.
 - `pnpm typecheck`: run `tsr generate && tsc --noEmit`.
 - `pnpm preview`: run the Vite preview server.
+- `pnpm release:mac`: run the local Apple Silicon release build, updater signing, DMG notarization, stapling, and
+  verification flow.
+- `pnpm release:github`: build locally and create or update a draft GitHub Release through `gh`.
 - `pnpm tauri`: run the Tauri CLI.

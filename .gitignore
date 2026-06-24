@@ -7,6 +7,9 @@
 .idea
 *.local
 *.log
+*.p12
+*.p8
+*.certSigningRequest
 *.njsproj
 *.ntvs*
 *.sln
@@ -20,5 +23,6 @@ logs
 node_modules
 npm-debug.log*
 pnpm-debug.log*
+certificate-base64.txt
 yarn-debug.log*
 yarn-error.log*

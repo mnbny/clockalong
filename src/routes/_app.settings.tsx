@@ -1,7 +1,16 @@
 import type { ReactNode } from 'react'
 
 import { PaginationOrderBy } from '@linear/sdk'
-import { IconCheck, IconCopy, IconFileText, IconRefresh, IconRestore, IconTrash, IconX } from '@tabler/icons-react'
+import {
+  IconCheck,
+  IconCopy,
+  IconDownload,
+  IconFileText,
+  IconRefresh,
+  IconRestore,
+  IconTrash,
+  IconX,
+} from '@tabler/icons-react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -35,6 +44,7 @@ import {
 } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
 import { app } from '../services/tauri/appClient'
+import { type AppUpdate, type AppUpdateDownloadProgress, appUpdates } from '../services/tauri/appUpdates'
 import { cx } from '../utils/cx'
 
 export const Route = createFileRoute('/_app/settings')({
@@ -285,6 +295,10 @@ function SettingsScreen() {
                 </fieldset>
               </SettingsRow>
 
+              <SettingsRow label="Updates" description="Check for new Clinear releases.">
+                <AppUpdatesControl />
+              </SettingsRow>
+
               <SettingsRow label="App logs" description="View Rust and browser console logs from this app.">
                 <button className="btn btn-primary btn-sm" type="button" onClick={openAppLogsDrawer}>
                   <IconFileText className="size-4" />
@@ -362,6 +376,121 @@ function SettingsScreen() {
           </div>
         </aside>
       </div>
+    </div>
+  )
+}
+
+function AppUpdatesControl() {
+  const [availableUpdate, setAvailableUpdate] = useState<AppUpdate | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [installing, setInstalling] = useState(false)
+  const [installed, setInstalled] = useState(false)
+  const [progress, setProgress] = useState<AppUpdateDownloadProgress | null>(null)
+
+  const checkForUpdate = async () => {
+    setChecking(true)
+    setInstalled(false)
+    setProgress(null)
+
+    try {
+      const update = await appUpdates.check()
+      setAvailableUpdate(update)
+
+      if (update) {
+        appToast.info(`Clinear ${update.version} is available`)
+      } else {
+        appToast.success('Clinear is up to date')
+      }
+    } catch (error) {
+      appToast.error('Could not check for updates', {
+        description: getErrorMessage(error),
+      })
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  const installUpdate = async () => {
+    if (!availableUpdate) {
+      return
+    }
+
+    setInstalling(true)
+    setProgress(null)
+
+    try {
+      await appUpdates.install(setProgress)
+      setInstalled(true)
+      appToast.success('Update installed', {
+        description: 'Restart Clinear to finish.',
+      })
+    } catch (error) {
+      appToast.error('Could not install update', {
+        description: getErrorMessage(error),
+      })
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  const progressPercent = getUpdateProgressPercent(progress)
+
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button className="btn btn-primary btn-sm" type="button" disabled={checking || installing} onClick={checkForUpdate}>
+          {checking ? <span className="loading loading-spinner loading-xs" /> : <IconRefresh className="size-4" />}
+          Check
+        </button>
+
+        {availableUpdate && !installed ? (
+          <button
+            className="btn btn-outline btn-primary btn-sm"
+            type="button"
+            disabled={checking || installing}
+            onClick={() => void installUpdate()}>
+            {installing ? <span className="loading loading-spinner loading-xs" /> : <IconDownload className="size-4" />}
+            Install
+          </button>
+        ) : null}
+
+        {installed ? (
+          <button
+            className="btn btn-outline btn-primary btn-sm"
+            type="button"
+            onClick={() => {
+              void appUpdates.relaunch()
+            }}>
+            <IconRefresh className="size-4" />
+            Restart
+          </button>
+        ) : null}
+      </div>
+
+      {availableUpdate ? (
+        <div className="bg-base-200 rounded-box min-w-0 p-3">
+          <div className="text-sm leading-6 font-medium">Clinear {availableUpdate.version}</div>
+          {availableUpdate.body ? (
+            <div className="text-base-content/70 overflow-wrap-anywhere mt-1 text-xs leading-5 whitespace-pre-wrap">
+              {availableUpdate.body}
+            </div>
+          ) : null}
+          {availableUpdate.date ? (
+            <div className="text-base-content/60 mt-2 text-xs leading-5">
+              Published {new Date(availableUpdate.date).toLocaleString()}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {progress ? (
+        <div className="flex w-full max-w-sm flex-col gap-1">
+          <progress className="progress progress-primary w-full" value={progressPercent ?? 0} max={100} />
+          <div className="text-base-content/60 text-xs leading-5">
+            {formatUpdateProgress(progress)}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -634,6 +763,34 @@ function getThemeLabel(theme: ThemeOption) {
   }
 }
 
+function getUpdateProgressPercent(progress: AppUpdateDownloadProgress | null) {
+  if (!progress?.totalBytes) {
+    return null
+  }
+
+  return Math.min(100, Math.round((progress.downloadedBytes / progress.totalBytes) * 100))
+}
+
+function formatUpdateProgress(progress: AppUpdateDownloadProgress) {
+  if (!progress.totalBytes) {
+    return `${formatBytes(progress.downloadedBytes)} downloaded`
+  }
+
+  return `${formatBytes(progress.downloadedBytes)} of ${formatBytes(progress.totalBytes)}`
+}
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '0 B'
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB']
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  const value = bytes / 1024 ** exponent
+
+  return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`
+}
+
 function filterDisplayedAppLogs(contents: string) {
   return contents.split('\n').filter(isDisplayedAppLogLine).join('\n')
 }
@@ -660,6 +817,7 @@ function getErrorMessage(error: unknown) {
 
 const customFrontendLogPrefixes = [
   '[app initialization]',
+  '[app updates]',
   '[app logs]',
   '[clockify api]',
   '[clockify auth]',
