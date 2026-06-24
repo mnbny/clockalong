@@ -1,11 +1,11 @@
 import { IconBell, IconMoon, IconSearch, IconSettings, IconSun } from '@tabler/icons-react'
-import { createRootRoute, Outlet } from '@tanstack/react-router'
+import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 import { isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect } from 'react'
 
 import { AppToaster } from '../components/AppToaster'
-import { ClinearLogo } from '../components/ClinearLogo'
+import { MoonBunnyLogo } from '../components/MoonBunnyLogo'
 import { useDevTools } from '../hooks/useDevTools'
 import { useTauriClinearAuthState } from '../hooks/useTauriClinearAuthState'
 import { useStorage } from '../services/storage/useStorage'
@@ -43,9 +43,9 @@ function RootLayout() {
         <div />
 
         <h1 className="pointer-events-none flex h-10 min-w-0 items-center gap-3 justify-self-center text-lg leading-none font-semibold">
-          <span className="truncate">Clinear</span>
-          <ClinearLogo className="size-10 self-center" />
-          <span className="truncate">App</span>
+          <span className="truncate">Moonbunny</span>
+          <MoonBunnyLogo className="size-10 self-center" />
+          <span className="truncate">Clienear</span>
         </h1>
 
         <div className="flex items-center gap-1 justify-self-end">
@@ -57,9 +57,9 @@ function RootLayout() {
               <button className="btn btn-square btn-ghost" type="button" aria-label="Notifications">
                 <IconBell className="size-5" />
               </button>
-              <button className="btn btn-square btn-ghost" type="button" aria-label="Settings">
+              <Link to="/settings" className="btn btn-square btn-ghost" aria-label="Settings">
                 <IconSettings className="size-5" />
-              </button>
+              </Link>
             </>
           ) : null}
           <label className="swap swap-rotate btn btn-square btn-ghost">
