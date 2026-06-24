@@ -1,4 +1,5 @@
 .DS_Store
+.context/
 .conductor/*
 !.conductor/settings.toml
 .eslintcache
