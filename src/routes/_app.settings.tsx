@@ -1,13 +1,21 @@
 import type { ReactNode } from 'react'
 
-import { IconCopy, IconFileText, IconRefresh, IconTrash, IconX } from '@tabler/icons-react'
+import { IconCheck, IconCopy, IconFileText, IconRefresh, IconRestore, IconTrash, IconX } from '@tabler/icons-react'
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { appToast } from '../components/AppToaster'
 import { PageHeader } from '../components/PageHeader'
 import { useTauriAppLogs } from '../hooks/useTauriAppLogs'
+import {
+  type ClockifyDescriptionTemplateToken,
+  clockifyDescriptionTemplateTokenGroups,
+  defaultClockifyDescriptionTemplate,
+  formatClockifyDescriptionTemplate,
+  getUnknownClockifyDescriptionTemplateTokens,
+  sampleClockifyDescriptionTemplateValues,
+} from '../services/clockify/descriptionTemplate'
 import {
   type DefaultViewOption,
   defaultViewOptions,
@@ -18,6 +26,7 @@ import {
 } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
 import { app } from '../services/tauri/appClient'
+import { cx } from '../utils/cx'
 
 export const Route = createFileRoute('/_app/settings')({
   component: SettingsScreen,
@@ -31,6 +40,8 @@ function SettingsScreen() {
   const [desktopAlerts, setDesktopAlerts] = useStorage('desktopAlerts')
   const [compactRows, setCompactRows] = useStorage('compactRows')
   const [density, setDensity] = useStorage('density')
+  const [clockifyDescriptionTemplate, setClockifyDescriptionTemplate, resetClockifyDescriptionTemplate] =
+    useStorage('clockifyDescriptionTemplate')
   const [appLogsDrawerOpen, setAppLogsDrawerOpen] = useState(false)
   const appLogs = useTauriAppLogs({ enabled: appLogsDrawerOpen })
   const displayedAppLogs = useMemo(() => filterDisplayedAppLogs(appLogs.value.contents), [appLogs.value.contents])
@@ -153,6 +164,18 @@ function SettingsScreen() {
               </SettingsRow>
             </SettingsSection>
 
+            <SettingsSection title="Clockify">
+              <SettingsRow
+                label="Entry description"
+                description="Format used when creating time entries from Linear issues.">
+                <ClockifyDescriptionTemplateEditor
+                  value={clockifyDescriptionTemplate}
+                  onReset={resetClockifyDescriptionTemplate}
+                  onSave={setClockifyDescriptionTemplate}
+                />
+              </SettingsRow>
+            </SettingsSection>
+
             <SettingsSection title="App">
               <SettingsRow label="Theme" description="Controls the app appearance.">
                 <fieldset className="flex flex-wrap items-center gap-4" aria-label="Theme">
@@ -268,6 +291,145 @@ function SettingsScreen() {
   )
 }
 
+type ClockifyDescriptionTemplateEditorProps = {
+  value: string
+  onReset: () => Promise<void>
+  onSave: (value: string) => Promise<void>
+}
+
+function ClockifyDescriptionTemplateEditor({ value, onReset, onSave }: ClockifyDescriptionTemplateEditorProps) {
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [draft, setDraft] = useState(value)
+  const normalizedDraft = draft.trim()
+  const unknownTokens = useMemo(() => getUnknownClockifyDescriptionTemplateTokens(draft), [draft])
+  const preview = useMemo(
+    () =>
+      formatClockifyDescriptionTemplate(
+        draft || defaultClockifyDescriptionTemplate,
+        sampleClockifyDescriptionTemplateValues,
+      ),
+    [draft],
+  )
+  const invalid = !normalizedDraft || unknownTokens.length > 0
+  const changed = draft !== value
+
+  useEffect(() => {
+    setDraft(value)
+  }, [value])
+
+  const insertToken = (token: ClockifyDescriptionTemplateToken) => {
+    const input = inputRef.current
+    const tokenText = `{${token}}`
+
+    if (!input) {
+      setDraft(current => `${current}${tokenText}`)
+      return
+    }
+
+    const start = input.selectionStart ?? draft.length
+    const end = input.selectionEnd ?? draft.length
+    const nextDraft = `${draft.slice(0, start)}${tokenText}${draft.slice(end)}`
+
+    setDraft(nextDraft)
+    window.requestAnimationFrame(() => {
+      input.focus()
+      const nextCursor = start + tokenText.length
+      input.setSelectionRange(nextCursor, nextCursor)
+    })
+  }
+
+  const saveTemplate = async () => {
+    if (invalid) {
+      return
+    }
+
+    try {
+      await onSave(normalizedDraft)
+      appToast.success('Clockify description format saved')
+    } catch (error) {
+      appToast.error('Could not save description format', {
+        description: getErrorMessage(error),
+      })
+    }
+  }
+
+  const resetTemplate = async () => {
+    try {
+      await onReset()
+      setDraft(defaultClockifyDescriptionTemplate)
+      appToast.success('Clockify description format reset')
+    } catch (error) {
+      appToast.error('Could not reset description format', {
+        description: getErrorMessage(error),
+      })
+    }
+  }
+
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-4">
+      <label className={cx('textarea textarea-primary block h-auto w-full p-0', invalid && 'textarea-error')}>
+        <textarea
+          ref={inputRef}
+          aria-label="Clockify entry description format"
+          className="min-h-20 w-full resize-y bg-transparent p-3 font-mono text-sm outline-none"
+          value={draft}
+          onChange={event => setDraft(event.currentTarget.value)}
+        />
+      </label>
+
+      <div className="bg-base-200 rounded-box min-w-0 p-3">
+        <div className="text-base-content/60 text-xs leading-5 font-medium">Preview</div>
+        <div className="overflow-wrap-anywhere font-mono text-sm leading-6 whitespace-pre-wrap">
+          {preview || defaultClockifyDescriptionTemplate}
+        </div>
+      </div>
+
+      {unknownTokens.length > 0 ? (
+        <p className="text-error text-xs leading-5">
+          Unknown {unknownTokens.length === 1 ? 'variable' : 'variables'}:{' '}
+          {unknownTokens.map(token => `{${token}}`).join(', ')}
+        </p>
+      ) : null}
+
+      {!normalizedDraft ? <p className="text-error text-xs leading-5">Description format is required.</p> : null}
+
+      <div className="flex flex-col gap-3">
+        {clockifyDescriptionTemplateTokenGroups.map(group => (
+          <div key={group.label} className="flex min-w-0 flex-col gap-2">
+            <div className="text-base-content/60 text-xs leading-5 font-medium">{group.label}</div>
+            <div className="flex flex-wrap gap-2">
+              {group.tokens.map(token => (
+                <button
+                  key={token}
+                  className="btn btn-outline btn-xs font-mono"
+                  type="button"
+                  onClick={() => insertToken(token)}>
+                  {`{${token}}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap justify-end gap-2">
+        <button className="btn btn-ghost btn-sm" type="button" onClick={() => void resetTemplate()}>
+          <IconRestore className="size-4" />
+          Reset
+        </button>
+        <button
+          className="btn btn-primary btn-sm"
+          type="button"
+          disabled={!changed || invalid}
+          onClick={() => void saveTemplate()}>
+          <IconCheck className="size-4" />
+          Save
+        </button>
+      </div>
+    </div>
+  )
+}
+
 type SettingsSectionProps = {
   title: string
   children: ReactNode
@@ -363,9 +525,11 @@ function getErrorMessage(error: unknown) {
 const customFrontendLogPrefixes = [
   '[app initialization]',
   '[app logs]',
+  '[clockify auth]',
   '[console logging]',
   '[clinear auth]',
   '[dev tools]',
+  '[linear auth]',
   '[sign in]',
   '[storage]',
   '[storage hook]',

@@ -1,6 +1,7 @@
+#![allow(dead_code)]
+
 pub const STORAGE_PATH: &str = "settings.json";
 
-#[allow(dead_code)]
 #[derive(Clone, Copy)]
 pub enum StorageKey {
     ClockifyAuthConnected,

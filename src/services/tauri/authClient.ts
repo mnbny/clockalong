@@ -9,10 +9,28 @@ export type ClinearAuthProvider = 'linear' | 'clockify'
 
 export type ClinearAuthStartResult = {
   provider: ClinearAuthProvider
-  status: 'notImplemented'
+  status: 'connected' | 'notImplemented'
+}
+
+export type ClinearAuthConnectionResult = {
+  provider: ClinearAuthProvider
+  status: 'connected'
+}
+
+export type ClinearClockifyApiKeySnapshot = {
+  clockifyApiKey: string | null
+}
+
+export type ClinearLinearAccessTokenSnapshot = {
+  linearAccessToken: string | null
 }
 
 export const clinearAuth = {
+  clearClockifyAuthentication: () => invoke<void>('clinear_auth_clear_clockify_authentication'),
+  connectClockifyApiKey: (apiKey: string) =>
+    invoke<ClinearAuthConnectionResult>('clinear_auth_connect_clockify_api_key', { apiKey }),
+  getClockifyApiKey: () => invoke<ClinearClockifyApiKeySnapshot>('clinear_auth_get_clockify_api_key'),
+  getLinearAccessToken: () => invoke<ClinearLinearAccessTokenSnapshot>('clinear_auth_get_linear_access_token'),
   getState: () => invoke<ClinearAuthSnapshot>('clinear_auth_get_state'),
   startClockifyAuthentication: () => invoke<ClinearAuthStartResult>('clinear_auth_start_clockify_authentication'),
   startLinearAuthentication: () => invoke<ClinearAuthStartResult>('clinear_auth_start_linear_authentication'),

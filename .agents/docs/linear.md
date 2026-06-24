@@ -125,11 +125,31 @@ For a no-backend Tauri app, use a loopback callback such as:
 http://localhost:<port>/oauth/callback
 ```
 
-Use a fixed registered port if Linear requires exact redirect URI matching. If dynamic ports become necessary, verify
-that Linear allows every redirect URI that might be used before relying on that design.
+Use registered callback URLs because Linear requires redirect URI matching. Clinear uses a small registered port pool
+rather than arbitrary dynamic ports.
 
 A custom URL scheme may be useful for Tauri generally, but do not assume Linear will accept it until tested against
 Linear's OAuth app configuration.
+
+Clinear ships this public Linear OAuth client ID in Rust:
+
+```txt
+1ef17fb4bbef1626a5f1f838843e067c
+```
+
+This is safe to ship. It is not a secret, and users should not provide it.
+
+Clinear uses this registered redirect URI pool:
+
+```txt
+http://localhost:53682/oauth/linear/callback
+http://localhost:53683/oauth/linear/callback
+http://localhost:53684/oauth/linear/callback
+```
+
+Register all three callback URLs in the Linear OAuth app. During auth, Rust binds the first available port and sends
+the matching redirect URI to Linear. Developers can override the redirect URI with
+`CLINEAR_LINEAR_REDIRECT_URI` if that exact callback URL is also registered in Linear.
 
 ## Client strategy
 
@@ -174,11 +194,12 @@ local-only architecture, use narrow pull-based refreshes instead of webhooks.
 
 If Clinear later adds a backend, webhooks become useful for syncing issue changes and OAuth revocation events.
 
-## Open checks before implementation
+## Remaining checks
 
-- Create/register the Clinear OAuth app and confirm accepted redirect URI formats for packaged Tauri.
-- Pick the exact secure storage mechanism for Linear refresh tokens.
-- Decide whether the first shipped scope is only `read` or whether any write feature is included.
+- Confirm the public Linear OAuth app works from packaged Tauri builds and local development.
+- Decide whether Stronghold remains the long-term credential storage mechanism or whether native Keychain is worth the
+  extra platform-specific work.
+- Decide whether Linear needs more than the initial `read` scope.
 - Test `@linear/sdk` in the Tauri webview production origin. A 2026-06-24 preflight check returned CORS allow headers
   for both localhost and `tauri://localhost`, but implementation should still verify this in-app.
 - Decide whether API-key fallback is worth supporting; default should be OAuth.

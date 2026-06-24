@@ -2,11 +2,15 @@ mod app_initialization;
 mod app_logs;
 mod clinear_auth;
 mod storage_config;
+mod stronghold_config;
 
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0)
+        .expect("failed to configure Stronghold snapshot encryption work factor");
+
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -33,6 +37,14 @@ pub fn run() {
         .manage(app_initialization::AppInitializationState::default())
         .manage(clinear_auth::ClinearAuthState::default())
         .setup(|app| {
+            let salt_path = app
+                .path()
+                .app_local_data_dir()?
+                .join(stronghold_config::STRONGHOLD_SALT_FILE);
+
+            app.handle()
+                .plugin(tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build())?;
+
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 log::info!("auth lifecycle initialization started");
@@ -58,7 +70,11 @@ pub fn run() {
             app_logs::app_clear_log_file,
             app_logs::app_read_log_file,
             app_initialization::app_get_initialization_state,
+            clinear_auth::clinear_auth_clear_clockify_authentication,
+            clinear_auth::clinear_auth_connect_clockify_api_key,
+            clinear_auth::clinear_auth_get_linear_access_token,
             clinear_auth::clinear_auth_get_state,
+            clinear_auth::clinear_auth_get_clockify_api_key,
             clinear_auth::clinear_auth_start_clockify_authentication,
             clinear_auth::clinear_auth_start_linear_authentication,
         ])

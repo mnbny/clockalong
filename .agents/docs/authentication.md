@@ -99,8 +99,7 @@ User flow:
 - The user clicks the Clockify connection button.
 - The frontend opens a small dialog.
 - The dialog shows one regular text input for the API key.
-- The dialog includes a helpful link to Clockify's profile or API-key documentation so the user can find or create the
-  key.
+- The dialog links directly to Clockify's API key management page at `https://app.clockify.me/manage-api-keys`.
 - The user submits the key.
 - The frontend calls the native Clockify key-save command.
 - Rust validates the key against Clockify.
@@ -167,14 +166,23 @@ auth, token storage, refresh, and credential clearing.
 
 Shipping rules:
 
-- Ship the Linear OAuth client ID.
-- Ship the registered redirect URI.
+- Ship the Linear OAuth client ID. The current public client ID is `1ef17fb4bbef1626a5f1f838843e067c`.
+- Ship the registered redirect URI pool.
 - Do not ship a Linear personal API key.
 - Do not ship an OAuth client secret.
 - Do not ship client-credentials secrets.
 - Do not make personal API keys the default Linear setup path.
 
-Personal API-key support is only an optional future fallback. If it ever exists, it should be clearly advanced/manual,
+Clinear ships this redirect URI pool:
+
+- `http://localhost:53682/oauth/linear/callback`
+- `http://localhost:53683/oauth/linear/callback`
+- `http://localhost:53684/oauth/linear/callback`
+
+Rust should bind the first available callback port and send that exact matching redirect URI to Linear. This allows
+multiple local worktrees to coexist as long as they are not all using every registered callback port at the same time.
+
+Personal API-key support is only an optional future fallback. If it ever exists, it should be advanced/manual,
 stored securely, and kept out of the normal auth screen.
 
 Initial Linear scopes should be conservative. Start with read access for the assigned-ticket workflow. Add write scopes
@@ -202,9 +210,8 @@ side revocation is useful but can come after the local credential-clearing path 
 
 ## Open implementation choices
 
-- Choose Stronghold or native Keychain for long-lived Linear credentials.
-- Register the Linear OAuth app and confirm the exact redirect URI format Linear accepts for packaged desktop builds.
-- Decide whether Linear access tokens are stored natively with expiry metadata or always refreshed from the refresh
-  token when needed.
+- Decide whether to keep Stronghold long term or switch to native Keychain for provider credentials.
+- Confirm the Linear OAuth app behaves correctly from packaged Tauri builds and local development.
+- Decide whether Linear needs more than the initial `read` scope.
 - Decide when to add disconnect UI. It is useful early for development, but it does not need to complicate the first
   auth screen.

@@ -1,6 +1,6 @@
-import { IconArrowRight, IconLoader2 } from '@tabler/icons-react'
+import { IconArrowRight, IconCheck, IconExternalLink, IconLoader2 } from '@tabler/icons-react'
 import { createFileRoute } from '@tanstack/react-router'
-import { type ReactNode, useState } from 'react'
+import { type FormEvent, type ReactNode, useRef, useState } from 'react'
 
 import { appToast } from '../components/AppToaster'
 import { ClinearLogo } from '../components/ClinearLogo'
@@ -16,9 +16,12 @@ export const Route = createFileRoute('/_auth/sign-in')({
 
 function SignInScreen() {
   const authState = useTauriClinearAuthState()
+  const clockifyDialogRef = useRef<HTMLDialogElement>(null)
+  const [clockifyApiKey, setClockifyApiKey] = useState('')
   const [pendingProvider, setPendingProvider] = useState<ClinearAuthProvider | null>(null)
 
   const startAuthentication = async (provider: ClinearAuthProvider) => {
+    signInLog(`startAuthentication: provider=${provider}`)
     setPendingProvider(provider)
 
     try {
@@ -26,12 +29,43 @@ function SignInScreen() {
         provider === 'linear'
           ? await clinearAuth.startLinearAuthentication()
           : await clinearAuth.startClockifyAuthentication()
+      signInLog(`startAuthentication: provider=${provider} status=${result.status}`)
 
       if (result.status === 'notImplemented') {
         appToast.info(`${getProviderName(provider)} authentication is not wired yet.`)
+      } else if (result.status === 'connected') {
+        appToast.success(`${getProviderName(provider)} connected.`)
       }
     } catch (error) {
+      signInLog(`startAuthentication: provider=${provider} failed=${getErrorMessage(error)}`)
       appToast.error(`Could not start ${getProviderName(provider)} authentication.`, {
+        description: getErrorMessage(error),
+      })
+    } finally {
+      setPendingProvider(null)
+    }
+  }
+
+  const openClockifyDialog = () => {
+    signInLog('openClockifyDialog: opening')
+    setClockifyApiKey('')
+    clockifyDialogRef.current?.showModal()
+  }
+
+  const connectClockify = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    signInLog(`connectClockify: submitting key_len=${clockifyApiKey.trim().length}`)
+    setPendingProvider('clockify')
+
+    try {
+      await clinearAuth.connectClockifyApiKey(clockifyApiKey)
+      signInLog('connectClockify: connected')
+      appToast.success('Clockify connected.')
+      clockifyDialogRef.current?.close()
+      setClockifyApiKey('')
+    } catch (error) {
+      signInLog(`connectClockify: failed=${getErrorMessage(error)}`)
+      appToast.error('Could not connect Clockify.', {
         description: getErrorMessage(error),
       })
     } finally {
@@ -60,10 +94,60 @@ function SignInScreen() {
             icon={<ClockifyIcon className="size-5" />}
             label="Clockify"
             loading={pendingProvider === 'clockify'}
-            onClick={() => void startAuthentication('clockify')}
+            onClick={openClockifyDialog}
           />
         </div>
       </div>
+
+      <dialog ref={clockifyDialogRef} className="modal">
+        <div className="modal-box max-w-md rounded-lg">
+          <form className="grid gap-5" onSubmit={event => void connectClockify(event)}>
+            <div className="grid gap-2">
+              <h3 className="text-lg leading-7 font-semibold">Connect Clockify</h3>
+              <a
+                className="link link-primary inline-flex w-fit items-center gap-1 text-sm"
+                href="https://app.clockify.me/manage-api-keys"
+                rel="noreferrer"
+                target="_blank">
+                Find your API key
+                <IconExternalLink className="size-4" />
+              </a>
+            </div>
+
+            <label className="form-control grid gap-2">
+              <span className="label-text text-sm font-medium">API key</span>
+              <input
+                autoComplete="off"
+                autoFocus
+                className="input input-bordered w-full font-mono text-sm"
+                disabled={pendingProvider === 'clockify'}
+                spellCheck={false}
+                type="text"
+                value={clockifyApiKey}
+                onChange={event => setClockifyApiKey(event.target.value)}
+              />
+            </label>
+
+            <div className="modal-action mt-0">
+              <button
+                className="btn btn-ghost"
+                disabled={pendingProvider === 'clockify'}
+                type="button"
+                onClick={() => clockifyDialogRef.current?.close()}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" disabled={pendingProvider === 'clockify'} type="submit">
+                {pendingProvider === 'clockify' ? <span className="loading loading-spinner loading-sm" /> : null}
+                Connect
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <form className="modal-backdrop" method="dialog">
+          <button>close</button>
+        </form>
+      </dialog>
     </section>
   )
 }
@@ -90,7 +174,13 @@ function AuthenticationButton({ connected, icon, label, loading, onClick }: Auth
         <span className="text-primary">{icon}</span>
         <span className="truncate">{connected ? `${label} connected` : `Connect ${label}`}</span>
       </span>
-      {loading ? <IconLoader2 className="size-5 animate-spin" /> : <IconArrowRight className="size-5" />}
+      {loading ? (
+        <IconLoader2 className="size-5 animate-spin" />
+      ) : connected ? (
+        <IconCheck className="size-5" />
+      ) : (
+        <IconArrowRight className="size-5" />
+      )}
     </button>
   )
 }
@@ -110,4 +200,8 @@ function getErrorMessage(error: unknown) {
   }
 
   return String(error)
+}
+
+function signInLog(message: string) {
+  console.info(`[sign in] ${message}`)
 }
