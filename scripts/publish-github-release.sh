@@ -11,9 +11,11 @@ MACOS_BUNDLE_DIR="${ROOT_DIR}/src-tauri/target/${TARGET}/release/bundle/macos"
 MANIFEST_PATH="${ROOT_DIR}/src-tauri/target/${TARGET}/release/bundle/latest.json"
 RELEASE_MODE="--draft"
 
-if [[ "${1:-}" == "--publish" ]]; then
-  RELEASE_MODE=""
-fi
+for arg in "$@"; do
+  if [[ "${arg}" == "--publish" ]]; then
+    RELEASE_MODE=""
+  fi
+done
 
 if ! command -v gh >/dev/null 2>&1; then
   echo "Missing required command: gh" >&2
