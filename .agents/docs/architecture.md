@@ -12,6 +12,8 @@
 - Reusable frontend components live in `src/components/`; shared frontend helpers live in `src/utils/`.
 - Frontend-to-Rust bridge calls live in clients under `src/services/tauri/`; route code should use those clients instead
   of raw `invoke`.
+- External frontend API clients live under `src/services/<provider>/`; Clockify uses a generated Zodios client under
+  `src/services/clockify/`.
 - Auth routing mirrors the reference app:
   - `/` waits for native app initialization, then navigates to `/dashboard`.
   - `_app` guards authenticated routes and redirects unauthenticated users to `/sign-in`.

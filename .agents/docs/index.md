@@ -5,6 +5,7 @@
 - `tauri.md`: Tauri state, events, and React hook conventions
 - `storage.md`: store key contract
 - `linear.md`: Linear API, SDK, OAuth, and client strategy
+- `clockify.md`: Clockify API, auth, and client strategy
 
 ## Documentation Style
 

@@ -10,8 +10,7 @@ issues into accurate, reviewable Clockify time entries.
 ## Core Workflow
 
 - Authenticate with Linear.
-- Authenticate with Clockify. Current assumption: Clockify may require API key-based authentication, but this needs
-  separate research before implementation.
+- Authenticate with Clockify using a user-provided API key stored through native secure storage.
 - Show Linear tickets assigned to the current user.
 - Let the user start and stop Clockify timers for specific Linear tickets.
 - Sum tracked Clockify time by Linear ticket so the user can see how much time has accumulated on each piece of work.
@@ -41,7 +40,7 @@ base Linear/Clockify workflow is solid.
 ## Open Research
 
 - Linear authentication flow and required scopes.
-- Clockify authentication method, API key handling, and workspace/project/task model.
+- Clockify workspace/project/task mapping decisions after the first authenticated API client is in place.
 - Local storage requirements for tokens, selected workspaces, issue mappings, recent timers, and preferences.
 - Whether Clinear should create Clockify projects/tasks from Linear data or only attach time entries with Linear issue
   metadata.
