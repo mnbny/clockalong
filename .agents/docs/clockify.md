@@ -1,7 +1,7 @@
 # Clockify integration notes
 
-Clockify's regular REST API uses user-owned API keys. Clinear treats Clockify as a user-authorized external service,
-not as an OAuth provider with a shippable app credential.
+Clockify's regular REST API uses user-owned API keys. Clinear treats Clockify as a user-authorized external service, not
+as an OAuth provider with a shippable app credential.
 
 Rust owns Clockify credential storage and auth state. Clockify API calls should be implemented client-side in the
 frontend after the native layer has supplied the authenticated state and whatever token access contract Clinear settles
@@ -26,12 +26,16 @@ on.
 - Rust should handle saving, reading, validating, and clearing the key. The broader Clockify API client belongs in the
   frontend.
 - Validate a saved key by calling `GET /v1/user`.
+- Startup validation should mark Clockify disconnected whenever validation does not succeed; Clinear does not support
+  offline authenticated Clockify mode.
+- Clear the saved key only when validation clearly fails because the credential is invalid or revoked. Keep the saved key
+  after network or provider failures so the app can retry without asking the user to paste it again.
 - Subdomain and regional workspaces may require a workspace-specific key or alternate base URL. Keep base URL handling
   configurable instead of hard-coding every request to the global host.
 
-Clockify also has a CAKE.com Marketplace add-on model that uses `X-Addon-Token` and add-on scopes. That path is meant
-for marketplace add-ons embedded in or installed into Clockify workspaces. It is not the first-choice auth model for
-Clinear's local Tauri desktop app.
+Clockify also has a CAKE.com Marketplace add-on model that uses `X-Addon-Token` and add-on scopes. That path is for
+marketplace add-ons embedded in or installed into Clockify workspaces. It is not the right auth model for Clinear's local
+Tauri desktop app.
 
 ## API shape
 
@@ -49,15 +53,15 @@ The API is broad and documented through Redoc plus an OpenAPI 3 spec. The endpoi
 - `POST /v1/workspaces/{workspaceId}/reports/summary`: generate grouped summaries.
 
 Clockify permissions follow the authenticated user's Clockify role and workspace access. Clinear should assume a normal
-user key can manage that user's own timer/time entries, while admin-style workspace operations may fail unless the user
-has the required Clockify role.
+user key can manage that user's own timer and time entries. Admin-style workspace operations may fail unless the user has
+the required Clockify role.
 
 ## Client strategy
 
 Clockify does not publish an official TypeScript or Rust SDK for the API-key workflow. Clinear uses Zodios for the
 frontend Clockify API client, following the generated-client pattern from `~/Dev/polybot-v2/api`.
 
-- `clockify/api-examples` is official and useful as request reference, but it is not a maintained SDK.
+- `clockify/api-examples` is official and works as request reference, but it is not a maintained SDK.
 - `clockify/addon-java-sdk` is official for CAKE.com Marketplace add-ons, not Clinear's desktop flow.
 - `clockifixed` is a newer third-party TypeScript wrapper generated from the OpenAPI spec, with Zod validation.
 - `clockify-ts` is an older third-party TypeScript wrapper.
