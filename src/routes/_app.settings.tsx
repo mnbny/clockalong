@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import { PaginationOrderBy } from '@linear/sdk'
 import { IconCheck, IconCopy, IconFileText, IconRefresh, IconRestore, IconTrash, IconX } from '@tabler/icons-react'
 import { useMutation } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
@@ -20,6 +21,10 @@ import {
 import {
   type DefaultViewOption,
   defaultViewOptions,
+  type LinearTicketSortByOption,
+  linearTicketSortByOptions,
+  type LinearTicketSortOrderOption,
+  linearTicketSortOrderOptions,
   type RefreshIntervalOption,
   refreshIntervalOptions,
   type ThemeOption,
@@ -41,6 +46,10 @@ function SettingsScreen() {
   const [desktopAlerts, setDesktopAlerts] = useStorage('desktopAlerts')
   const [compactRows, setCompactRows] = useStorage('compactRows')
   const [density, setDensity] = useStorage('density')
+  const [clockifyBillable, setClockifyBillable] = useStorage('clockifyBillable')
+  const [linearTicketFetchLimit, setLinearTicketFetchLimit] = useStorage('linearTicketFetchLimit')
+  const [linearTicketSortBy, setLinearTicketSortBy] = useStorage('linearTicketSortBy')
+  const [linearTicketSortOrder, setLinearTicketSortOrder] = useStorage('linearTicketSortOrder')
   const [clockifyDescriptionTemplate, setClockifyDescriptionTemplate, resetClockifyDescriptionTemplate] =
     useStorage('clockifyDescriptionTemplate')
   const [
@@ -170,7 +179,67 @@ function SettingsScreen() {
               </SettingsRow>
             </SettingsSection>
 
+            <SettingsSection title="Linear">
+              <SettingsRow label="Ticket fetch limit" description="Maximum Linear tickets to load for ticket lists.">
+                <label className="input input-primary w-full max-w-56">
+                  <input
+                    aria-label="Ticket fetch limit"
+                    className="min-w-0 grow text-sm"
+                    min={1}
+                    step={1}
+                    type="number"
+                    value={linearTicketFetchLimit}
+                    onChange={event =>
+                      void setLinearTicketFetchLimit(normalizePositiveInteger(event.currentTarget.value, 50))
+                    }
+                  />
+                </label>
+              </SettingsRow>
+
+              <SettingsRow label="Ticket sort by" description="Linear field used for the initial ticket fetch order.">
+                <select
+                  aria-label="Ticket sort by"
+                  className="select select-primary w-full max-w-56"
+                  value={linearTicketSortBy}
+                  onChange={event => void setLinearTicketSortBy(event.currentTarget.value as LinearTicketSortByOption)}>
+                  {linearTicketSortByOptions.map(option => (
+                    <option key={option} value={option}>
+                      {getLinearTicketSortByLabel(option)}
+                    </option>
+                  ))}
+                </select>
+              </SettingsRow>
+
+              <SettingsRow label="Ticket sort order" description="Client-side ordering used for ticket lists.">
+                <select
+                  aria-label="Ticket sort order"
+                  className="select select-primary w-full max-w-56"
+                  value={linearTicketSortOrder}
+                  onChange={event =>
+                    void setLinearTicketSortOrder(event.currentTarget.value as LinearTicketSortOrderOption)
+                  }>
+                  {linearTicketSortOrderOptions.map(option => (
+                    <option key={option} value={option}>
+                      {getLinearTicketSortOrderLabel(option)}
+                    </option>
+                  ))}
+                </select>
+              </SettingsRow>
+            </SettingsSection>
+
             <SettingsSection title="Clockify">
+              <SettingsRow
+                label="Billable by default"
+                description="Mark new Clockify time entries as billable unless changed.">
+                <input
+                  aria-label="Billable by default"
+                  checked={clockifyBillable}
+                  className="toggle toggle-primary"
+                  type="checkbox"
+                  onChange={event => void setClockifyBillable(event.currentTarget.checked)}
+                />
+              </SettingsRow>
+
               <SettingsRow
                 label="Entry description"
                 description="Format used when creating time entries from Linear issues.">
@@ -531,11 +600,45 @@ function getRefreshIntervalLabel(refreshInterval: RefreshIntervalOption) {
   }
 }
 
+function getLinearTicketSortByLabel(option: LinearTicketSortByOption) {
+  switch (option) {
+    case PaginationOrderBy.CreatedAt:
+      return 'Created date'
+    case PaginationOrderBy.UpdatedAt:
+      return 'Updated date'
+  }
+}
+
+function getLinearTicketSortOrderLabel(option: LinearTicketSortOrderOption) {
+  switch (option) {
+    case 'alphabetical':
+      return 'Alphabetical'
+    case 'created':
+      return 'Created date'
+    case 'custom':
+      return 'Clinear relevance'
+    case 'status':
+      return 'Status'
+    case 'updated':
+      return 'Updated date'
+  }
+}
+
+function normalizePositiveInteger(value: string, fallback: number) {
+  const parsedValue = Number(value)
+
+  if (!Number.isFinite(parsedValue)) {
+    return fallback
+  }
+
+  return Math.max(1, Math.floor(parsedValue))
+}
+
 function getThemeLabel(theme: ThemeOption) {
   switch (theme.theme) {
-    case 'night':
+    case 'abyss':
       return 'Dark'
-    case 'winter':
+    case 'autumn':
       return 'Light'
   }
 }
@@ -567,11 +670,13 @@ function getErrorMessage(error: unknown) {
 const customFrontendLogPrefixes = [
   '[app initialization]',
   '[app logs]',
+  '[clockify api]',
   '[clockify auth]',
   '[console logging]',
   '[clinear auth]',
   '[dev tools]',
   '[linear auth]',
+  '[linear tickets]',
   '[sign in]',
   '[storage]',
   '[storage hook]',

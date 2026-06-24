@@ -1,3 +1,5 @@
+import { PaginationOrderBy } from '@linear/sdk'
+
 import {
   defaultClockifyDescriptionTemplate,
   defaultClockifyDescriptionTemplateFallback,
@@ -6,14 +8,23 @@ import { type StorageConfig, StorageService } from './storage'
 
 export const storagePath = 'settings.json'
 export const themeOptions = [
-  { theme: 'night', appearance: 'dark' },
-  { theme: 'winter', appearance: 'light' },
+  { theme: 'abyss', appearance: 'dark' },
+  { theme: 'autumn', appearance: 'light' },
 ] as const
 export const defaultViewOptions = ['dashboard', 'recent', 'active'] as const
+export const linearTicketSortByOptions = [PaginationOrderBy.CreatedAt, PaginationOrderBy.UpdatedAt] as const
+export const linearTicketSortOrderOptions = ['custom', 'status', 'created', 'updated', 'alphabetical'] as const
 export const refreshIntervalOptions = ['manual', '5m', '15m', '30m'] as const
 
+export type ClockifyLinearEntryLink = {
+  linearIssueId: string
+  linkedAt: string
+}
+export type ClockifyLinearEntryLinkRegistry = Record<string, ClockifyLinearEntryLink>
 export type ThemeOption = (typeof themeOptions)[number]
 export type DefaultViewOption = (typeof defaultViewOptions)[number]
+export type LinearTicketSortByOption = (typeof linearTicketSortByOptions)[number]
+export type LinearTicketSortOrderOption = (typeof linearTicketSortOrderOptions)[number]
 export type RefreshIntervalOption = (typeof refreshIntervalOptions)[number]
 
 const storageConfig = {
@@ -37,6 +48,11 @@ const storageConfig = {
     default: true,
     version: 1,
   },
+  clockifyBillable: {
+    type: 'boolean',
+    default: true,
+    version: 1,
+  },
   clockifyDescriptionTemplate: {
     type: 'string',
     default: defaultClockifyDescriptionTemplate,
@@ -47,10 +63,30 @@ const storageConfig = {
     default: defaultClockifyDescriptionTemplateFallback,
     version: 1,
   },
+  clockifyLinearEntryLinks: {
+    type: 'object',
+    default: {} as ClockifyLinearEntryLinkRegistry,
+    version: 1,
+  },
   displayName: {
     type: 'string',
     default: 'Moonbunny Clinear',
     version: 1,
+  },
+  linearTicketFetchLimit: {
+    type: 'number',
+    default: 50,
+    version: 1,
+  },
+  linearTicketSortBy: {
+    type: 'string',
+    default: linearTicketSortByOptions[0] as LinearTicketSortByOption,
+    version: 1,
+  },
+  linearTicketSortOrder: {
+    type: 'string',
+    default: linearTicketSortOrderOptions[0] as LinearTicketSortOrderOption,
+    version: 2,
   },
   refreshInterval: {
     type: 'string',
@@ -60,7 +96,7 @@ const storageConfig = {
   theme: {
     type: 'object',
     default: themeOptions[0] as ThemeOption,
-    version: 1,
+    version: 3,
   },
 } satisfies StorageConfig
 

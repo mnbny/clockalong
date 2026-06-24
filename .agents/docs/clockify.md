@@ -45,10 +45,18 @@ The API is broad and documented through Redoc plus an OpenAPI 3 spec. The endpoi
 - `GET /v1/workspaces/{workspaceId}/projects/{projectId}/tasks`: list tasks if Clinear maps Linear issues to tasks.
 - `POST /v1/workspaces/{workspaceId}/time-entries`: create or start a time entry.
 - `GET /v1/workspaces/{workspaceId}/time-entries/status/in-progress`: inspect running timers in a workspace.
-- `GET /v1/workspaces/{workspaceId}/user/{userId}/time-entries`: read a user's time entries for summaries.
+- `GET /v1/workspaces/{workspaceId}/user/{userId}/time-entries`: read a user's time entries when entry-level data is needed.
 - `PATCH /v1/workspaces/{workspaceId}/user/{userId}/time-entries`: stop the currently running timer for a user.
 - `POST /v1/workspaces/{workspaceId}/reports/detailed`: generate detailed reports for reconciliation.
 - `POST /v1/workspaces/{workspaceId}/reports/summary`: generate grouped summaries.
+
+Clockify reports use a separate base URL from regular API calls:
+
+- Regular API: `https://api.clockify.me/api`
+- Reports API: `https://reports.api.clockify.me`
+
+The public OpenAPI spec includes report paths and path-level report servers. Keep reports on a separate app client so
+the regular API base URL does not leak into report requests.
 
 Clockify permissions follow the authenticated user's Clockify role and workspace access. Clinear should assume a normal
 user key can manage that user's own timer and time entries. Admin-style workspace operations may fail unless the user has
@@ -68,6 +76,8 @@ Clinear builds Clockify time-entry descriptions from the user-configured Linear 
   `clockifyDescriptionTemplateFallback`.
 - Timer creation should format from the assigned-issue list DTO when possible. Do not fetch full issue details only to
   build the Clockify description.
+- New time entries should use the `clockifyBillable` storage preference for their initial billable flag. The
+  default is billable.
 
 ## Client strategy
 
@@ -96,8 +106,10 @@ packages or an `api/` package here.
 The Clinear setup lives under `src/services/clockify/`:
 
 - `specs/clockify-openapi.json`: downloaded Clockify OpenAPI spec.
+- `specs/clockify-reports-openapi.json`: generated report-only spec derived from the official Clockify spec.
 - `generated/clockify.ts`: generated Zodios client and exported schema/type definitions.
-- `client.ts`: app-facing client factory and default base client instance.
+- `generated/reports.ts`: generated Zodios client for Clockify's reports host.
+- `client.ts`: app-facing client factories and default client instances.
 - `index.ts`: public exports for Clockify service code.
 
 Polybot reference points:
@@ -113,9 +125,15 @@ For Clinear, adapt that pattern to Clockify:
 - Regenerate with `pnpm clockify:generate`.
 - Fetch the spec from `https://docs.clockify.me/openapi.json`.
 - Generate `src/services/clockify/generated/clockify.ts`.
-- Export `createClockifyClient(baseUrl, options)` and `clockify` from `src/services/clockify/client.ts`.
+- Prepare the report-only spec with `scripts/prepare-clockify-specs.mjs`.
+- Generate `src/services/clockify/generated/reports.ts` from the report-only spec.
+- Export `createClockifyClient(baseUrl, options)`, `createClockifyReportsClient(baseUrl, options)`, `clockify`, and
+  `clockifyReports` from `src/services/clockify/client.ts`.
 - Configure auth by attaching `X-Api-Key` from the native auth bridge before Clockify requests.
 - Keep regional and subdomain base URL selection outside the generated client so it can be changed per workspace.
+
+The reports generator uses a media-type expression that accepts Clockify's `*/*` report responses as JSON. Keep that
+logic in `scripts/generate-clockify-client.mjs`; do not put long generator pipelines directly in `package.json`.
 
 The generated file is intentionally marked `// @ts-nocheck`. Clockify's OpenAPI spec currently produces a few circular
 type/default-value errors in the generated implementation. App code should still import the generated aliases, schemas,
