@@ -3,16 +3,14 @@
 Clockify's regular REST API uses user-owned API keys. Clinear treats Clockify as a user-authorized external service, not
 as an OAuth provider with a shippable app credential.
 
-Rust owns Clockify credential storage and auth state. Clockify API calls should be implemented client-side in the
-frontend after the native layer has supplied the authenticated state and whatever token access contract Clinear settles
-on.
+Rust owns Clockify credential storage and auth state. Clockify API calls stay in the frontend. When the TypeScript
+client needs to call Clockify, it asks Rust for the validated API key and keeps that key in memory only.
 
 ## Primary references
 
 - API docs: https://docs.clockify.me/
 - OpenAPI spec: https://docs.clockify.me/openapi.json
-- API key help: https://clockify.me/help/administration/api-webhook-settings
-- Profile key generation help: https://clockify.me/help/getting-started/manage-your-profile-settings
+- API key management: https://app.clockify.me/manage-api-keys
 - Official API examples: https://github.com/clockify/api-examples
 
 ## Authentication

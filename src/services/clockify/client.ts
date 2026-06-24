@@ -1,6 +1,7 @@
 import { type ZodiosOptions } from '@zodios/core'
-import axios, { type AxiosRequestConfig } from 'axios'
+import axios, { AxiosHeaders, type AxiosRequestConfig } from 'axios'
 
+import { getTauriClockifyApiKey } from './auth'
 import { createApiClient } from './generated/clockify'
 
 export const CLOCKIFY_GLOBAL_API_BASE_URL = 'https://api.clockify.me/api'
@@ -16,6 +17,22 @@ export const clockifyClientOptions = {
     },
   },
 } satisfies ZodiosOptions
+
+const authenticatedClockifyAxios = axios.create(clockifyClientOptions.axiosConfig)
+
+authenticatedClockifyAxios.interceptors.request.use(async config => {
+  const { clockifyApiKey } = await getTauriClockifyApiKey()
+
+  if (!clockifyApiKey) {
+    throw new Error('Missing Clockify API key.')
+  }
+
+  const headers = AxiosHeaders.from(config.headers)
+  headers.set('X-Api-Key', clockifyApiKey)
+
+  config.headers = headers
+  return config
+})
 
 export function createClockifyClient(
   baseUrl = CLOCKIFY_GLOBAL_API_BASE_URL,
@@ -38,7 +55,9 @@ export function createClockifyClient(
   })
 }
 
-export const clockify = createClockifyClient()
+export const clockify = createClockifyClient(CLOCKIFY_GLOBAL_API_BASE_URL, {
+  axiosInstance: authenticatedClockifyAxios,
+})
 
 function createClockifyAxiosConfig(apiKey: string | undefined, axiosConfig: AxiosRequestConfig | undefined) {
   const mergedConfig = {

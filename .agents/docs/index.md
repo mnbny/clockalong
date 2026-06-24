@@ -3,6 +3,7 @@
 - `project.md`: current product boundary for this scaffold
 - `architecture.md`: app architecture and commands
 - `tauri.md`: Tauri state, events, and React hook conventions
+- `logging.md`: Rust/frontend logging and diagnostics UI pattern
 - `storage.md`: store key contract
 - `authentication.md`: authentication ownership, screen behavior, and provider decisions
 - `linear.md`: Linear API, SDK, OAuth, and client strategy

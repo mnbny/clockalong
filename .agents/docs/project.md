@@ -30,16 +30,16 @@ base Linear/Clockify workflow is solid.
 
 ## Near-Term Boundary
 
-- Keep implementation focused on infrastructure and product scaffolding until the API/auth research is complete.
-- Do not add real Linear or Clockify integration code without explicit direction.
+- Provider authentication and API-client infrastructure are now in place. Keep new work focused on the Linear/Clockify
+  workflow instead of broad project-management or invoicing features.
 - Avoid Streamlink-derived or unrelated domain concepts.
-- Placeholder UI is acceptable when it proves app shell, styling, navigation, and Tauri boot behavior.
+- Placeholder UI is acceptable for product areas that are not wired yet, but provider auth should use the real native
+  flows.
 - Preserve the current Tauri, React, pnpm, Conductor, and agent-doc conventions unless a specific product requirement
   needs a change.
 
 ## Open Research
 
-- Linear authentication flow and required scopes.
 - Clockify workspace/project/task mapping decisions after the first authenticated API client is in place.
 - Local storage requirements for tokens, selected workspaces, issue mappings, recent timers, and preferences.
 - Whether Clinear should create Clockify projects/tasks from Linear data or only attach time entries with Linear issue

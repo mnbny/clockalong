@@ -44,9 +44,10 @@ Frontend-to-Rust bridge calls should be grouped by domain in `src/services/tauri
 
 ## Auth gate
 
-Rust owns the startup authentication snapshot. `src-tauri/src/clinear_auth.rs` reads placeholder auth markers from the
-Tauri store during setup, emits `clinear-auth:state-changed`, and leaves app initialization blocked until that native
-check completes.
+Rust owns the startup authentication snapshot. `src-tauri/src/clinear_auth.rs` reads provider credentials from
+Stronghold during setup, validates or refreshes them as needed, emits `clinear-auth:state-changed`, and leaves app
+initialization blocked until that native check completes.
 
-Provider start commands are placeholders for now. The frontend buttons call the same native command boundary the real
-flows will use, but no Linear or Clockify auth runs yet.
+Linear starts through the native OAuth command. Clockify uses a native API-key connection command that validates the key
+before saving it. The frontend should keep route decisions tied to the native auth snapshot instead of trying to infer
+auth state from local UI state.

@@ -23,11 +23,7 @@
 - Tauri permissions live in `src-tauri/capabilities/`.
 - Repo-local agent skills live in `.agents/skills/`.
 
-## App Logs
-
-- Rust logging uses `tauri-plugin-log` with a `LogDir` target named `app`.
-- Frontend console methods are forwarded to the log plugin from `src/utils/console-logging.ts`.
-- The Rust `app_read_log_file` and `app_clear_log_file` commands are available for future diagnostics UI.
+- Logging follows the shared Rust/frontend diagnostics pattern documented in `logging.md`.
 
 ## Commands
 

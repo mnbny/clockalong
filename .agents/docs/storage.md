@@ -14,5 +14,9 @@ browser-based Vite development. Keep stored values small, serializable, and vers
 - `displayName`: temporary local display name used by settings UI previews.
 - `theme`: active daisyUI theme and native window appearance.
 - `refreshInterval`: temporary background refresh preference.
-- `linearAuthConnected`: placeholder native marker for Linear auth state.
-- `clockifyAuthConnected`: placeholder native marker for Clockify auth state.
+
+## Native secrets
+
+Clockify stores the user API key in native Stronghold storage, not in the Tauri JSON store. Linear stores OAuth token
+data in Stronghold as well. On startup, Rust reads those saved credentials and validates or refreshes them before setting
+provider auth state.
