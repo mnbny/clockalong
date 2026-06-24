@@ -49,7 +49,7 @@ const storageConfig = {
   },
   displayName: {
     type: 'string',
-    default: 'Moonbunny Clienear',
+    default: 'Moonbunny Clinear',
     version: 1,
   },
   refreshInterval: {
