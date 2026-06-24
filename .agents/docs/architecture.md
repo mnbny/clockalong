@@ -14,6 +14,8 @@
   of raw `invoke`.
 - External frontend API clients live under `src/services/<provider>/`; Clockify uses a generated Zodios client under
   `src/services/clockify/`.
+- Do not add barrel files such as `src/services/<provider>/index.ts`. Import concrete modules directly so dependencies
+  stay visible and tree-shaking boundaries are obvious.
 - Auth routing mirrors the reference app:
   - `/` waits for native app initialization, then navigates to `/dashboard`.
   - `_app` guards authenticated routes and redirects unauthenticated users to `/sign-in`.

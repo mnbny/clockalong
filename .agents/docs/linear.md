@@ -1,4 +1,4 @@
-# Linear Integration Notes
+# Linear integration notes
 
 Linear's normal integration path for Clinear is its public GraphQL API through the official `@linear/sdk` TypeScript
 client. Clinear should treat Linear as a user-authorized service: users connect their own Linear account with OAuth2,
@@ -44,6 +44,29 @@ API behavior to preserve:
 
 The first Clinear issue query should be based on the authenticated viewer, for example `viewer.assignedIssues(...)`
 through the SDK. Fetch only fields required for the ticket list, timer mapping, and issue detail surfaces.
+
+## Assigned ticket fetching
+
+The dashboard ticket list fetches the authenticated viewer's assigned issues across all workflow statuses.
+
+Implementation constraints:
+
+- Use `viewer.assignedIssues(first, after, orderBy)` with cursor pagination.
+- `linearTicketFetchLimit` controls the maximum number of assigned issues to aggregate.
+- `linearTicketSortBy` maps to Linear's `PaginationOrderBy` field for the fetch. Current exposed values are
+  `createdAt` and `updatedAt`.
+- `viewer.assignedIssues` does not expose a sort-direction argument. Do not treat client-side ordering as an API fetch
+  direction.
+- Use focused raw GraphQL when the dashboard only needs a compact row DTO.
+- Fetch status `color`, `type`, and `position`; `position` is used for Linear-like status ordering.
+- Fetch assignee display fields and avatar fields for the row avatar.
+
+The current dashboard row DTO is intentionally small: identifier, title, created/updated timestamps, status, assignee,
+and placeholder tracking fields. Full issue descriptions, labels, comments, and project/cycle detail should be fetched
+only for future detail surfaces that actually need them.
+
+Linear workflow states expose one `color` hex value. The API does not provide separate light/dark status tokens. Clinear
+uses that color directly for the status badge background and computes a contrasting foreground locally.
 
 ## Authentication
 

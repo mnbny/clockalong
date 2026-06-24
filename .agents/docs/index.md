@@ -1,6 +1,7 @@
 # Agent Documentation
 
 - `project.md`: current product boundary for this scaffold
+- `time-tracking.md`: dashboard scope, ticket ordering, and time-tracking workflow decisions
 - `architecture.md`: app architecture and commands
 - `tauri.md`: Tauri state, events, and React hook conventions
 - `logging.md`: Rust/frontend logging and diagnostics UI pattern
