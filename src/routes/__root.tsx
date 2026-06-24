@@ -1,8 +1,9 @@
+import { useHotkeys } from '@mantine/hooks'
 import { IconLogout, IconMoon, IconSettings, IconSun } from '@tabler/icons-react'
 import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 import { isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { appToast, AppToaster } from '../components/AppToaster'
 import { MoonBunnyLogo } from '../components/MoonBunnyLogo'
@@ -21,6 +22,14 @@ function RootLayout() {
   const [disconnectingLinear, setDisconnectingLinear] = useState(false)
   const authState = useTauriClinearAuthState()
   const authenticated = isClinearAuthenticated(authState.value)
+
+  const toggleTheme = useCallback(() => {
+    void setTheme(current =>
+      current.theme === 'abyss' ? { theme: 'emerald', appearance: 'light' } : { theme: 'abyss', appearance: 'dark' },
+    )
+  }, [setTheme])
+
+  useHotkeys([['mod+shift+A', toggleTheme, { preventDefault: true }]])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme.theme
@@ -95,18 +104,7 @@ function RootLayout() {
             </>
           ) : null}
           <label className="swap swap-rotate btn btn-square btn-ghost">
-            <input
-              aria-label="Toggle theme"
-              checked={theme.theme === 'abyss'}
-              type="checkbox"
-              onChange={event =>
-                void setTheme(
-                  event.currentTarget.checked
-                    ? { theme: 'abyss', appearance: 'dark' }
-                    : { theme: 'emerald', appearance: 'light' },
-                )
-              }
-            />
+            <input aria-label="Toggle theme" checked={theme.theme === 'abyss'} type="checkbox" onChange={toggleTheme} />
             <IconSun className="swap-off size-5" />
             <IconMoon className="swap-on size-5" />
           </label>
