@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 import { PaginationOrderBy } from '@linear/sdk'
 import { IconCheck, IconCopy, IconFileText, IconRefresh, IconRestore, IconTrash, IconX } from '@tabler/icons-react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -19,14 +19,17 @@ import {
   sampleClockifyDescriptionTemplateValues,
 } from '../services/clockify/descriptionTemplate'
 import {
-  type DefaultViewOption,
-  defaultViewOptions,
+  clockifyProjectOptionsQueryKey,
+  getClockifyProjectOptions,
+  getClockifyProjectOptionValue,
+} from '../services/clockify/projects'
+import {
+  type LinearTicketRefetchIntervalOption,
+  linearTicketRefetchIntervalOptions,
   type LinearTicketSortByOption,
   linearTicketSortByOptions,
   type LinearTicketSortOrderOption,
   linearTicketSortOrderOptions,
-  type RefreshIntervalOption,
-  refreshIntervalOptions,
   type ThemeOption,
   themeOptions,
 } from '../services/storage/config'
@@ -40,14 +43,10 @@ export const Route = createFileRoute('/_app/settings')({
 
 function SettingsScreen() {
   const [theme, setTheme] = useStorage('theme')
-  const [displayName, setDisplayName] = useStorage('displayName')
-  const [defaultView, setDefaultView] = useStorage('defaultView')
-  const [refreshInterval, setRefreshInterval] = useStorage('refreshInterval')
-  const [desktopAlerts, setDesktopAlerts] = useStorage('desktopAlerts')
-  const [compactRows, setCompactRows] = useStorage('compactRows')
-  const [density, setDensity] = useStorage('density')
   const [clockifyBillable, setClockifyBillable] = useStorage('clockifyBillable')
+  const [clockifyDefaultProject, setClockifyDefaultProject] = useStorage('clockifyDefaultProject')
   const [linearTicketFetchLimit, setLinearTicketFetchLimit] = useStorage('linearTicketFetchLimit')
+  const [linearTicketRefetchInterval, setLinearTicketRefetchInterval] = useStorage('linearTicketRefetchInterval')
   const [linearTicketSortBy, setLinearTicketSortBy] = useStorage('linearTicketSortBy')
   const [linearTicketSortOrder, setLinearTicketSortOrder] = useStorage('linearTicketSortOrder')
   const [clockifyDescriptionTemplate, setClockifyDescriptionTemplate, resetClockifyDescriptionTemplate] =
@@ -59,6 +58,19 @@ function SettingsScreen() {
   ] = useStorage('clockifyDescriptionTemplateFallback')
   const [appLogsDrawerOpen, setAppLogsDrawerOpen] = useState(false)
   const appLogs = useTauriAppLogs({ enabled: appLogsDrawerOpen })
+  const clockifyProjectsQuery = useQuery({
+    queryKey: clockifyProjectOptionsQueryKey,
+    queryFn: getClockifyProjectOptions,
+    retry: 1,
+    staleTime: 5 * 60_000,
+  })
+  const clockifyProjectOptions = clockifyProjectsQuery.data ?? []
+  const selectedClockifyProjectValue = clockifyDefaultProject
+    ? getClockifyProjectOptionValue(clockifyDefaultProject)
+    : ''
+  const selectedClockifyProjectLoaded = clockifyProjectOptions.some(
+    project => getClockifyProjectOptionValue(project) === selectedClockifyProjectValue,
+  )
   const displayedAppLogs = useMemo(() => filterDisplayedAppLogs(appLogs.value.contents), [appLogs.value.contents])
   const clearAppLogsMutation = useMutation({
     mutationFn: app.clearLogFile,
@@ -72,6 +84,16 @@ function SettingsScreen() {
       void appLogs.refresh()
     },
   })
+
+  useEffect(() => {
+    const firstProject = clockifyProjectOptions[0]
+
+    if (!firstProject || clockifyDefaultProject) {
+      return
+    }
+
+    void setClockifyDefaultProject(firstProject)
+  }, [clockifyDefaultProject, clockifyProjectOptions, setClockifyDefaultProject])
 
   const openAppLogsDrawer = () => {
     setAppLogsDrawerOpen(true)
@@ -115,70 +137,6 @@ function SettingsScreen() {
           />
 
           <div className="flex w-full flex-col gap-10">
-            <SettingsSection title="Profile">
-              <SettingsRow label="Display name" description="Local name used in app previews.">
-                <label className="input input-primary w-full max-w-sm">
-                  <input
-                    aria-label="Display name"
-                    className="min-w-0 grow text-sm"
-                    type="text"
-                    value={displayName}
-                    onChange={event => void setDisplayName(event.currentTarget.value)}
-                  />
-                </label>
-              </SettingsRow>
-
-              <SettingsRow label="Desktop alerts" description="Show local desktop notifications.">
-                <input
-                  aria-label="Desktop alerts"
-                  checked={desktopAlerts}
-                  className="toggle toggle-primary"
-                  type="checkbox"
-                  onChange={event => void setDesktopAlerts(event.currentTarget.checked)}
-                />
-              </SettingsRow>
-            </SettingsSection>
-
-            <SettingsSection title="Workflow">
-              <SettingsRow label="Default view" description="Choose the first screen to open after sign-in.">
-                <select
-                  aria-label="Default view"
-                  className="select select-primary w-full max-w-56"
-                  value={defaultView}
-                  onChange={event => void setDefaultView(event.currentTarget.value as DefaultViewOption)}>
-                  {defaultViewOptions.map(option => (
-                    <option key={option} value={option}>
-                      {getDefaultViewLabel(option)}
-                    </option>
-                  ))}
-                </select>
-              </SettingsRow>
-
-              <SettingsRow label="Refresh interval" description="Choose how often the app checks for updates.">
-                <select
-                  aria-label="Refresh interval"
-                  className="select select-primary w-full max-w-56"
-                  value={refreshInterval}
-                  onChange={event => void setRefreshInterval(event.currentTarget.value as RefreshIntervalOption)}>
-                  {refreshIntervalOptions.map(option => (
-                    <option key={option} value={option}>
-                      {getRefreshIntervalLabel(option)}
-                    </option>
-                  ))}
-                </select>
-              </SettingsRow>
-
-              <SettingsRow label="Compact rows" description="Use tighter spacing in lists and tables.">
-                <input
-                  aria-label="Compact rows"
-                  checked={compactRows}
-                  className="toggle toggle-primary"
-                  type="checkbox"
-                  onChange={event => void setCompactRows(event.currentTarget.checked)}
-                />
-              </SettingsRow>
-            </SettingsSection>
-
             <SettingsSection title="Linear">
               <SettingsRow label="Ticket fetch limit" description="Maximum Linear tickets to load for ticket lists.">
                 <label className="input input-primary w-full max-w-56">
@@ -194,6 +152,22 @@ function SettingsScreen() {
                     }
                   />
                 </label>
+              </SettingsRow>
+
+              <SettingsRow label="Ticket refetch interval" description="How often assigned Linear tickets refresh.">
+                <select
+                  aria-label="Ticket refetch interval"
+                  className="select select-primary w-full max-w-56"
+                  value={linearTicketRefetchInterval}
+                  onChange={event =>
+                    void setLinearTicketRefetchInterval(event.currentTarget.value as LinearTicketRefetchIntervalOption)
+                  }>
+                  {linearTicketRefetchIntervalOptions.map(option => (
+                    <option key={option} value={option}>
+                      {getLinearTicketRefetchIntervalLabel(option)}
+                    </option>
+                  ))}
+                </select>
               </SettingsRow>
 
               <SettingsRow label="Ticket sort by" description="Linear field used for the initial ticket fetch order.">
@@ -228,6 +202,44 @@ function SettingsScreen() {
             </SettingsSection>
 
             <SettingsSection title="Clockify">
+              <SettingsRow
+                label="Default project"
+                description="Project used when creating new Clockify time entries from Linear issues.">
+                <div className="flex w-full max-w-sm items-center gap-2">
+                  <select
+                    aria-label="Default Clockify project"
+                    className="select select-primary min-w-0 flex-1"
+                    disabled={
+                      clockifyProjectsQuery.isLoading || clockifyProjectsQuery.isError || !clockifyProjectOptions.length
+                    }
+                    value={selectedClockifyProjectValue}
+                    onChange={event => {
+                      const selectedProject = clockifyProjectOptions.find(
+                        project => getClockifyProjectOptionValue(project) === event.currentTarget.value,
+                      )
+
+                      if (selectedProject) {
+                        void setClockifyDefaultProject(selectedProject)
+                      }
+                    }}>
+                    {!selectedClockifyProjectValue ? <option value="">No projects loaded</option> : null}
+                    {selectedClockifyProjectValue && !selectedClockifyProjectLoaded && clockifyDefaultProject ? (
+                      <option value={selectedClockifyProjectValue}>
+                        {formatClockifyProjectLabel(clockifyDefaultProject)}
+                      </option>
+                    ) : null}
+                    {clockifyProjectOptions.map(project => (
+                      <option
+                        key={getClockifyProjectOptionValue(project)}
+                        value={getClockifyProjectOptionValue(project)}>
+                        {formatClockifyProjectLabel(project)}
+                      </option>
+                    ))}
+                  </select>
+                  {clockifyProjectsQuery.isFetching ? <span className="loading loading-spinner loading-xs" /> : null}
+                </div>
+              </SettingsRow>
+
               <SettingsRow
                 label="Billable by default"
                 description="Mark new Clockify time entries as billable unless changed.">
@@ -271,22 +283,6 @@ function SettingsScreen() {
                     </label>
                   ))}
                 </fieldset>
-              </SettingsRow>
-
-              <SettingsRow label="Density" description="Adjust spacing across app screens.">
-                <div className="flex w-full max-w-56 items-center gap-3">
-                  <input
-                    aria-label="Density"
-                    className="range range-primary range-sm min-w-0 flex-1"
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={density}
-                    onChange={event => void setDensity(Number(event.currentTarget.value))}
-                  />
-                  <span className="text-base-content/70 w-10 text-right text-xs tabular-nums">{density}%</span>
-                </div>
               </SettingsRow>
 
               <SettingsRow label="App logs" description="View Rust and browser console logs from this app.">
@@ -576,19 +572,17 @@ function SettingsRow({ label, description, children }: SettingsRowProps) {
   )
 }
 
-function getDefaultViewLabel(defaultView: DefaultViewOption) {
-  switch (defaultView) {
-    case 'active':
-      return 'Active items'
-    case 'dashboard':
-      return 'Dashboard'
-    case 'recent':
-      return 'Recent items'
+function getLinearTicketSortByLabel(option: LinearTicketSortByOption) {
+  switch (option) {
+    case PaginationOrderBy.CreatedAt:
+      return 'Created date'
+    case PaginationOrderBy.UpdatedAt:
+      return 'Updated date'
   }
 }
 
-function getRefreshIntervalLabel(refreshInterval: RefreshIntervalOption) {
-  switch (refreshInterval) {
+function getLinearTicketRefetchIntervalLabel(option: LinearTicketRefetchIntervalOption) {
+  switch (option) {
     case 'manual':
       return 'Manual'
     case '5m':
@@ -597,15 +591,8 @@ function getRefreshIntervalLabel(refreshInterval: RefreshIntervalOption) {
       return 'Every 15 minutes'
     case '30m':
       return 'Every 30 minutes'
-  }
-}
-
-function getLinearTicketSortByLabel(option: LinearTicketSortByOption) {
-  switch (option) {
-    case PaginationOrderBy.CreatedAt:
-      return 'Created date'
-    case PaginationOrderBy.UpdatedAt:
-      return 'Updated date'
+    case '1h':
+      return 'Every hour'
   }
 }
 
@@ -622,6 +609,10 @@ function getLinearTicketSortOrderLabel(option: LinearTicketSortOrderOption) {
     case 'updated':
       return 'Updated date'
   }
+}
+
+function formatClockifyProjectLabel(project: { projectName: string; workspaceName: string }) {
+  return `${project.workspaceName} / ${project.projectName}`
 }
 
 function normalizePositiveInteger(value: string, fallback: number) {

@@ -9,6 +9,8 @@ browser-based Vite development. Keep stored values small, serializable, and vers
 
 - `compactRows`: temporary preference for dense list and table views.
 - `clockifyBillable`: default billable flag for new Clockify time entries created from Linear issues.
+- `clockifyDefaultProject`: default Clockify project for new time entries created from Linear issues. Stores the
+  selected workspace/project IDs plus display names.
 - `clockifyDescriptionTemplate`: Clockify time-entry description format for Linear issue variables.
 - `clockifyDescriptionTemplateFallback`: replacement text for missing values in the Clockify description template.
 - `clockifyLinearEntryLinks`: local mapping from Clockify time entry IDs to canonical Linear issue IDs.
@@ -17,6 +19,7 @@ browser-based Vite development. Keep stored values small, serializable, and vers
 - `desktopAlerts`: temporary preference for desktop notifications.
 - `displayName`: temporary local display name used by settings UI previews.
 - `linearTicketFetchLimit`: maximum number of Linear tickets to fetch for ticket lists. Default is `50`.
+- `linearTicketRefetchInterval`: how often assigned Linear tickets refetch on the dashboard. Default is `30m`.
 - `linearTicketSortBy`: Linear pagination ordering field for ticket fetches. Values mirror Linear `PaginationOrderBy`
   support currently exposed by the app: `createdAt`, `updatedAt`.
 - `linearTicketSortOrder`: client-side ticket ordering mode. Values are `custom`, `status`, `created`, `updated`, and
