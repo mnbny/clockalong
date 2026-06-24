@@ -1,4 +1,4 @@
-import { IconBell, IconLogout, IconMoon, IconSearch, IconSettings, IconSun } from '@tabler/icons-react'
+import { IconLogout, IconMoon, IconSettings, IconSun } from '@tabler/icons-react'
 import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 import { isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -77,12 +77,6 @@ function RootLayout() {
         <div className="flex items-center gap-1 justify-self-end">
           {authenticated ? (
             <>
-              <button className="btn btn-square btn-ghost" type="button" aria-label="Search">
-                <IconSearch className="size-5" />
-              </button>
-              <button className="btn btn-square btn-ghost" type="button" aria-label="Notifications">
-                <IconBell className="size-5" />
-              </button>
               <Link to="/settings" className="btn btn-square btn-ghost" aria-label="Settings">
                 <IconSettings className="size-5" />
               </Link>
@@ -103,13 +97,13 @@ function RootLayout() {
           <label className="swap swap-rotate btn btn-square btn-ghost">
             <input
               aria-label="Toggle theme"
-              checked={theme.theme === 'night'}
+              checked={theme.theme === 'abyss'}
               type="checkbox"
               onChange={event =>
                 void setTheme(
                   event.currentTarget.checked
-                    ? { theme: 'night', appearance: 'dark' }
-                    : { theme: 'winter', appearance: 'light' },
+                    ? { theme: 'abyss', appearance: 'dark' }
+                    : { theme: 'autumn', appearance: 'light' },
                 )
               }
             />
