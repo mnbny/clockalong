@@ -8,3 +8,5 @@ browser-based Vite development. Keep stored values small, serializable, and vers
 ## Keys
 
 - `theme`: active daisyUI theme and native window appearance.
+- `linearAuthConnected`: placeholder native marker for Linear auth state.
+- `clockifyAuthConnected`: placeholder native marker for Clockify auth state.

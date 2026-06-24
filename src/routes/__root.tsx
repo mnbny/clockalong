@@ -7,7 +7,9 @@ import { useEffect } from 'react'
 import { AppToaster } from '../components/AppToaster'
 import { ClinearLogo } from '../components/ClinearLogo'
 import { useDevTools } from '../hooks/useDevTools'
+import { useTauriClinearAuthState } from '../hooks/useTauriClinearAuthState'
 import { useStorage } from '../services/storage/useStorage'
+import { isClinearAuthenticated } from '../services/tauri/authClient'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -16,6 +18,8 @@ export const Route = createRootRoute({
 function RootLayout() {
   useDevTools()
   const [theme, setTheme] = useStorage('theme')
+  const authState = useTauriClinearAuthState()
+  const authenticated = isClinearAuthenticated(authState.value)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme.theme
@@ -45,15 +49,19 @@ function RootLayout() {
         </h1>
 
         <div className="flex items-center gap-1 justify-self-end">
-          <button className="btn btn-square btn-ghost" type="button" aria-label="Search">
-            <IconSearch className="size-5" />
-          </button>
-          <button className="btn btn-square btn-ghost" type="button" aria-label="Notifications">
-            <IconBell className="size-5" />
-          </button>
-          <button className="btn btn-square btn-ghost" type="button" aria-label="Settings">
-            <IconSettings className="size-5" />
-          </button>
+          {authenticated ? (
+            <>
+              <button className="btn btn-square btn-ghost" type="button" aria-label="Search">
+                <IconSearch className="size-5" />
+              </button>
+              <button className="btn btn-square btn-ghost" type="button" aria-label="Notifications">
+                <IconBell className="size-5" />
+              </button>
+              <button className="btn btn-square btn-ghost" type="button" aria-label="Settings">
+                <IconSettings className="size-5" />
+              </button>
+            </>
+          ) : null}
           <label className="swap swap-rotate btn btn-square btn-ghost">
             <input
               aria-label="Toggle theme"

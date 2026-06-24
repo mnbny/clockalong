@@ -41,3 +41,12 @@ Hooks should:
 - use `createTauriReactiveStateHook` from `src/utils/createTauriReactiveStateHook.ts` for shared mechanics
 
 Frontend-to-Rust bridge calls should be grouped by domain in `src/services/tauri/`.
+
+## Auth gate
+
+Rust owns the startup authentication snapshot. `src-tauri/src/clinear_auth.rs` reads placeholder auth markers from the
+Tauri store during setup, emits `clinear-auth:state-changed`, and leaves app initialization blocked until that native
+check completes.
+
+Provider start commands are placeholders for now. The frontend buttons call the same native command boundary the real
+flows will use, but no Linear or Clockify auth runs yet.

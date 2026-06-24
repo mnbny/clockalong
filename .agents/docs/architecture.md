@@ -12,6 +12,11 @@
 - Reusable frontend components live in `src/components/`; shared frontend helpers live in `src/utils/`.
 - Frontend-to-Rust bridge calls live in clients under `src/services/tauri/`; route code should use those clients instead
   of raw `invoke`.
+- Auth routing mirrors the reference app:
+  - `/` waits for native app initialization, then navigates to `/dashboard`.
+  - `_app` guards authenticated routes and redirects unauthenticated users to `/sign-in`.
+  - `_auth` guards authentication routes and redirects fully authenticated users to `/dashboard`.
+  - Rust exposes authentication state through `clinear_auth_get_state` and `clinear-auth:state-changed`.
 - Tauri configuration lives in `src-tauri/tauri.conf.json`.
 - Tauri permissions live in `src-tauri/capabilities/`.
 - Repo-local agent skills live in `.agents/skills/`.
@@ -25,7 +30,8 @@
 ## Commands
 
 - `pnpm dev`: run the Vite dev server.
-- `pnpm dev:conductor`: run `scripts/conductor-dev.sh`.
+- `scripts/conductor-run.sh`: run the Conductor Tauri dev entrypoint.
+- `scripts/conductor-setup.sh`: run the Conductor setup entrypoint.
 - `pnpm build`: run `tsr generate && tsc && vite build`.
 - `pnpm typecheck`: run `tsr generate && tsc --noEmit`.
 - `pnpm preview`: run the Vite preview server.
