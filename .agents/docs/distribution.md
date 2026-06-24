@@ -24,7 +24,7 @@ For a local Apple Silicon DMG build:
 
 ```sh
 export APPLE_SIGNING_IDENTITY="Developer ID Application: Yulian Glukhenko (XRRAJG7BU8)"
-export TAURI_SIGNING_PRIVATE_KEY_PATH="$HOME/.tauri/clinear-updater.key"
+export TAURI_SIGNING_PRIVATE_KEY_PATH="$HOME/Documents/clinear-updater.key"
 pnpm release:mac
 ```
 
