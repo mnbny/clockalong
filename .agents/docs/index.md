@@ -4,6 +4,7 @@
 - `architecture.md`: app architecture and commands
 - `tauri.md`: Tauri state, events, and React hook conventions
 - `storage.md`: store key contract
+- `linear.md`: Linear API, SDK, OAuth, and client strategy
 
 ## Documentation Style
 

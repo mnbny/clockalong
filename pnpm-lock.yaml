@@ -14,6 +14,9 @@ importers:
       '@fontsource-variable/oxanium':
         specifier: 5.2.8
         version: 5.2.8
+      '@linear/sdk':
+        specifier: 87.0.0
+        version: 87.0.0(graphql@17.0.1)
       '@mantine/hooks':
         specifier: 9.2.1
         version: 9.2.1(react@19.2.6)
@@ -280,6 +283,11 @@ packages:
   '@fontsource-variable/oxanium@5.2.8':
     resolution: {integrity: sha512-W3HWxRLXVB6yox3dgm1DIGOp98pz8KglwiM6/2BsMopvZrg98mXI9citFWz2pUX0FOOLwf8fmHxX+KrIn+6BoA==}
 
+  '@graphql-typed-document-node/core@3.2.0':
+    resolution: {integrity: sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ==}
+    peerDependencies:
+      graphql: ^0.8.0 || ^0.9.0 || ^0.10.0 || ^0.11.0 || ^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
+
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
     engines: {node: '>=18.18.0'}
@@ -315,6 +323,10 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@linear/sdk@87.0.0':
+    resolution: {integrity: sha512-hYJhmhDIuhu7tyca1T9xZ5y0sf6EiCnFYbdGX3I5kylkGGMrrVszasoIfrkopwBCuJjolFnnVVwqqzCbURVftA==}
+    engines: {node: '>=18.x'}
 
   '@mantine/hooks@9.2.1':
     resolution: {integrity: sha512-IX/ztVG9eWmQTRsN7G8odyW4JckNvN8qv5A2ULzXyazjtAKLuaUpuMz0c6XhRp10J0g4bVfV3rhrTgWeImqxqg==}
@@ -1339,6 +1351,10 @@ packages:
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
+
+  graphql@17.0.1:
+    resolution: {integrity: sha512-8eWbg5Zcv/8o20nzEjHUGPTj20MLFJjc5kagbIPxbaeGxvFwpitJhemEC/k17n5+UD4M/9ea5rTuce78mELujQ==}
+    engines: {node: ^22.0.0 || ^24.0.0 || ^25.0.0 || >=26.0.0}
 
   has-bigints@1.1.0:
     resolution: {integrity: sha512-R3pbpkcIqv2Pm3dUwgjclDRVmWpTJW2DcMzcIhEXEx1oh/CEMObMm3KLmRJOdvhM7o4uQBnwr8pzRK2sJWIqfg==}
@@ -2475,6 +2491,10 @@ snapshots:
 
   '@fontsource-variable/oxanium@5.2.8': {}
 
+  '@graphql-typed-document-node/core@3.2.0(graphql@17.0.1)':
+    dependencies:
+      graphql: 17.0.1
+
   '@humanfs/core@0.19.2':
     dependencies:
       '@humanfs/types': 0.15.0
@@ -2509,6 +2529,12 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@linear/sdk@87.0.0(graphql@17.0.1)':
+    dependencies:
+      '@graphql-typed-document-node/core': 3.2.0(graphql@17.0.1)
+    transitivePeerDependencies:
+      - graphql
 
   '@mantine/hooks@9.2.1(react@19.2.6)':
     dependencies:
@@ -3620,6 +3646,8 @@ snapshots:
   gopd@1.2.0: {}
 
   graceful-fs@4.2.11: {}
+
+  graphql@17.0.1: {}
 
   has-bigints@1.1.0: {}
 
