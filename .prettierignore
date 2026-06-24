@@ -1,0 +1,12 @@
+.context/
+.eslintcache
+.playwright-mcp/
+.pnpm-store/
+.yarn/
+# Symlink to AGENTS.md; Prettier errors when it encounters symlinks.
+CLAUDE.md
+dist/
+dist-ssr/
+node_modules/
+pnpm-lock.yaml
+src-tauri/target/
