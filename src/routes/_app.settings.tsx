@@ -43,7 +43,7 @@ import {
   themeOptions,
 } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
-import { app } from '../services/tauri/appClient'
+import { app } from '../services/tauri/app-client'
 import { type AppUpdate, type AppUpdateDownloadProgress, appUpdates } from '../services/tauri/app-updates'
 import { cx } from '../utils/cx'
 import { getErrorMessage } from '../utils/errors'

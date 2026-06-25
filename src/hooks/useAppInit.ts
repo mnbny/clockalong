@@ -1,6 +1,6 @@
 import { isTauri } from '@tauri-apps/api/core'
 
-import { app } from '../services/tauri/appClient'
+import { app } from '../services/tauri/app-client'
 import { createTauriReactiveStateHook } from '../utils/create-tauri-reactive-state-hook'
 
 export const appInitializationStateChangedEvent = 'app:initialization-state-changed'
