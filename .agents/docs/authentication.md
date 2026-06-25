@@ -33,6 +33,8 @@ The first screen should remain a compact connection checklist:
 - Show a connected icon or connected button state after success.
 - Use success toasts for completed connections.
 - Use error toasts for failed or cancelled connections.
+- Keep the screen focused on the provider buttons. Do not add a product logo or heading unless users cannot tell what
+  screen they are on.
 - Do not add persistent explanatory copy unless the flow becomes unclear in practice.
 - Do not add detailed per-provider state labels beyond connected or disconnected for the first pass.
 
@@ -58,6 +60,11 @@ Secure storage is preferred for long-lived provider credentials. For the first r
 reasonable fit because there is already a local Tauri reference app using it successfully. Native Keychain storage is
 also acceptable if the implementation stays straightforward. Normal Tauri store is fine for non-secret auth metadata,
 but it should not hold refresh tokens or user API keys once the app is meant to be distributed.
+
+Native auth code is split by provider rather than kept in one large module. `auth.rs` owns the Tauri command surface,
+public snapshot, and `clinear-auth:state-changed` event. `auth_clockify.rs` owns Clockify API-key validation and storage.
+`auth_linear.rs` owns Linear OAuth, loopback callback handling, token refresh scheduling, and disconnect. `stronghold.rs`
+is the shared native secret helper.
 
 ## Frontend responsibilities
 
@@ -101,7 +108,7 @@ User flow:
 - The dialog shows one regular text input for the API key.
 - The dialog links directly to Clockify's API key management page at `https://app.clockify.me/manage-api-keys`.
 - The user submits the key.
-- The frontend calls the native Clockify key-save command.
+- The frontend calls `clinear_auth_connect_clockify`.
 - Rust validates the key against Clockify.
 - If validation succeeds, Rust stores the key in secure native storage, emits an auth-state change, and the frontend
   shows a success toast.
@@ -132,6 +139,8 @@ Clockify API calls belong in the TypeScript client, not in Rust. Keep that bridg
 Rust for the current key when it needs to build or use the Clockify client. The key should stay in memory and should not
 be written to browser storage, route state, logs, or broad UI state.
 
+The frontend bridge should use `clinearAuth.getClockifyCredential()`, whose snapshot shape is `{ apiKey }`.
+
 Clockify API calls should use the frontend Zodios client and send the API key as Clockify's API-key header. Rust should
 not become a general Clockify API proxy. Its Clockify role is key storage, key validation, key clearing, startup auth
 checks, auth-state events, and returning the key to the frontend on demand.
@@ -144,7 +153,7 @@ main UI. If needed, base URL selection can live behind an advanced control later
 Linear should use OAuth2 Authorization Code with PKCE:
 
 - The user clicks the Linear connection button.
-- The frontend calls the native Linear authentication command.
+- The frontend calls `clinear_auth_connect_linear`.
 - Rust creates the OAuth state and PKCE verifier/challenge.
 - Rust starts a local callback receiver.
 - Rust opens the system browser to Linear's authorization page.
@@ -158,7 +167,8 @@ Linear should use OAuth2 Authorization Code with PKCE:
 
 Linear access tokens are short-lived. Rust should return a valid Linear access token to the frontend when the TypeScript
 Linear client needs one. If the current access token is expired or near expiry, Rust should refresh first and then return
-the new access token.
+the new access token. The frontend bridge should use `clinearAuth.getLinearCredential()`, whose snapshot shape is
+`{ accessToken }`.
 
 The frontend should use the official Linear TypeScript SDK for normal Linear reads and mutations. Rust should not proxy
 Linear issue queries, ticket lists, comments, or other regular GraphQL operations. The native layer's Linear role is
@@ -193,23 +203,23 @@ Clinear should depend on MCP. It means our product flow should also be OAuth-fir
 
 ## Token refresh
 
-Keep refresh behavior simple at first. The native side can refresh on demand when the frontend asks for an access token.
-Scheduled background refresh can come later, but it is not required for the first working Linear integration.
+Keep refresh behavior native-side. Rust refreshes on demand when the frontend asks for an access token, and schedules a
+background refresh before the current access token expires. If a Linear API call still receives `401`, the frontend can
+call `clinearAuth.refreshLinearCredential()` and retry the request once with a fresh SDK client.
 
 If refresh succeeds, store the new token response and return the access token. If refresh fails because credentials are
 invalid or revoked, clear Linear credentials, emit an auth-state change, and let the frontend show an error toast. If
 refresh fails because the network or provider is temporarily unavailable, keep stored credentials, mark Linear
-disconnected for the failed check, and surface the error.
+disconnected for the failed check, schedule a retry, and surface the error.
 
 ## Disconnect
 
 Use "Disconnect" for provider auth removal rather than web-app "logout" language.
 
 Linear disconnect is local-first and provider revocation is best effort. Rust should try to revoke the stored refresh
-token with `token_type_hint=refresh_token`, then try the current access token with `token_type_hint=access_token`. It
-should clear local Linear credentials, clear auth metadata, and emit an auth-state change even if provider revocation
-fails. The frontend should show a success toast when revocation is confirmed or skipped, and a warning toast when only
-the local disconnect is confirmed.
+or access token when practical, then clear local Linear credentials, abort scheduled refresh work, clear auth metadata,
+and emit an auth-state change even if provider revocation fails. The disconnect result may include `revocationStatus`,
+but the UI should treat local credential removal as disconnected.
 
 ## Open implementation choices
 

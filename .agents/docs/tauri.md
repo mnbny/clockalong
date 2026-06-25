@@ -56,8 +56,9 @@ must call the plugin and decide how to notify or install.
 
 ## Auth gate
 
-Rust owns the startup authentication snapshot. `src-tauri/src/clinear_auth.rs` reads provider credentials from
-Stronghold during setup, validates or refreshes them as needed, emits `clinear-auth:state-changed`, and leaves app
+Rust owns the startup authentication snapshot. `src-tauri/src/auth.rs` exposes the command/event surface and delegates
+provider-specific credential work to `auth_linear.rs` and `auth_clockify.rs`. Those modules read provider credentials
+from Stronghold during setup, validate or refresh them as needed, emit `clinear-auth:state-changed`, and leave app
 initialization blocked until that native check completes.
 
 Linear starts through the native OAuth command. Clockify uses a native API-key connection command that validates the key

@@ -6,7 +6,7 @@ while the app ships only public OAuth metadata.
 
 Rust owns Linear auth state and token storage. The broader Linear API client should live in the frontend and use the
 official TypeScript SDK when possible. The native layer should handle OAuth startup, callback verification, secure token
-storage, token refresh, auth-state initialization, and clearing credentials.
+storage, token refresh scheduling, auth-state initialization, and clearing credentials.
 
 ## Primary references
 
@@ -58,6 +58,8 @@ Implementation constraints:
 - `viewer.assignedIssues` does not expose a sort-direction argument. Do not treat client-side ordering as an API fetch
   direction.
 - Use focused raw GraphQL when the dashboard only needs a compact row DTO.
+- If a compact assigned-ticket request receives `401`, refresh the native Linear credential and retry once with a new
+  SDK client.
 - Fetch status `color`, `type`, and `position`; `position` is used for Linear-like status ordering.
 - Fetch assignee display fields and avatar fields for the row avatar.
 
@@ -85,9 +87,9 @@ OAuth endpoints:
 - Token: `https://api.linear.app/oauth/token`
 - Revoke: `https://api.linear.app/oauth/revoke`
 
-During Linear disconnect, send the token in the `token` form field. Use `token_type_hint=refresh_token` for the stored
-refresh token and `token_type_hint=access_token` for the current access token. Local disconnect still wins if Linear
-revocation fails: clear local tokens, emit auth state, and show a warning toast.
+During Linear disconnect, provider revocation is best effort. Send the token in the `token` form field with the matching
+`token_type_hint` when revoking with Linear. Local disconnect still wins if Linear revocation fails: clear local tokens,
+abort scheduled refresh work, emit auth state, and keep the user-visible state disconnected.
 
 OAuth requirements and defaults relevant to Clinear:
 
@@ -187,6 +189,7 @@ Preferred split:
 - Rust stores refresh/access tokens in secure native storage, ideally Keychain-backed on macOS.
 - Rust exposes auth state through the existing Tauri reactive state pattern.
 - Rust exposes a command to return a valid short-lived access token, refreshing it first if needed.
+- Rust schedules a refresh before token expiry and schedules retry refreshes after transient failures.
 - The frontend creates `new LinearClient({ accessToken })` from `@linear/sdk`.
 - The frontend performs normal Linear API reads through `@linear/sdk`.
 - Do not store Linear tokens in the Tauri JSON store, browser local storage, or route state.

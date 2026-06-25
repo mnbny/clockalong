@@ -17,6 +17,6 @@ export async function createLinearClient({ accessToken }: CreateLinearClientOpti
 }
 
 async function getLinearAccessToken() {
-  const { linearAccessToken } = await getTauriLinearAccessToken()
-  return linearAccessToken
+  const { accessToken } = await getTauriLinearAccessToken()
+  return accessToken
 }

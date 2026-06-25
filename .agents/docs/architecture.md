@@ -16,6 +16,11 @@
   `src/services/clockify/`.
 - A provider service folder can expose a small `index.ts` for public exports when that pattern already exists, as
   Clockify does. Avoid broad barrels elsewhere; import concrete modules when that keeps dependencies clearer.
+- Native auth is split by responsibility:
+  - `src-tauri/src/auth.rs`: Tauri command surface, public auth snapshot, and auth-state events.
+  - `src-tauri/src/auth_clockify.rs`: Clockify API-key validation and secure credential lifecycle.
+  - `src-tauri/src/auth_linear.rs`: Linear OAuth, loopback callback, token refresh, and disconnect.
+  - `src-tauri/src/stronghold.rs`: narrow Stronghold read/write/remove helpers for native secrets.
 - Auth routing mirrors the reference app:
   - `/` waits for native app initialization, then navigates to `/dashboard`.
   - `_app` guards authenticated routes and redirects unauthenticated users to `/sign-in`.

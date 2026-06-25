@@ -34,14 +34,14 @@ const authenticatedClockifyReportsAxios = axios.create(clockifyClientOptions.axi
       url: config.url,
     })
 
-    const { clockifyApiKey } = await getTauriClockifyApiKey()
+    const { apiKey } = await getTauriClockifyApiKey()
 
-    if (!clockifyApiKey) {
+    if (!apiKey) {
       throw new Error('Missing Clockify API key.')
     }
 
     const headers = AxiosHeaders.from(config.headers)
-    headers.set('X-Api-Key', clockifyApiKey)
+    headers.set('X-Api-Key', apiKey)
 
     config.headers = headers
     return config

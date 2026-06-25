@@ -1,7 +1,10 @@
 mod app_initialization;
 mod app_logs;
-mod clinear_auth;
+mod auth;
+mod auth_clockify;
+mod auth_linear;
 mod storage_config;
+mod stronghold;
 mod stronghold_config;
 
 use tauri::Manager;
@@ -37,7 +40,8 @@ pub fn run() {
 
     builder
         .manage(app_initialization::AppInitializationState::default())
-        .manage(clinear_auth::ClinearAuthState::default())
+        .manage(auth::ClinearAuthState::default())
+        .manage(stronghold::ClinearStrongholdState::default())
         .setup(|app| {
             let salt_path = app
                 .path()
@@ -50,9 +54,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 log::info!("auth lifecycle initialization started");
-                if let Err(error) =
-                    clinear_auth::initialize_auth_lifecycle(app_handle.clone()).await
-                {
+                if let Err(error) = auth::initialize_auth_lifecycle(app_handle.clone()).await {
                     log::error!("auth lifecycle initialization failed: {error}");
                 } else {
                     log::info!("auth lifecycle initialization completed");
@@ -72,14 +74,14 @@ pub fn run() {
             app_logs::app_clear_log_file,
             app_logs::app_read_log_file,
             app_initialization::app_get_initialization_state,
-            clinear_auth::clinear_auth_clear_clockify_authentication,
-            clinear_auth::clinear_auth_connect_clockify_api_key,
-            clinear_auth::clinear_auth_disconnect_linear,
-            clinear_auth::clinear_auth_get_linear_access_token,
-            clinear_auth::clinear_auth_get_state,
-            clinear_auth::clinear_auth_get_clockify_api_key,
-            clinear_auth::clinear_auth_start_clockify_authentication,
-            clinear_auth::clinear_auth_start_linear_authentication,
+            auth::clinear_auth_connect_clockify,
+            auth::clinear_auth_connect_linear,
+            auth::clinear_auth_disconnect_clockify,
+            auth::clinear_auth_disconnect_linear,
+            auth::clinear_auth_get_clockify_credential,
+            auth::clinear_auth_get_linear_credential,
+            auth::clinear_auth_get_state,
+            auth::clinear_auth_refresh_linear_credential,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

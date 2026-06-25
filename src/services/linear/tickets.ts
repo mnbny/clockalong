@@ -1,6 +1,7 @@
 import type { LinearTicketSortByOption } from '../storage/config'
-import type { Issue, LinearRawResponse, User, WorkflowState } from '@linear/sdk'
+import type { Issue, LinearClient, User, WorkflowState } from '@linear/sdk'
 
+import { clinearAuth } from '../tauri/authClient'
 import { createLinearClient } from './client'
 
 const linearTicketsPageSize = 50
@@ -54,8 +55,6 @@ type AssignedIssuesResponse = {
   }
 }
 type AssignedIssuesPage = AssignedIssuesResponse['viewer']['assignedIssues']
-type AssignedIssuesRawResponse = LinearRawResponse<AssignedIssuesResponse>
-
 type AssignedIssuesVariables = {
   after?: string | null
   first: number
@@ -98,7 +97,6 @@ const assignedTicketsQuery = `
 `
 
 export async function getAssignedLinearTickets(options: GetAssignedLinearTicketsOptions): Promise<LinearTicket[]> {
-  const linearClient = await createLinearClient()
   const fetchLimit = normalizeFetchLimit(options.fetchLimit)
   const assignedIssues: AssignedIssuesResponse['viewer']['assignedIssues']['nodes'] = []
   let after: string | null = null
@@ -122,10 +120,7 @@ export async function getAssignedLinearTickets(options: GetAssignedLinearTickets
       sortBy: options.sortBy,
     })
 
-    const response: AssignedIssuesRawResponse = await linearClient.client.rawRequest<
-      AssignedIssuesResponse,
-      AssignedIssuesVariables
-    >(assignedTicketsQuery, {
+    const response = await requestAssignedIssuesPage({
       after,
       first,
       orderBy: options.sortBy,
@@ -173,6 +168,50 @@ export async function getAssignedLinearTickets(options: GetAssignedLinearTickets
   })
 
   return tickets
+}
+
+async function requestAssignedIssuesPage(variables: AssignedIssuesVariables) {
+  const linearClient = await createLinearClient()
+  return requestAssignedIssuesPageWithClient(linearClient, variables, true)
+}
+
+async function requestAssignedIssuesPageWithClient(
+  linearClient: LinearClient,
+  variables: AssignedIssuesVariables,
+  allowCredentialRefresh: boolean,
+) {
+  try {
+    const response = await linearClient.client.rawRequest<AssignedIssuesResponse, AssignedIssuesVariables>(
+      assignedTicketsQuery,
+      variables,
+    )
+
+    if (response.status !== 401 || !allowCredentialRefresh) {
+      return response
+    }
+  } catch (error) {
+    if (!allowCredentialRefresh || !isUnauthorizedLinearError(error)) {
+      throw error
+    }
+  }
+
+  linearTicketsLog('assigned fetch unauthorized, refreshing Linear credential')
+  await clinearAuth.refreshLinearCredential()
+  const retryClient = await createLinearClient()
+  return requestAssignedIssuesPageWithClient(retryClient, variables, false)
+}
+
+function isUnauthorizedLinearError(error: unknown) {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const maybeError = error as {
+    response?: { status?: number }
+    status?: number
+  }
+
+  return maybeError.status === 401 || maybeError.response?.status === 401
 }
 
 function normalizeFetchLimit(fetchLimit: number) {

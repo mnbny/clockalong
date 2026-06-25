@@ -83,7 +83,7 @@ const storageConfig = {
   },
   displayName: {
     type: 'string',
-    default: 'Moonbunny Clinear',
+    default: 'Moon Bunny Clinear',
     version: 1,
   },
   linearTicketFetchLimit: {

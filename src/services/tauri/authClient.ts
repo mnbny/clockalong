@@ -7,11 +7,6 @@ export type ClinearAuthSnapshot = {
 
 export type ClinearAuthProvider = 'linear' | 'clockify'
 
-export type ClinearAuthStartResult = {
-  provider: ClinearAuthProvider
-  status: 'connected' | 'notImplemented'
-}
-
 export type ClinearAuthConnectionResult = {
   provider: ClinearAuthProvider
   status: 'connected'
@@ -20,27 +15,26 @@ export type ClinearAuthConnectionResult = {
 export type ClinearAuthDisconnectResult = {
   provider: ClinearAuthProvider
   status: 'disconnected'
-  revocationStatus: 'confirmed' | 'failed' | 'skipped'
+  revocationStatus?: 'confirmed' | 'failed' | 'skipped'
 }
 
-export type ClinearClockifyApiKeySnapshot = {
-  clockifyApiKey: string | null
+export type ClinearClockifyCredentialSnapshot = {
+  apiKey: string | null
 }
 
-export type ClinearLinearAccessTokenSnapshot = {
-  linearAccessToken: string | null
+export type ClinearLinearCredentialSnapshot = {
+  accessToken: string | null
 }
 
 export const clinearAuth = {
-  clearClockifyAuthentication: () => invoke<void>('clinear_auth_clear_clockify_authentication'),
-  connectClockifyApiKey: (apiKey: string) =>
-    invoke<ClinearAuthConnectionResult>('clinear_auth_connect_clockify_api_key', { apiKey }),
+  connectClockify: (apiKey: string) => invoke<ClinearAuthConnectionResult>('clinear_auth_connect_clockify', { apiKey }),
+  connectLinear: () => invoke<ClinearAuthConnectionResult>('clinear_auth_connect_linear'),
+  disconnectClockify: () => invoke<ClinearAuthDisconnectResult>('clinear_auth_disconnect_clockify'),
   disconnectLinear: () => invoke<ClinearAuthDisconnectResult>('clinear_auth_disconnect_linear'),
-  getClockifyApiKey: () => invoke<ClinearClockifyApiKeySnapshot>('clinear_auth_get_clockify_api_key'),
-  getLinearAccessToken: () => invoke<ClinearLinearAccessTokenSnapshot>('clinear_auth_get_linear_access_token'),
+  getClockifyCredential: () => invoke<ClinearClockifyCredentialSnapshot>('clinear_auth_get_clockify_credential'),
+  getLinearCredential: () => invoke<ClinearLinearCredentialSnapshot>('clinear_auth_get_linear_credential'),
   getState: () => invoke<ClinearAuthSnapshot>('clinear_auth_get_state'),
-  startClockifyAuthentication: () => invoke<ClinearAuthStartResult>('clinear_auth_start_clockify_authentication'),
-  startLinearAuthentication: () => invoke<ClinearAuthStartResult>('clinear_auth_start_linear_authentication'),
+  refreshLinearCredential: () => invoke<ClinearLinearCredentialSnapshot>('clinear_auth_refresh_linear_credential'),
 }
 
 export function isClinearAuthenticated(authState: ClinearAuthSnapshot) {

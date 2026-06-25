@@ -5,18 +5,3 @@ pub const STRONGHOLD_PATH: &str = "secrets.hold";
 pub const STRONGHOLD_CLIENT_NAME: &str = "main";
 pub const STRONGHOLD_METADATA_KEY: &str = "__stronghold_metadata";
 pub const STRONGHOLD_PASSWORD: &str = "clinear-stronghold-v1";
-
-#[derive(Clone, Copy)]
-pub enum StrongholdKey {
-    ClockifyApiKey,
-    LinearOAuthTokens,
-}
-
-impl StrongholdKey {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::ClockifyApiKey => "clockifyApiKey",
-            Self::LinearOAuthTokens => "linearOAuthTokens",
-        }
-    }
-}

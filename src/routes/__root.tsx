@@ -3,7 +3,7 @@ import { IconLogout, IconMoon, IconSettings, IconSun } from '@tabler/icons-react
 import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 import { isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect } from 'react'
 
 import { appToast, AppToaster } from '../components/AppToaster'
 import { MoonBunnyLogo } from '../components/MoonBunnyLogo'
@@ -20,7 +20,6 @@ export const Route = createRootRoute({
 function RootLayout() {
   useDevTools()
   const [theme, setTheme] = useStorage('theme')
-  const [disconnectingLinear, setDisconnectingLinear] = useState(false)
   const authState = useTauriClinearAuthState()
   const authenticated = isClinearAuthenticated(authState.value)
 
@@ -109,26 +108,16 @@ function RootLayout() {
 
   const disconnectLinear = async () => {
     console.info('[clinear auth] disconnectLinear: requested from header')
-    setDisconnectingLinear(true)
 
     try {
       const result = await clinearAuth.disconnectLinear()
       console.info(`[clinear auth] disconnectLinear: revocation_status=${result.revocationStatus}`)
-
-      if (result.revocationStatus === 'failed') {
-        appToast.warning('Linear disconnected on this device.', {
-          description: 'Linear revocation could not be confirmed. You may revoke access from Linear settings.',
-        })
-      } else {
-        appToast.success('Linear disconnected.')
-      }
+      appToast.success('Linear disconnected.')
     } catch (error) {
       console.error('[clinear auth] disconnectLinear: failed', error)
       appToast.error('Could not disconnect Linear.', {
         description: getErrorMessage(error),
       })
-    } finally {
-      setDisconnectingLinear(false)
     }
   }
 
@@ -140,7 +129,7 @@ function RootLayout() {
         <div />
 
         <h1 className="pointer-events-none flex h-10 min-w-0 items-center gap-3 justify-self-center text-lg leading-none font-semibold">
-          <span className="truncate">Moonbunny</span>
+          <span className="truncate">Moon Bunny</span>
           <MoonBunnyLogo className="size-10 self-center" />
           <span className="truncate">Clinear</span>
         </h1>
@@ -153,15 +142,10 @@ function RootLayout() {
               </Link>
               <button
                 className="btn btn-square btn-ghost"
-                disabled={disconnectingLinear}
                 type="button"
                 aria-label="Disconnect Linear"
                 onClick={() => void disconnectLinear()}>
-                {disconnectingLinear ? (
-                  <span className="loading loading-spinner loading-sm" />
-                ) : (
-                  <IconLogout className="size-5" />
-                )}
+                <IconLogout className="size-5" />
               </button>
             </>
           ) : null}
