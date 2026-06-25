@@ -6,8 +6,7 @@
 
 Clinear is a desktop app for tracking time against Linear issues in Clockify.
 
-It is built for a narrow workflow: pull in the Linear issues assigned to you, start or stop a Clockify timer from a ticket,
-and see how much time has been tracked for that work.
+It is built for a narrow workflow: pull in the Linear issues assigned to you, start or stop a Clockify timer from a ticket, and see how much time has been tracked for that work.
 
 ## Development
 
