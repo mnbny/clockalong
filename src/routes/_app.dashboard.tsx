@@ -23,7 +23,7 @@ import {
   type CreateTimeEntryRequest,
   type TimeEntryDtoImplV1,
 } from '../services/clockify'
-import { formatClockifyDescriptionTemplate } from '../services/clockify/descriptionTemplate'
+import { formatClockifyDescriptionTemplate } from '../services/clockify/description-template'
 import { getAssignedLinearTickets } from '../services/linear/tickets'
 import { sortLinearTickets } from '../services/linear/tickets-sorting'
 import { linearTicketSortOrderOptions } from '../services/storage/config'

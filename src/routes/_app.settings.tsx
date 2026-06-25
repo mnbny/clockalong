@@ -26,7 +26,7 @@ import {
   formatClockifyDescriptionTemplate,
   getUnknownClockifyDescriptionTemplateTokens,
   sampleClockifyDescriptionTemplateValues,
-} from '../services/clockify/descriptionTemplate'
+} from '../services/clockify/description-template'
 import {
   clockifyProjectOptionsQueryKey,
   getClockifyProjectOptions,

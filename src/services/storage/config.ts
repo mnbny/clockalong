@@ -3,7 +3,7 @@ import { PaginationOrderBy } from '@linear/sdk'
 import {
   defaultClockifyDescriptionTemplate,
   defaultClockifyDescriptionTemplateFallback,
-} from '../clockify/descriptionTemplate'
+} from '../clockify/description-template'
 import { type StorageConfig, StorageService } from './storage'
 
 export const storagePath = 'settings.json'
