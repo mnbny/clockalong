@@ -14,7 +14,7 @@ const originalConsole = {
 
 let initialized = false
 
-export function initializeConsoleLogging() {
+export function registerConsoleLogging() {
   if (initialized || !isTauri()) {
     return
   }
