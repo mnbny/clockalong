@@ -1,6 +1,6 @@
 import { isTauri } from '@tauri-apps/api/core'
 
-import { clinearAuth } from '../tauri/authClient'
+import { auth } from '../tauri/auth-client'
 
 export async function getTauriLinearAccessToken() {
   const fallback = { accessToken: null as string | null }
@@ -11,7 +11,7 @@ export async function getTauriLinearAccessToken() {
   }
 
   linearAuthLog('getTauriLinearAccessToken: requesting Rust token snapshot')
-  return clinearAuth.getLinearCredential()
+  return auth.getLinearCredential()
 }
 
 function linearAuthLog(message: string) {

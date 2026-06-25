@@ -26,7 +26,7 @@ export type ClinearLinearCredentialSnapshot = {
   accessToken: string | null
 }
 
-export const clinearAuth = {
+export const auth = {
   connectClockify: (apiKey: string) => invoke<ClinearAuthConnectionResult>('clinear_auth_connect_clockify', { apiKey }),
   connectLinear: () => invoke<ClinearAuthConnectionResult>('clinear_auth_connect_linear'),
   disconnectClockify: () => invoke<ClinearAuthDisconnectResult>('clinear_auth_disconnect_clockify'),
@@ -35,8 +35,4 @@ export const clinearAuth = {
   getLinearCredential: () => invoke<ClinearLinearCredentialSnapshot>('clinear_auth_get_linear_credential'),
   getState: () => invoke<ClinearAuthSnapshot>('clinear_auth_get_state'),
   refreshLinearCredential: () => invoke<ClinearLinearCredentialSnapshot>('clinear_auth_refresh_linear_credential'),
-}
-
-export function isClinearAuthenticated(authState: ClinearAuthSnapshot) {
-  return authState.linearAuthenticated && authState.clockifyAuthenticated
 }

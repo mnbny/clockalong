@@ -6,7 +6,7 @@ import { appToast } from '../components/AppToaster'
 import { ClockifyIcon } from '../components/icons/ClockifyIcon'
 import { LinearIcon } from '../components/icons/LinearIcon'
 import { useAppAuth } from '../hooks/useAppAuth'
-import { clinearAuth, type ClinearAuthProvider } from '../services/tauri/authClient'
+import { auth, type ClinearAuthProvider } from '../services/tauri/auth-client'
 import { cx } from '../utils/cx'
 import { getErrorMessage } from '../utils/errors'
 
@@ -25,7 +25,7 @@ function SignInScreen() {
     setPendingProvider('linear')
 
     try {
-      const result = await clinearAuth.connectLinear()
+      const result = await auth.connectLinear()
       signInLog(`connectLinear: status=${result.status}`)
       appToast.success('Linear connected.')
     } catch (error) {
@@ -50,7 +50,7 @@ function SignInScreen() {
     setPendingProvider('clockify')
 
     try {
-      await clinearAuth.connectClockify(clockifyApiKey)
+      await auth.connectClockify(clockifyApiKey)
       signInLog('connectClockify: connected')
       appToast.success('Clockify connected.')
       clockifyDialogRef.current?.close()

@@ -1,6 +1,6 @@
 import { isTauri } from '@tauri-apps/api/core'
 
-import { clinearAuth } from '../tauri/authClient'
+import { auth } from '../tauri/auth-client'
 
 export async function getTauriClockifyApiKey() {
   const fallback = { apiKey: null as string | null }
@@ -11,7 +11,7 @@ export async function getTauriClockifyApiKey() {
   }
 
   clockifyAuthLog('getTauriClockifyApiKey: requesting Rust key snapshot')
-  return clinearAuth.getClockifyCredential()
+  return auth.getClockifyCredential()
 }
 
 function clockifyAuthLog(message: string) {

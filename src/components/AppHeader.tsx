@@ -7,7 +7,7 @@ import { useCallback, useEffect } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
 import { useStorage } from '../services/storage/useStorage'
-import { clinearAuth, isClinearAuthenticated } from '../services/tauri/authClient'
+import { auth } from '../services/tauri/auth-client'
 import { getErrorMessage } from '../utils/errors'
 import { appToast } from './AppToaster'
 import { MoonBunnyLogo } from './MoonBunnyLogo'
@@ -15,7 +15,7 @@ import { MoonBunnyLogo } from './MoonBunnyLogo'
 export function AppHeader() {
   const [theme, setTheme] = useStorage('theme')
   const authState = useAppAuth()
-  const authenticated = isClinearAuthenticated(authState.value)
+  const authenticated = authState.value.linearAuthenticated && authState.value.clockifyAuthenticated
 
   const toggleTheme = useCallback(() => {
     void setTheme(current =>
@@ -43,7 +43,7 @@ export function AppHeader() {
     console.info('[clinear auth] disconnectLinear: requested from header')
 
     try {
-      const result = await clinearAuth.disconnectLinear()
+      const result = await auth.disconnectLinear()
       console.info(`[clinear auth] disconnectLinear: revocation_status=${result.revocationStatus}`)
       appToast.success('Linear disconnected.')
     } catch (error) {

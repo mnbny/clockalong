@@ -3,7 +3,6 @@ import { useEffect } from 'react'
 
 import { clockifyProjectOptionsQueryKey, getClockifyProjectOptions } from '../services/clockify'
 import { useStorage } from '../services/storage/useStorage'
-import { isClinearAuthenticated } from '../services/tauri/authClient'
 import { useAppAuth } from './useAppAuth'
 import { useAppInit } from './useAppInit'
 
@@ -12,7 +11,10 @@ export function useClockifyDefaults() {
   const authState = useAppAuth()
   const [clockifyDefaultProject, setClockifyDefaultProject] = useStorage('clockifyDefaultProject')
   const enabled =
-    !appInitializationState.value.appInitializing && !authState.loading && isClinearAuthenticated(authState.value)
+    !appInitializationState.value.appInitializing &&
+    !authState.loading &&
+    authState.value.linearAuthenticated &&
+    authState.value.clockifyAuthenticated
 
   const projectsQuery = useQuery({
     enabled,

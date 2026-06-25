@@ -1,7 +1,7 @@
 import type { LinearTicketSortByOption } from '../storage/config'
 import type { Issue, LinearClient, User, WorkflowState } from '@linear/sdk'
 
-import { clinearAuth } from '../tauri/authClient'
+import { auth } from '../tauri/auth-client'
 import { createLinearClient } from './client'
 
 const linearTicketsPageSize = 50
@@ -196,7 +196,7 @@ async function requestAssignedIssuesPageWithClient(
   }
 
   linearTicketsLog('assigned fetch unauthorized, refreshing Linear credential')
-  await clinearAuth.refreshLinearCredential()
+  await auth.refreshLinearCredential()
   const retryClient = await createLinearClient()
   return requestAssignedIssuesPageWithClient(retryClient, variables, false)
 }

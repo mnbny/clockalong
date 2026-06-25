@@ -2,7 +2,6 @@ import { createFileRoute, Navigate, Outlet } from '@tanstack/react-router'
 
 import { useAppInit } from '../hooks/useAppInit'
 import { useAppAuth } from '../hooks/useAppAuth'
-import { isClinearAuthenticated } from '../services/tauri/authClient'
 
 export const Route = createFileRoute('/_auth')({
   component: AuthLayout,
@@ -16,7 +15,7 @@ function AuthLayout() {
     return null
   }
 
-  if (isClinearAuthenticated(authState.value)) {
+  if (authState.value.linearAuthenticated && authState.value.clockifyAuthenticated) {
     return <Navigate to="/dashboard" replace />
   }
 
