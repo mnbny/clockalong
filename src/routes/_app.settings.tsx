@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { appToast } from '../components/AppToaster'
 import { PageHeader } from '../components/PageHeader'
-import { useTauriAppLogs } from '../hooks/useTauriAppLogs'
+import { useAppLogs } from '../hooks/useAppLogs'
 import {
   type ClockifyDescriptionTemplateToken,
   clockifyDescriptionTemplateTokenGroups,
@@ -67,7 +67,7 @@ function SettingsScreen() {
     resetClockifyDescriptionTemplateFallback,
   ] = useStorage('clockifyDescriptionTemplateFallback')
   const [appLogsDrawerOpen, setAppLogsDrawerOpen] = useState(false)
-  const appLogs = useTauriAppLogs({ enabled: appLogsDrawerOpen })
+  const appLogs = useAppLogs({ enabled: appLogsDrawerOpen })
   const clockifyProjectsQuery = useQuery({
     queryKey: clockifyProjectOptionsQueryKey,
     queryFn: getClockifyProjectOptions,

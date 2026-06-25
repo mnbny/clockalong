@@ -7,24 +7,24 @@ type AppLogsSnapshot = {
   contents: string
 }
 
-export async function getTauriAppLogs(): Promise<AppLogsSnapshot> {
+export async function getAppLogs(): Promise<AppLogsSnapshot> {
   const fallback = { contents: '' }
 
   if (!isTauri()) {
-    appLogsLog('getTauriAppLogs: non-Tauri runtime, using browser fallback')
+    appLogsLog('getAppLogs: non-Tauri runtime, using browser fallback')
     return fallback
   }
 
-  appLogsLog('getTauriAppLogs: requesting Rust log file snapshot')
+  appLogsLog('getAppLogs: requesting Rust log file snapshot')
   return { contents: await app.readLogFile() }
 }
 
-export const useTauriAppLogs = createTauriReactiveStateHook({
+export const useAppLogs = createTauriReactiveStateHook({
   browserValue: { contents: '' },
-  getSnapshot: getTauriAppLogs,
+  getSnapshot: getAppLogs,
   initialValue: { contents: '' },
   logScope: 'app logs',
-  stateName: 'useTauriAppLogs',
+  stateName: 'useAppLogs',
 })
 
 function appLogsLog(message: string) {
