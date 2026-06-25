@@ -44,7 +44,7 @@ import {
 } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
 import { app } from '../services/tauri/appClient'
-import { type AppUpdate, type AppUpdateDownloadProgress, appUpdates } from '../services/tauri/appUpdates'
+import { type AppUpdate, type AppUpdateDownloadProgress, appUpdates } from '../services/tauri/app-updates'
 import { cx } from '../utils/cx'
 import { getErrorMessage } from '../utils/errors'
 
