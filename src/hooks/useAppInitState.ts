@@ -15,11 +15,11 @@ export async function getAppInitializationState() {
   return app.getInitializationState()
 }
 
-export const useTauriAppInitializationState = createTauriReactiveStateHook({
+export const useAppInitState = createTauriReactiveStateHook({
   browserValue: { appInitializing: false },
   eventName: appInitializationStateChangedEvent,
   getSnapshot: getAppInitializationState,
   initialValue: { appInitializing: true },
   logScope: 'app initialization',
-  stateName: 'useTauriAppInitializationState',
+  stateName: 'useAppInitState',
 })

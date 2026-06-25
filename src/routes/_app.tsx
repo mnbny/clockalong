@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Navigate, Outlet } from '@tanstack/react-router'
 import { useEffect } from 'react'
 
-import { useTauriAppInitializationState } from '../hooks/useTauriAppInitializationState'
+import { useAppInitState } from '../hooks/useAppInitState'
 import { useTauriClinearAuthState } from '../hooks/useTauriClinearAuthState'
 import { clockifyProjectOptionsQueryKey, getClockifyProjectOptions } from '../services/clockify'
 import { useStorage } from '../services/storage/useStorage'
@@ -13,7 +13,7 @@ export const Route = createFileRoute('/_app')({
 })
 
 function AppLayout() {
-  const appInitializationState = useTauriAppInitializationState()
+  const appInitializationState = useAppInitState()
   const authState = useTauriClinearAuthState()
   const authenticated =
     !appInitializationState.value.appInitializing && !authState.loading && isClinearAuthenticated(authState.value)
