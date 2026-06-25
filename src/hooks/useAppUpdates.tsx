@@ -3,7 +3,7 @@ import { isTauri } from '@tauri-apps/api/core'
 import { useEffect } from 'react'
 
 import { appToast } from '../components/AppToaster'
-import { appUpdates, type AppUpdate } from '../services/tauri/app-updates'
+import { type AppUpdate, appUpdates } from '../services/tauri/app-updates'
 import { getErrorMessage } from '../utils/errors'
 
 const INITIAL_UPDATE_CHECK_DELAY_MS = 10_000

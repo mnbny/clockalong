@@ -17,7 +17,7 @@ for arg in "$@"; do
   fi
 done
 
-if ! command -v gh >/dev/null 2>&1; then
+if ! command -v gh > /dev/null 2>&1; then
   echo "Missing required command: gh" >&2
   exit 1
 fi
@@ -39,14 +39,14 @@ if [[ ! -f "${DMG_PATH}" || ! -f "${UPDATE_BUNDLE}" || ! -f "${UPDATE_SIGNATURE}
   exit 1
 fi
 
-if git rev-parse "${TAG}" >/dev/null 2>&1; then
+if git rev-parse "${TAG}" > /dev/null 2>&1; then
   echo "Using existing tag ${TAG}"
 else
   git tag "${TAG}"
   git push origin "${TAG}"
 fi
 
-if gh release view "${TAG}" --repo "${GITHUB_REPO}" >/dev/null 2>&1; then
+if gh release view "${TAG}" --repo "${GITHUB_REPO}" > /dev/null 2>&1; then
   gh release upload "${TAG}" "${DMG_PATH}" "${UPDATE_BUNDLE}" "${UPDATE_SIGNATURE}" "${MANIFEST_PATH}" --clobber --repo "${GITHUB_REPO}"
 else
   gh release create "${TAG}" \

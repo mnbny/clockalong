@@ -1,3 +1,4 @@
+import type { TimeEntryWithRatesDtoV1 } from '../services/clockify/generated/clockify'
 import type { TimeEntrySummaryReportDto } from '../services/clockify/generated/reports'
 
 import { formatCurrency } from '@automattic/format-currency'
@@ -8,7 +9,6 @@ import { useMemo } from 'react'
 import { useStopwatch } from 'react-timer-hook'
 
 import { clockify, clockifyReports } from '../services/clockify/client'
-import type { TimeEntryWithRatesDtoV1 } from '../services/clockify/generated/clockify'
 import { ClockifyIcon } from './icons/ClockifyIcon'
 
 type ClockifyPeriodStat = {

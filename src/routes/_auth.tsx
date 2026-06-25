@@ -1,7 +1,7 @@
 import { createFileRoute, Navigate, Outlet } from '@tanstack/react-router'
 
-import { useAppInit } from '../hooks/useAppInit'
 import { useAppAuth } from '../hooks/useAppAuth'
+import { useAppInit } from '../hooks/useAppInit'
 
 export const Route = createFileRoute('/_auth')({
   component: AuthLayout,

@@ -237,9 +237,7 @@
           }
         },
         "summary": "Generate shared report by ID",
-        "tags": [
-          "Shared Report"
-        ],
+        "tags": ["Shared Report"],
         "security": [
           {
             "ApiKeyAuth": []
@@ -292,9 +290,7 @@
           }
         },
         "summary": "Generate an attendance report",
-        "tags": [
-          "Team Report"
-        ],
+        "tags": ["Team Report"],
         "security": [
           {
             "ApiKeyAuth": []
@@ -348,9 +344,7 @@
           }
         },
         "summary": "Generate a detailed report",
-        "tags": [
-          "Time Entry Report"
-        ],
+        "tags": ["Time Entry Report"],
         "security": [
           {
             "ApiKeyAuth": []
@@ -404,9 +398,7 @@
           }
         },
         "summary": "Generate an expense report",
-        "tags": [
-          "Expense Report"
-        ],
+        "tags": ["Expense Report"],
         "security": [
           {
             "ApiKeyAuth": []
@@ -460,9 +452,7 @@
           }
         },
         "summary": "Generate a summary report",
-        "tags": [
-          "Time Entry Report"
-        ],
+        "tags": ["Time Entry Report"],
         "security": [
           {
             "ApiKeyAuth": []
@@ -516,9 +506,7 @@
           }
         },
         "summary": "Generate a weekly report",
-        "tags": [
-          "Time Entry Report"
-        ],
+        "tags": ["Time Entry Report"],
         "security": [
           {
             "ApiKeyAuth": []
@@ -579,12 +567,7 @@
               "type": "string",
               "default": "ALL",
               "description": "Filters shared reports by origin.",
-              "enum": [
-                "ALL",
-                "ALL_ADMIN",
-                "CREATED_BY_ME",
-                "SHARED_WITH_ME"
-              ],
+              "enum": ["ALL", "ALL_ADMIN", "CREATED_BY_ME", "SHARED_WITH_ME"],
               "example": "CREATED_BY_ME"
             }
           }
@@ -602,9 +585,7 @@
           }
         },
         "summary": "Get all my shared reports",
-        "tags": [
-          "Shared Report"
-        ],
+        "tags": ["Shared Report"],
         "security": [
           {
             "ApiKeyAuth": []
@@ -652,9 +633,7 @@
           }
         },
         "summary": "Create a shared report",
-        "tags": [
-          "Shared Report"
-        ],
+        "tags": ["Shared Report"],
         "security": [
           {
             "ApiKeyAuth": []
@@ -701,9 +680,7 @@
           }
         },
         "summary": "Delete a shared report",
-        "tags": [
-          "Shared Report"
-        ],
+        "tags": ["Shared Report"],
         "security": [
           {
             "ApiKeyAuth": []
@@ -761,9 +738,7 @@
           }
         },
         "summary": "Update a shared report",
-        "tags": [
-          "Shared Report"
-        ],
+        "tags": ["Shared Report"],
         "security": [
           {
             "ApiKeyAuth": []
@@ -784,82 +759,33 @@
         "oneOf": [
           {
             "type": "string",
-            "enum": [
-              "ACTIVE",
-              "PENDING_EMAIL_VERIFICATION",
-              "DELETED",
-              "NOT_REGISTERED",
-              "LIMITED",
-              "LIMITED_DELETED"
-            ]
+            "enum": ["ACTIVE", "PENDING_EMAIL_VERIFICATION", "DELETED", "NOT_REGISTERED", "LIMITED", "LIMITED_DELETED"]
           }
         ],
         "properties": {
           "ACTIVE": {
             "type": "string",
-            "enum": [
-              "ACTIVE",
-              "PENDING_EMAIL_VERIFICATION",
-              "DELETED",
-              "NOT_REGISTERED",
-              "LIMITED",
-              "LIMITED_DELETED"
-            ]
+            "enum": ["ACTIVE", "PENDING_EMAIL_VERIFICATION", "DELETED", "NOT_REGISTERED", "LIMITED", "LIMITED_DELETED"]
           },
           "DELETED": {
             "type": "string",
-            "enum": [
-              "ACTIVE",
-              "PENDING_EMAIL_VERIFICATION",
-              "DELETED",
-              "NOT_REGISTERED",
-              "LIMITED",
-              "LIMITED_DELETED"
-            ]
+            "enum": ["ACTIVE", "PENDING_EMAIL_VERIFICATION", "DELETED", "NOT_REGISTERED", "LIMITED", "LIMITED_DELETED"]
           },
           "LIMITED": {
             "type": "string",
-            "enum": [
-              "ACTIVE",
-              "PENDING_EMAIL_VERIFICATION",
-              "DELETED",
-              "NOT_REGISTERED",
-              "LIMITED",
-              "LIMITED_DELETED"
-            ]
+            "enum": ["ACTIVE", "PENDING_EMAIL_VERIFICATION", "DELETED", "NOT_REGISTERED", "LIMITED", "LIMITED_DELETED"]
           },
           "LIMITED_DELETED": {
             "type": "string",
-            "enum": [
-              "ACTIVE",
-              "PENDING_EMAIL_VERIFICATION",
-              "DELETED",
-              "NOT_REGISTERED",
-              "LIMITED",
-              "LIMITED_DELETED"
-            ]
+            "enum": ["ACTIVE", "PENDING_EMAIL_VERIFICATION", "DELETED", "NOT_REGISTERED", "LIMITED", "LIMITED_DELETED"]
           },
           "NOT_REGISTERED": {
             "type": "string",
-            "enum": [
-              "ACTIVE",
-              "PENDING_EMAIL_VERIFICATION",
-              "DELETED",
-              "NOT_REGISTERED",
-              "LIMITED",
-              "LIMITED_DELETED"
-            ]
+            "enum": ["ACTIVE", "PENDING_EMAIL_VERIFICATION", "DELETED", "NOT_REGISTERED", "LIMITED", "LIMITED_DELETED"]
           },
           "PENDING_EMAIL_VERIFICATION": {
             "type": "string",
-            "enum": [
-              "ACTIVE",
-              "PENDING_EMAIL_VERIFICATION",
-              "DELETED",
-              "NOT_REGISTERED",
-              "LIMITED",
-              "LIMITED_DELETED"
-            ]
+            "enum": ["ACTIVE", "PENDING_EMAIL_VERIFICATION", "DELETED", "NOT_REGISTERED", "LIMITED", "LIMITED_DELETED"]
           },
           "active": {
             "type": "boolean"
@@ -873,9 +799,7 @@
         }
       },
       "AddLimitedUsersRequest": {
-        "required": [
-          "users"
-        ],
+        "required": ["users"],
         "type": "object",
         "properties": {
           "users": {
@@ -889,9 +813,7 @@
         }
       },
       "AddUserToWorkspaceRequest": {
-        "required": [
-          "email"
-        ],
+        "required": ["email"],
         "type": "object",
         "properties": {
           "email": {
@@ -916,10 +838,7 @@
           "userIds": {
             "type": "array",
             "description": "Represents array of user ids which should be added/removed.",
-            "example": [
-              "45b687e29ae1f428e7ebe123",
-              "67s687e29ae1f428e7ebe678"
-            ],
+            "example": ["45b687e29ae1f428e7ebe123", "67s687e29ae1f428e7ebe678"],
             "items": {
               "type": "string",
               "description": "Represents array of user ids which should be added/removed.",
@@ -935,50 +854,25 @@
         "oneOf": [
           {
             "type": "string",
-            "enum": [
-              "TAX1",
-              "TAX2",
-              "TAX1TAX2",
-              "NONE"
-            ]
+            "enum": ["TAX1", "TAX2", "TAX1TAX2", "NONE"]
           }
         ],
         "properties": {
           "NONE": {
             "type": "string",
-            "enum": [
-              "TAX1",
-              "TAX2",
-              "TAX1TAX2",
-              "NONE"
-            ]
+            "enum": ["TAX1", "TAX2", "TAX1TAX2", "NONE"]
           },
           "TAX1": {
             "type": "string",
-            "enum": [
-              "TAX1",
-              "TAX2",
-              "TAX1TAX2",
-              "NONE"
-            ]
+            "enum": ["TAX1", "TAX2", "TAX1TAX2", "NONE"]
           },
           "TAX1TAX2": {
             "type": "string",
-            "enum": [
-              "TAX1",
-              "TAX2",
-              "TAX1TAX2",
-              "NONE"
-            ]
+            "enum": ["TAX1", "TAX2", "TAX1TAX2", "NONE"]
           },
           "TAX2": {
             "type": "string",
-            "enum": [
-              "TAX1",
-              "TAX2",
-              "TAX1TAX2",
-              "NONE"
-            ]
+            "enum": ["TAX1", "TAX2", "TAX1TAX2", "NONE"]
           },
           "value": {
             "type": "string"
@@ -1105,15 +999,7 @@
             "type": "string",
             "description": "Represents a day of the week.",
             "example": "MONDAY",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ]
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
           },
           "timeZone": {
             "type": "string",
@@ -1145,13 +1031,7 @@
             "type": "string",
             "description": "Represents approval state enum.",
             "example": "APPROVED",
-            "enum": [
-              "PENDING",
-              "APPROVED",
-              "WITHDRAWN_SUBMISSION",
-              "WITHDRAWN_APPROVAL",
-              "REJECTED"
-            ]
+            "enum": ["PENDING", "APPROVED", "WITHDRAWN_SUBMISSION", "WITHDRAWN_APPROVAL", "REJECTED"]
           },
           "updatedAt": {
             "type": "string",
@@ -1173,13 +1053,7 @@
         "description": "Represents approval request status object."
       },
       "AssignmentCreateRequestV1": {
-        "required": [
-          "end",
-          "hoursPerDay",
-          "projectId",
-          "start",
-          "userId"
-        ],
+        "required": ["end", "hoursPerDay", "projectId", "start", "userId"],
         "type": "object",
         "properties": {
           "billable": {
@@ -1421,10 +1295,7 @@
         "description": "Represents a list of assignment per day objects."
       },
       "AssignmentUpdateRequestV1": {
-        "required": [
-          "end",
-          "start"
-        ],
+        "required": ["end", "start"],
         "type": "object",
         "properties": {
           "billable": {
@@ -1459,11 +1330,7 @@
             "type": "string",
             "description": "Valid series option",
             "example": "THIS_ONE",
-            "enum": [
-              "THIS_ONE",
-              "THIS_AND_FOLLOWING",
-              "ALL"
-            ]
+            "enum": ["THIS_ONE", "THIS_AND_FOLLOWING", "ALL"]
           },
           "start": {
             "type": "string",
@@ -1494,9 +1361,7 @@
             "type": "string",
             "description": "Represents a valid authorization source type.",
             "example": "USER_GROUP",
-            "enum": [
-              "USER_GROUP"
-            ]
+            "enum": ["USER_GROUP"]
           }
         },
         "description": "Represents an authorization data transfer object."
@@ -1514,27 +1379,19 @@
             "type": "string",
             "description": "Represents automatic accrual's period",
             "example": "YEAR",
-            "enum": [
-              "MONTH",
-              "YEAR"
-            ]
+            "enum": ["MONTH", "YEAR"]
           },
           "timeUnit": {
             "type": "string",
             "description": "Represents automatic accrual's time unit",
             "example": "DAYS",
-            "enum": [
-              "DAYS",
-              "HOURS"
-            ]
+            "enum": ["DAYS", "HOURS"]
           }
         },
         "description": "Represents automatic approval settings."
       },
       "AutomaticAccrualRequest": {
-        "required": [
-          "amount"
-        ],
+        "required": ["amount"],
         "type": "object",
         "properties": {
           "amount": {
@@ -1548,19 +1405,13 @@
             "type": "string",
             "description": "Represents automatic accrual period.",
             "example": "MONTH",
-            "enum": [
-              "MONTH",
-              "YEAR"
-            ]
+            "enum": ["MONTH", "YEAR"]
           },
           "timeUnit": {
             "type": "string",
             "description": "Represents automatic accrual time unit.",
             "example": "DAYS",
-            "enum": [
-              "DAYS",
-              "HOURS"
-            ]
+            "enum": ["DAYS", "HOURS"]
           }
         },
         "description": "Provide automatic accrual settings."
@@ -1572,15 +1423,7 @@
             "type": "string",
             "description": "Represents a day of the week.",
             "example": "FRIDAY",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ]
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
           },
           "dayOfMonth": {
             "type": "integer",
@@ -1592,25 +1435,13 @@
             "type": "string",
             "description": "Represents a day of the week.",
             "example": "MONDAY",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ]
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
           },
           "olderThanPeriod": {
             "type": "string",
             "description": "Represents a time entry automatic lock period enum.",
             "example": "DAYS",
-            "enum": [
-              "DAYS",
-              "WEEKS",
-              "MONTHS"
-            ]
+            "enum": ["DAYS", "WEEKS", "MONTHS"]
           },
           "olderThanValue": {
             "type": "integer",
@@ -1622,11 +1453,7 @@
             "type": "string",
             "description": "Represents a time entry automatic lock type enum.",
             "example": "WEEKLY",
-            "enum": [
-              "WEEKLY",
-              "MONTHLY",
-              "OLDER_THAN"
-            ]
+            "enum": ["WEEKLY", "MONTHLY", "OLDER_THAN"]
           }
         },
         "description": "Represents an automatic lock object."
@@ -1644,9 +1471,7 @@
         "description": "Represents automatic time entry creation settings."
       },
       "AutomaticTimeEntryCreationRequest": {
-        "required": [
-          "defaultEntities"
-        ],
+        "required": ["defaultEntities"],
         "type": "object",
         "properties": {
           "defaultEntities": {
@@ -1706,10 +1531,7 @@
             "type": "string",
             "description": "Represent policy time unit.",
             "example": "DAYS",
-            "enum": [
-              "DAYS",
-              "HOURS"
-            ]
+            "enum": ["DAYS", "HOURS"]
           },
           "total": {
             "type": "number",
@@ -1765,20 +1587,13 @@
             "type": "string",
             "description": "Filter type.",
             "example": "CONTAINS",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN",
-              "CONTAINS_ONLY"
-            ]
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN", "CONTAINS_ONLY"]
           },
           "ids": {
             "uniqueItems": true,
             "type": "array",
             "description": "Represents a list of filter identifiers.",
-            "example": [
-              "5a0ab5acb07987125438b60f",
-              "64c777ddd3fcab07cfbb210c"
-            ],
+            "example": ["5a0ab5acb07987125438b60f", "64c777ddd3fcab07cfbb210c"],
             "items": {
               "type": "string",
               "description": "Represents a list of filter identifiers.",
@@ -1795,26 +1610,17 @@
         "oneOf": [
           {
             "type": "string",
-            "enum": [
-              "INVOICE_BASED",
-              "ITEM_BASED"
-            ]
+            "enum": ["INVOICE_BASED", "ITEM_BASED"]
           }
         ],
         "properties": {
           "INVOICE_BASED": {
             "type": "string",
-            "enum": [
-              "INVOICE_BASED",
-              "ITEM_BASED"
-            ]
+            "enum": ["INVOICE_BASED", "ITEM_BASED"]
           },
           "ITEM_BASED": {
             "type": "string",
-            "enum": [
-              "INVOICE_BASED",
-              "ITEM_BASED"
-            ]
+            "enum": ["INVOICE_BASED", "ITEM_BASED"]
           },
           "value": {
             "type": "string"
@@ -1828,32 +1634,19 @@
             "type": "string",
             "description": "Represents the invoice status to be set.",
             "example": "PAID",
-            "enum": [
-              "UNSENT",
-              "SENT",
-              "PAID",
-              "PARTIALLY_PAID",
-              "VOID",
-              "OVERDUE"
-            ]
+            "enum": ["UNSENT", "SENT", "PAID", "PARTIALLY_PAID", "VOID", "OVERDUE"]
           }
         }
       },
       "ChangePolicyStatusRequestV1": {
-        "required": [
-          "status"
-        ],
+        "required": ["status"],
         "type": "object",
         "properties": {
           "status": {
             "type": "string",
             "description": "Provide the status you would like to use for changing the policy.",
             "example": "ACTIVE",
-            "enum": [
-              "ACTIVE",
-              "ARCHIVED",
-              "ALL"
-            ]
+            "enum": ["ACTIVE", "ARCHIVED", "ALL"]
           }
         }
       },
@@ -1979,20 +1772,13 @@
             "type": "string",
             "description": "Filter type.",
             "example": "CONTAINS",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN",
-              "CONTAINS_ONLY"
-            ]
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN", "CONTAINS_ONLY"]
           },
           "ids": {
             "uniqueItems": true,
             "type": "array",
             "description": "Represents a list of filter identifiers.",
-            "example": [
-              "5a0ab5acb07987125438b60f",
-              "64c777ddd3fcab07cfbb210c"
-            ],
+            "example": ["5a0ab5acb07987125438b60f", "64c777ddd3fcab07cfbb210c"],
             "items": {
               "type": "string",
               "description": "Represents a list of filter identifiers.",
@@ -2003,11 +1789,7 @@
             "type": "string",
             "description": "Filters entities by status.",
             "example": "ACTIVE",
-            "enum": [
-              "ACTIVE",
-              "ARCHIVED",
-              "ALL"
-            ]
+            "enum": ["ACTIVE", "ARCHIVED", "ALL"]
           }
         },
         "description": "Represents a project filter for imported items."
@@ -2019,20 +1801,13 @@
             "type": "string",
             "description": "Filter type.",
             "example": "CONTAINS",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN",
-              "CONTAINS_ONLY"
-            ]
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN", "CONTAINS_ONLY"]
           },
           "ids": {
             "uniqueItems": true,
             "type": "array",
             "description": "Represents a list of filter identifiers.",
-            "example": [
-              "5a0ab5acb07987125438b60f",
-              "64c777ddd3fcab07cfbb210c"
-            ],
+            "example": ["5a0ab5acb07987125438b60f", "64c777ddd3fcab07cfbb210c"],
             "items": {
               "type": "string",
               "description": "Represents a list of filter identifiers.",
@@ -2043,13 +1818,7 @@
             "type": "string",
             "description": "Filters entities by status.",
             "example": "ACTIVE",
-            "enum": [
-              "PENDING",
-              "ACTIVE",
-              "DECLINED",
-              "INACTIVE",
-              "ALL"
-            ]
+            "enum": ["PENDING", "ACTIVE", "DECLINED", "INACTIVE", "ALL"]
           }
         },
         "description": "Provide list with user group ids and corresponding status."
@@ -2061,20 +1830,13 @@
             "type": "string",
             "description": "Filter type.",
             "example": "CONTAINS",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN",
-              "CONTAINS_ONLY"
-            ]
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN", "CONTAINS_ONLY"]
           },
           "ids": {
             "uniqueItems": true,
             "type": "array",
             "description": "Represents a list of filter identifiers.",
-            "example": [
-              "5a0ab5acb07987125438b60f",
-              "64c777ddd3fcab07cfbb210c"
-            ],
+            "example": ["5a0ab5acb07987125438b60f", "64c777ddd3fcab07cfbb210c"],
             "items": {
               "type": "string",
               "description": "Represents a list of filter identifiers.",
@@ -2085,13 +1847,7 @@
             "type": "string",
             "description": "Filters entities by status.",
             "example": "ACTIVE",
-            "enum": [
-              "PENDING",
-              "ACTIVE",
-              "DECLINED",
-              "INACTIVE",
-              "ALL"
-            ]
+            "enum": ["PENDING", "ACTIVE", "DECLINED", "INACTIVE", "ALL"]
           }
         },
         "description": "Represents a user group filter request object."
@@ -2103,20 +1859,13 @@
             "type": "string",
             "description": "Filter type.",
             "example": "CONTAINS",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN",
-              "CONTAINS_ONLY"
-            ]
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN", "CONTAINS_ONLY"]
           },
           "ids": {
             "uniqueItems": true,
             "type": "array",
             "description": "Represents a list of filter identifiers.",
-            "example": [
-              "5a0ab5acb07987125438b60f",
-              "64c777ddd3fcab07cfbb210c"
-            ],
+            "example": ["5a0ab5acb07987125438b60f", "64c777ddd3fcab07cfbb210c"],
             "items": {
               "type": "string",
               "description": "Represents a list of filter identifiers.",
@@ -2127,11 +1876,7 @@
             "type": "string",
             "description": "Filters entities by status.",
             "example": "ACTIVE",
-            "enum": [
-              "ALL",
-              "ACTIVE",
-              "INACTIVE"
-            ]
+            "enum": ["ALL", "ACTIVE", "INACTIVE"]
           },
           "statuses": {
             "type": "array",
@@ -2149,20 +1894,13 @@
             "type": "string",
             "description": "Filter type.",
             "example": "CONTAINS",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN",
-              "CONTAINS_ONLY"
-            ]
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN", "CONTAINS_ONLY"]
           },
           "ids": {
             "uniqueItems": true,
             "type": "array",
             "description": "Represents a list of filter identifiers.",
-            "example": [
-              "5a0ab5acb07987125438b60f",
-              "64c777ddd3fcab07cfbb210c"
-            ],
+            "example": ["5a0ab5acb07987125438b60f", "64c777ddd3fcab07cfbb210c"],
             "items": {
               "type": "string",
               "description": "Represents a list of filter identifiers.",
@@ -2173,60 +1911,37 @@
             "type": "string",
             "description": "Valid authorization source type.",
             "example": "USER_GROUP",
-            "enum": [
-              "USER_GROUP"
-            ]
+            "enum": ["USER_GROUP"]
           },
           "status": {
             "type": "string",
             "description": "Filters entities by status.",
             "example": "ACTIVE",
-            "enum": [
-              "PENDING",
-              "ACTIVE",
-              "DECLINED",
-              "INACTIVE",
-              "ALL"
-            ]
+            "enum": ["PENDING", "ACTIVE", "DECLINED", "INACTIVE", "ALL"]
           },
           "statuses": {
             "type": "array",
             "description": "Valid array of membership statuses.",
-            "example": [
-              "PENDING",
-              "INACTIVE"
-            ],
+            "example": ["PENDING", "INACTIVE"],
             "items": {
               "type": "string",
               "description": "Valid array of membership statuses.",
               "example": "[\"PENDING\",\"INACTIVE\"]",
-              "enum": [
-                "PENDING",
-                "ACTIVE",
-                "DECLINED",
-                "INACTIVE",
-                "ALL"
-              ]
+              "enum": ["PENDING", "ACTIVE", "DECLINED", "INACTIVE", "ALL"]
             }
           }
         },
         "description": "Represents a user filter request object."
       },
       "CopyAssignmentRequestV1": {
-        "required": [
-          "userId"
-        ],
+        "required": ["userId"],
         "type": "object",
         "properties": {
           "seriesUpdateOption": {
             "type": "string",
             "description": "Represents a series update option.",
             "example": "THIS_ONE",
-            "enum": [
-              "THIS_ONE",
-              "THIS_AND_FOLLOWING",
-              "ALL"
-            ]
+            "enum": ["THIS_ONE", "THIS_AND_FOLLOWING", "ALL"]
           },
           "userId": {
             "type": "string",
@@ -2258,9 +1973,7 @@
         "description": "Represents a cost rate request object."
       },
       "CostRateRequestV1": {
-        "required": [
-          "amount"
-        ],
+        "required": ["amount"],
         "type": "object",
         "properties": {
           "amount": {
@@ -2278,20 +1991,14 @@
         }
       },
       "CreateApprovalRequest": {
-        "required": [
-          "periodStart"
-        ],
+        "required": ["periodStart"],
         "type": "object",
         "properties": {
           "period": {
             "type": "string",
             "description": "Specifies the approval period. It has to match the workspace approval period setting.",
             "example": "MONTHLY",
-            "enum": [
-              "WEEKLY",
-              "SEMI_MONTHLY",
-              "MONTHLY"
-            ]
+            "enum": ["WEEKLY", "SEMI_MONTHLY", "MONTHLY"]
           },
           "periodStart": {
             "minLength": 1,
@@ -2334,11 +2041,7 @@
         }
       },
       "CreateCustomAttributeRequest": {
-        "required": [
-          "name",
-          "namespace",
-          "value"
-        ],
+        "required": ["name", "namespace", "value"],
         "type": "object",
         "properties": {
           "name": {
@@ -2363,14 +2066,7 @@
         "description": "Represents a list of create custom field request objects."
       },
       "CreateExpenseV1Request": {
-        "required": [
-          "amount",
-          "categoryId",
-          "date",
-          "file",
-          "projectId",
-          "userId"
-        ],
+        "required": ["amount", "categoryId", "date", "file", "projectId", "userId"],
         "type": "object",
         "properties": {
           "amount": {
@@ -2426,10 +2122,7 @@
         }
       },
       "CreateHolidayRequestV1": {
-        "required": [
-          "datePeriod",
-          "name"
-        ],
+        "required": ["datePeriod", "name"],
         "type": "object",
         "properties": {
           "automaticTimeEntryCreation": {
@@ -2514,25 +2207,14 @@
         }
       },
       "CreateInvoiceItemRequestV1": {
-        "required": [
-          "applyTaxes",
-          "description",
-          "itemType",
-          "quantity",
-          "unitPrice"
-        ],
+        "required": ["applyTaxes", "description", "itemType", "quantity", "unitPrice"],
         "type": "object",
         "properties": {
           "applyTaxes": {
             "type": "string",
             "description": "Represents taxes applied to the invoice item. Applies only when the specified taxes are active on the invoice.",
             "example": "TAX1TAX2",
-            "enum": [
-              "TAX1",
-              "TAX2",
-              "TAX1TAX2",
-              "NONE"
-            ]
+            "enum": ["TAX1", "TAX2", "TAX1TAX2", "NONE"]
           },
           "description": {
             "type": "string",
@@ -2584,13 +2266,7 @@
         }
       },
       "CreateInvoiceRequest": {
-        "required": [
-          "clientId",
-          "currency",
-          "dueDate",
-          "issuedDate",
-          "number"
-        ],
+        "required": ["clientId", "currency", "dueDate", "issuedDate", "number"],
         "type": "object",
         "properties": {
           "clientId": {
@@ -2625,18 +2301,12 @@
           },
           "timeViewMode": {
             "type": "string",
-            "enum": [
-              "TIME_SENSITIVE_VIEW",
-              "AGGREGATED_TIME_VIEW"
-            ]
+            "enum": ["TIME_SENSITIVE_VIEW", "AGGREGATED_TIME_VIEW"]
           }
         }
       },
       "CreatePolicyRequestV1": {
-        "required": [
-          "approve",
-          "name"
-        ],
+        "required": ["approve", "name"],
         "type": "object",
         "properties": {
           "allowHalfDay": {
@@ -2715,10 +2385,7 @@
             "type": "string",
             "description": "Indicates time unit of the policy. ",
             "example": "DAYS",
-            "enum": [
-              "DAYS",
-              "HOURS"
-            ]
+            "enum": ["DAYS", "HOURS"]
           },
           "userGroups": {
             "$ref": "#/components/schemas/UserGroupIdsSchema"
@@ -2729,10 +2396,7 @@
         }
       },
       "CreateProjectFromTemplateV1": {
-        "required": [
-          "name",
-          "templateProjectId"
-        ],
+        "required": ["name", "templateProjectId"],
         "type": "object",
         "properties": {
           "clientId": {
@@ -2767,9 +2431,7 @@
         }
       },
       "CreateRecurringAssignmentRequestV1": {
-        "required": [
-          "weeks"
-        ],
+        "required": ["weeks"],
         "type": "object",
         "properties": {
           "repeat": {
@@ -2840,10 +2502,7 @@
           "tagIds": {
             "type": "array",
             "description": "Represents a list of tag ids.",
-            "example": [
-              "321r77ddd3fcab07cfbb567y",
-              "44x777ddd3fcab07cfbb88f"
-            ],
+            "example": ["321r77ddd3fcab07cfbb567y", "44x777ddd3fcab07cfbb88f"],
             "items": {
               "type": "string",
               "description": "Represents a list of tag ids.",
@@ -2858,17 +2517,12 @@
           "type": {
             "type": "string",
             "description": "Valid time entry type.",
-            "enum": [
-              "REGULAR",
-              "BREAK"
-            ]
+            "enum": ["REGULAR", "BREAK"]
           }
         }
       },
       "CreateTimeOffRequestV1Request": {
-        "required": [
-          "timeOffPeriod"
-        ],
+        "required": ["timeOffPeriod"],
         "type": "object",
         "properties": {
           "note": {
@@ -2882,12 +2536,7 @@
         }
       },
       "CreateWebhookRequestV1": {
-        "required": [
-          "triggerSource",
-          "triggerSourceType",
-          "url",
-          "webhookEvent"
-        ],
+        "required": ["triggerSource", "triggerSourceType", "url", "webhookEvent"],
         "type": "object",
         "properties": {
           "name": {
@@ -2900,10 +2549,7 @@
           "triggerSource": {
             "type": "array",
             "description": "Represents a list of trigger sources.",
-            "example": [
-              "54a687e29ae1f428e7ebe909",
-              "87p187e29ae1f428e7ebej56"
-            ],
+            "example": ["54a687e29ae1f428e7ebe909", "87p187e29ae1f428e7ebej56"],
             "items": {
               "type": "string",
               "description": "Represents a list of trigger sources.",
@@ -2914,15 +2560,7 @@
             "type": "string",
             "description": "Represents a webhook event trigger source type.",
             "example": "PROJECT_ID",
-            "enum": [
-              "PROJECT_ID",
-              "USER_ID",
-              "TAG_ID",
-              "TASK_ID",
-              "WORKSPACE_ID",
-              "ASSIGNMENT_ID",
-              "EXPENSE_ID"
-            ]
+            "enum": ["PROJECT_ID", "USER_ID", "TAG_ID", "TASK_ID", "WORKSPACE_ID", "ASSIGNMENT_ID", "EXPENSE_ID"]
           },
           "url": {
             "minLength": 1,
@@ -3056,13 +2694,7 @@
           "allowedValues": {
             "type": "array",
             "description": "Represents a list of custom field's allowed values.",
-            "example": [
-              "New York",
-              "London",
-              "Manila",
-              "Sydney",
-              "Belgrade"
-            ],
+            "example": ["New York", "London", "Manila", "Sydney", "Belgrade"],
             "items": {
               "type": "string",
               "description": "Represents a list of custom field's allowed values.",
@@ -3145,31 +2777,18 @@
             "type": "string",
             "description": "Represents a custom field status.",
             "example": "VISIBLE",
-            "enum": [
-              "INACTIVE",
-              "VISIBLE",
-              "INVISIBLE"
-            ]
+            "enum": ["INACTIVE", "VISIBLE", "INVISIBLE"]
           }
         }
       },
       "CustomFieldRequestV1": {
-        "required": [
-          "name",
-          "type"
-        ],
+        "required": ["name", "type"],
         "type": "object",
         "properties": {
           "allowedValues": {
             "type": "array",
             "description": "Represents a list of custom field's allowed values.",
-            "example": [
-              "New York",
-              "London",
-              "Manila",
-              "Sydney",
-              "Belgrade"
-            ],
+            "example": ["New York", "London", "Manila", "Sydney", "Belgrade"],
             "items": {
               "type": "string",
               "description": "Represents a list of custom field's allowed values.",
@@ -3185,10 +2804,7 @@
             "type": "string",
             "description": "Represents custom field entity type",
             "example": "TIMEENTRY",
-            "enum": [
-              "TIMEENTRY",
-              "USER"
-            ]
+            "enum": ["TIMEENTRY", "USER"]
           },
           "name": {
             "type": "string",
@@ -3209,24 +2825,13 @@
             "type": "string",
             "description": "Represents custom field status",
             "example": "VISIBLE",
-            "enum": [
-              "INACTIVE",
-              "VISIBLE",
-              "INVISIBLE"
-            ]
+            "enum": ["INACTIVE", "VISIBLE", "INVISIBLE"]
           },
           "type": {
             "type": "string",
             "description": "Represents custom field type.",
             "example": "DROPDOWN_MULTIPLE",
-            "enum": [
-              "TXT",
-              "NUMBER",
-              "DROPDOWN_SINGLE",
-              "DROPDOWN_MULTIPLE",
-              "CHECKBOX",
-              "LINK"
-            ]
+            "enum": ["TXT", "NUMBER", "DROPDOWN_SINGLE", "DROPDOWN_MULTIPLE", "CHECKBOX", "LINK"]
           },
           "workspaceDefaultValue": {
             "type": "object",
@@ -3242,82 +2847,33 @@
         "oneOf": [
           {
             "type": "string",
-            "enum": [
-              "TXT",
-              "NUMBER",
-              "DROPDOWN_SINGLE",
-              "DROPDOWN_MULTIPLE",
-              "CHECKBOX",
-              "LINK"
-            ]
+            "enum": ["TXT", "NUMBER", "DROPDOWN_SINGLE", "DROPDOWN_MULTIPLE", "CHECKBOX", "LINK"]
           }
         ],
         "properties": {
           "CHECKBOX": {
             "type": "string",
-            "enum": [
-              "TXT",
-              "NUMBER",
-              "DROPDOWN_SINGLE",
-              "DROPDOWN_MULTIPLE",
-              "CHECKBOX",
-              "LINK"
-            ]
+            "enum": ["TXT", "NUMBER", "DROPDOWN_SINGLE", "DROPDOWN_MULTIPLE", "CHECKBOX", "LINK"]
           },
           "DROPDOWN_MULTIPLE": {
             "type": "string",
-            "enum": [
-              "TXT",
-              "NUMBER",
-              "DROPDOWN_SINGLE",
-              "DROPDOWN_MULTIPLE",
-              "CHECKBOX",
-              "LINK"
-            ]
+            "enum": ["TXT", "NUMBER", "DROPDOWN_SINGLE", "DROPDOWN_MULTIPLE", "CHECKBOX", "LINK"]
           },
           "DROPDOWN_SINGLE": {
             "type": "string",
-            "enum": [
-              "TXT",
-              "NUMBER",
-              "DROPDOWN_SINGLE",
-              "DROPDOWN_MULTIPLE",
-              "CHECKBOX",
-              "LINK"
-            ]
+            "enum": ["TXT", "NUMBER", "DROPDOWN_SINGLE", "DROPDOWN_MULTIPLE", "CHECKBOX", "LINK"]
           },
           "LINK": {
             "type": "string",
-            "enum": [
-              "TXT",
-              "NUMBER",
-              "DROPDOWN_SINGLE",
-              "DROPDOWN_MULTIPLE",
-              "CHECKBOX",
-              "LINK"
-            ]
+            "enum": ["TXT", "NUMBER", "DROPDOWN_SINGLE", "DROPDOWN_MULTIPLE", "CHECKBOX", "LINK"]
           },
           "NUMBER": {
             "type": "string",
-            "enum": [
-              "TXT",
-              "NUMBER",
-              "DROPDOWN_SINGLE",
-              "DROPDOWN_MULTIPLE",
-              "CHECKBOX",
-              "LINK"
-            ]
+            "enum": ["TXT", "NUMBER", "DROPDOWN_SINGLE", "DROPDOWN_MULTIPLE", "CHECKBOX", "LINK"]
           },
           "TXT": {
             "type": "string",
-            "enum": [
-              "TXT",
-              "NUMBER",
-              "DROPDOWN_SINGLE",
-              "DROPDOWN_MULTIPLE",
-              "CHECKBOX",
-              "LINK"
-            ]
+            "enum": ["TXT", "NUMBER", "DROPDOWN_SINGLE", "DROPDOWN_MULTIPLE", "CHECKBOX", "LINK"]
           }
         }
       },
@@ -3333,11 +2889,7 @@
             "type": "string",
             "description": "Represents a custom field value source type.",
             "example": "WORKSPACE",
-            "enum": [
-              "WORKSPACE",
-              "PROJECT",
-              "TIMEENTRY"
-            ]
+            "enum": ["WORKSPACE", "PROJECT", "TIMEENTRY"]
           },
           "timeEntryId": {
             "type": "string",
@@ -3398,10 +2950,7 @@
         "description": "Represents startDate and endDate of the holiday. Date is in format yyyy-mm-dd"
       },
       "DatePeriodRequest": {
-        "required": [
-          "endDate",
-          "startDate"
-        ],
+        "required": ["endDate", "startDate"],
         "type": "object",
         "properties": {
           "endDate": {
@@ -3465,37 +3014,21 @@
         "oneOf": [
           {
             "type": "string",
-            "enum": [
-              "ADMINS",
-              "ADMINS_AND_PROJECT_MANAGERS",
-              "EVERYONE"
-            ]
+            "enum": ["ADMINS", "ADMINS_AND_PROJECT_MANAGERS", "EVERYONE"]
           }
         ],
         "properties": {
           "ADMINS": {
             "type": "string",
-            "enum": [
-              "ADMINS",
-              "ADMINS_AND_PROJECT_MANAGERS",
-              "EVERYONE"
-            ]
+            "enum": ["ADMINS", "ADMINS_AND_PROJECT_MANAGERS", "EVERYONE"]
           },
           "ADMINS_AND_PROJECT_MANAGERS": {
             "type": "string",
-            "enum": [
-              "ADMINS",
-              "ADMINS_AND_PROJECT_MANAGERS",
-              "EVERYONE"
-            ]
+            "enum": ["ADMINS", "ADMINS_AND_PROJECT_MANAGERS", "EVERYONE"]
           },
           "EVERYONE": {
             "type": "string",
-            "enum": [
-              "ADMINS",
-              "ADMINS_AND_PROJECT_MANAGERS",
-              "EVERYONE"
-            ]
+            "enum": ["ADMINS", "ADMINS_AND_PROJECT_MANAGERS", "EVERYONE"]
           },
           "creators": {
             "uniqueItems": true,
@@ -3545,10 +3078,7 @@
             "type": "string",
             "description": "Represents an estimate type enum.",
             "example": "AUTO",
-            "enum": [
-              "AUTO",
-              "MANUAL"
-            ]
+            "enum": ["AUTO", "MANUAL"]
           }
         },
         "description": "Represents a project estimate object."
@@ -3565,10 +3095,7 @@
             "type": "string",
             "description": "Represents an estimate type enum.",
             "example": "AUTO",
-            "enum": [
-              "AUTO",
-              "MANUAL"
-            ]
+            "enum": ["AUTO", "MANUAL"]
           }
         },
         "description": "Represents an estimate request object."
@@ -3582,15 +3109,7 @@
           },
           "dayOfWeek": {
             "type": "string",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ]
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
           },
           "hour": {
             "type": "integer",
@@ -3598,11 +3117,7 @@
           },
           "interval": {
             "type": "string",
-            "enum": [
-              "WEEKLY",
-              "MONTHLY",
-              "YEARLY"
-            ]
+            "enum": ["WEEKLY", "MONTHLY", "YEARLY"]
           },
           "month": {
             "type": "string",
@@ -3642,15 +3157,7 @@
             "type": "string",
             "description": "Represents a day of the week.",
             "example": "MONDAY",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ]
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
           },
           "hour": {
             "maximum": 23,
@@ -3664,11 +3171,7 @@
             "type": "string",
             "description": "Represents a reset option enum.",
             "example": "MONTHLY",
-            "enum": [
-              "WEEKLY",
-              "MONTHLY",
-              "YEARLY"
-            ]
+            "enum": ["WEEKLY", "MONTHLY", "YEARLY"]
           },
           "isActive": {
             "type": "boolean",
@@ -3717,20 +3220,13 @@
             "type": "string",
             "description": "Represents a reset option enum.",
             "example": "WEEKLY",
-            "enum": [
-              "WEEKLY",
-              "MONTHLY",
-              "YEARLY"
-            ]
+            "enum": ["WEEKLY", "MONTHLY", "YEARLY"]
           },
           "type": {
             "type": "string",
             "description": "Represents an estimate type enum.",
             "example": "AUTO",
-            "enum": [
-              "AUTO",
-              "MANUAL"
-            ]
+            "enum": ["AUTO", "MANUAL"]
           }
         },
         "description": "Represents a project budget estimate object."
@@ -3759,20 +3255,13 @@
             "type": "string",
             "description": "Represents a reset option enum.",
             "example": "MONTHLY",
-            "enum": [
-              "WEEKLY",
-              "MONTHLY",
-              "YEARLY"
-            ]
+            "enum": ["WEEKLY", "MONTHLY", "YEARLY"]
           },
           "type": {
             "type": "string",
             "description": "Represents an estimate type enum.",
             "example": "AUTO",
-            "enum": [
-              "AUTO",
-              "MANUAL"
-            ]
+            "enum": ["AUTO", "MANUAL"]
           }
         },
         "description": "Represents estimate with options request object."
@@ -3890,9 +3379,7 @@
         "description": "Represents a list of expense categories data transfer object."
       },
       "ExpenseCategoryV1Request": {
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "type": "object",
         "properties": {
           "hasUnitPrice": {
@@ -4026,14 +3513,7 @@
             "type": "string",
             "description": "Represents the approval status of the expense",
             "example": "PENDING",
-            "enum": [
-              "PENDING",
-              "APPROVED",
-              "UNSUBMITTED",
-              "REJECTED",
-              "WITHDRAWN_APPROVAL",
-              "WITHDRAWN_SUBMISSION"
-            ]
+            "enum": ["PENDING", "APPROVED", "UNSUBMITTED", "REJECTED", "WITHDRAWN_APPROVAL", "WITHDRAWN_SUBMISSION"]
           },
           "billable": {
             "type": "boolean",
@@ -4057,14 +3537,7 @@
             "type": "string",
             "description": "Represents a detailed approval status of the expense",
             "example": "PENDING",
-            "enum": [
-              "PENDING",
-              "APPROVED",
-              "UNSUBMITTED",
-              "REJECTED",
-              "WITHDRAWN_APPROVAL",
-              "WITHDRAWN_SUBMISSION"
-            ]
+            "enum": ["PENDING", "APPROVED", "UNSUBMITTED", "REJECTED", "WITHDRAWN_APPROVAL", "WITHDRAWN_SUBMISSION"]
           },
           "fileId": {
             "type": "string",
@@ -4261,12 +3734,7 @@
       "Feature": {
         "type": "object",
         "description": "Represents a list of features.",
-        "example": [
-          "ADD_TIME_FOR_OTHERS",
-          "ADMIN_PANEL",
-          "ALERTS",
-          "APPROVAL"
-        ],
+        "example": ["ADD_TIME_FOR_OTHERS", "ADMIN_PANEL", "ALERTS", "APPROVAL"],
         "oneOf": [
           {
             "type": "string",
@@ -11336,13 +10804,7 @@
         "properties": {
           "addonSubscriptionPlan": {
             "type": "string",
-            "enum": [
-              "FREE",
-              "BASIC",
-              "STANDARD",
-              "PRO",
-              "ENTERPRISE"
-            ]
+            "enum": ["FREE", "BASIC", "STANDARD", "PRO", "ENTERPRISE"]
           },
           "featurePermissions": {
             "uniqueItems": true,
@@ -11485,31 +10947,19 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Filters time off requests by status.",
-            "example": [
-              "APPROVED",
-              "PENDING"
-            ],
+            "example": ["APPROVED", "PENDING"],
             "items": {
               "type": "string",
               "description": "Filters time off requests by status.",
               "example": "[\"APPROVED\",\"PENDING\"]",
-              "enum": [
-                "PENDING",
-                "APPROVED",
-                "REJECTED",
-                "ALL"
-              ]
+              "enum": ["PENDING", "APPROVED", "REJECTED", "ALL"]
             }
           },
           "userGroups": {
             "uniqueItems": true,
             "type": "array",
             "description": "Provide the user group ids of time off requests.",
-            "example": [
-              "5b715612b079875110791342",
-              "5b715612b079875110791324",
-              "5b715612b079875110793142"
-            ],
+            "example": ["5b715612b079875110791342", "5b715612b079875110791324", "5b715612b079875110793142"],
             "items": {
               "type": "string",
               "description": "Provide the user group ids of time off requests.",
@@ -11520,10 +10970,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Provide the user ids of time off requests. If empty, will return time off requests of all users (with a maximum of 5000 users).",
-            "example": [
-              "5b715612b079875110791432",
-              "b715612b079875110791234"
-            ],
+            "example": ["5b715612b079875110791432", "b715612b079875110791234"],
             "items": {
               "type": "string",
               "description": "Provide the user ids of time off requests. If empty, will return time off requests of all users (with a maximum of 5000 users).",
@@ -11533,10 +10980,7 @@
         }
       },
       "GetUserTotalsRequestV1": {
-        "required": [
-          "end",
-          "start"
-        ],
+        "required": ["end", "start"],
         "type": "object",
         "properties": {
           "end": {
@@ -11575,11 +11019,7 @@
             "type": "string",
             "description": "Filters assignments by status.",
             "example": "PUBLISHED",
-            "enum": [
-              "PUBLISHED",
-              "UNPUBLISHED",
-              "ALL"
-            ]
+            "enum": ["PUBLISHED", "UNPUBLISHED", "ALL"]
           },
           "userFilter": {
             "$ref": "#/components/schemas/ContainsUsersFilterRequestV1"
@@ -11596,10 +11036,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "If provided, you'll get a filtered list of users with the corresponding account status filter. If not, this will only filter ACTIVE, PENDING_EMAIL_VERIFICATION, and NOT_REGISTERED Users.",
-            "example": [
-              "LIMITED",
-              "ACTIVE"
-            ],
+            "example": ["LIMITED", "ACTIVE"],
             "items": {
               "type": "string",
               "description": "If provided, you'll get a filtered list of users with the corresponding account status filter. If not, this will only filter ACTIVE, PENDING_EMAIL_VERIFICATION, and NOT_REGISTERED Users.",
@@ -11620,13 +11057,7 @@
             "type": "string",
             "description": "If provided, you'll get all users along with workspaces, groups, or projects they have access to.",
             "example": "NONE",
-            "enum": [
-              "ALL",
-              "NONE",
-              "WORKSPACE",
-              "PROJECT",
-              "USERGROUP"
-            ],
+            "enum": ["ALL", "NONE", "WORKSPACE", "PROJECT", "USERGROUP"],
             "default": "NONE"
           },
           "name": {
@@ -11658,65 +11089,37 @@
             "uniqueItems": true,
             "type": "array",
             "description": "If provided, you'll get a filtered list of users that have any of the specified roles. Owners are counted as admins when filtering.",
-            "example": [
-              "WORKSPACE_ADMIN",
-              "OWNER"
-            ],
+            "example": ["WORKSPACE_ADMIN", "OWNER"],
             "items": {
               "type": "string",
               "description": "If provided, you'll get a filtered list of users that have any of the specified roles. Owners are counted as admins when filtering.",
               "example": "[\"WORKSPACE_ADMIN\",\"OWNER\"]",
-              "enum": [
-                "WORKSPACE_ADMIN",
-                "OWNER",
-                "TEAM_MANAGER",
-                "PROJECT_MANAGER"
-              ]
+              "enum": ["WORKSPACE_ADMIN", "OWNER", "TEAM_MANAGER", "PROJECT_MANAGER"]
             }
           },
           "sortColumn": {
             "type": "string",
             "description": "Sorting criteria",
             "example": "ID",
-            "enum": [
-              "ID",
-              "EMAIL",
-              "NAME",
-              "NAME_LOWERCASE",
-              "ACCESS",
-              "HOURLYRATE",
-              "COSTRATE"
-            ]
+            "enum": ["ID", "EMAIL", "NAME", "NAME_LOWERCASE", "ACCESS", "HOURLYRATE", "COSTRATE"]
           },
           "sortOrder": {
             "type": "string",
             "description": "Sorting mode",
             "example": "ASCENDING",
-            "enum": [
-              "ASCENDING",
-              "DESCENDING"
-            ]
+            "enum": ["ASCENDING", "DESCENDING"]
           },
           "status": {
             "type": "string",
             "description": "If provided, you'll get a filtered list of users with the corresponding status.",
             "example": "ACTIVE",
-            "enum": [
-              "PENDING",
-              "ACTIVE",
-              "DECLINED",
-              "INACTIVE",
-              "ALL"
-            ]
+            "enum": ["PENDING", "ACTIVE", "DECLINED", "INACTIVE", "ALL"]
           },
           "userGroups": {
             "uniqueItems": true,
             "type": "array",
             "description": "If provided, you'll get a list of users that belong to the specified user group IDs.",
-            "example": [
-              "5a0ab5acb07987125438b60f",
-              "72wab5acb07987125438b564"
-            ],
+            "example": ["5a0ab5acb07987125438b60f", "72wab5acb07987125438b564"],
             "items": {
               "type": "string",
               "description": "If provided, you'll get a list of users that belong to the specified user group IDs.",
@@ -11765,11 +11168,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Indicates which user groups are included.",
-            "example": [
-              "5b715612b079875110791342",
-              "5b715612b079875110791324",
-              "5b715612b079875110793142"
-            ],
+            "example": ["5b715612b079875110791342", "5b715612b079875110791324", "5b715612b079875110793142"],
             "items": {
               "type": "string",
               "description": "Indicates which user groups are included.",
@@ -11787,10 +11186,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Indicates which users are included.",
-            "example": [
-              "5b715612b079875110791432",
-              "5b715612b079875110791234"
-            ],
+            "example": ["5b715612b079875110791432", "5b715612b079875110791234"],
             "items": {
               "type": "string",
               "description": "Indicates which users are included.",
@@ -11859,11 +11255,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Indicates which user groups are included.",
-            "example": [
-              "5b715612b079875110791342",
-              "5b715612b079875110791324",
-              "5b715612b079875110793142"
-            ],
+            "example": ["5b715612b079875110791342", "5b715612b079875110791324", "5b715612b079875110793142"],
             "items": {
               "type": "string",
               "description": "Indicates which user groups are included.",
@@ -11874,10 +11266,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Indicates which users are included.",
-            "example": [
-              "5b715612b079875110791432",
-              "5b715612b079875110791234"
-            ],
+            "example": ["5b715612b079875110791432", "5b715612b079875110791234"],
             "items": {
               "type": "string",
               "description": "Indicates which users are included.",
@@ -11909,9 +11298,7 @@
         "description": "Represents an hourly rate object."
       },
       "HourlyRateRequest": {
-        "required": [
-          "amount"
-        ],
+        "required": ["amount"],
         "type": "object",
         "properties": {
           "amount": {
@@ -11930,9 +11317,7 @@
         "description": "Represents an hourly rate request object."
       },
       "HourlyRateRequestV1": {
-        "required": [
-          "amount"
-        ],
+        "required": ["amount"],
         "type": "object",
         "properties": {
           "amount": {
@@ -11950,34 +11335,19 @@
         }
       },
       "ImportTimeEntriesAndExpensesRequestV1": {
-        "required": [
-          "from",
-          "importExpenses",
-          "projectFilter",
-          "timeEntryGroupType",
-          "to"
-        ],
+        "required": ["from", "importExpenses", "projectFilter", "timeEntryGroupType", "to"],
         "type": "object",
         "properties": {
           "expenseFieldsForDetailedGroup": {
             "uniqueItems": true,
             "type": "array",
             "description": "Represents a set of expense fields to include when using the DETAILED expense grouping type.",
-            "example": [
-              "NOTE"
-            ],
+            "example": ["NOTE"],
             "items": {
               "type": "string",
               "description": "Represents a set of expense fields to include when using the DETAILED expense grouping type.",
               "example": "[\"NOTE\"]",
-              "enum": [
-                "PROJECT",
-                "TASK",
-                "CATEGORY",
-                "NOTE",
-                "DATE",
-                "USER"
-              ],
+              "enum": ["PROJECT", "TASK", "CATEGORY", "NOTE", "DATE", "USER"],
               "default": "NOTE"
             },
             "default": "NOTE"
@@ -11986,20 +11356,13 @@
             "type": "string",
             "description": "Represents a group field when using the GROUPED expense group type.",
             "example": "CATEGORY",
-            "enum": [
-              "CATEGORY",
-              "PROJECT",
-              "USER"
-            ],
+            "enum": ["CATEGORY", "PROJECT", "USER"],
             "default": "PROJECT"
           },
           "expensesGroupType": {
             "type": "string",
             "description": "Represents an expense group type.",
-            "enum": [
-              "GROUPED",
-              "DETAILED"
-            ],
+            "enum": ["GROUPED", "DETAILED"],
             "default": "DETAILED"
           },
           "from": {
@@ -12024,56 +11387,31 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Represents a set of time entry fields to include when using DETAILED time entry grouping type.",
-            "example": [
-              "PROJECT",
-              "DESCRIPTION"
-            ],
+            "example": ["PROJECT", "DESCRIPTION"],
             "items": {
               "type": "string",
               "description": "Represents a set of time entry fields to include when using DETAILED time entry grouping type.",
               "example": "[\"PROJECT\",\"DESCRIPTION\"]",
-              "enum": [
-                "PROJECT",
-                "TASK",
-                "TAGS",
-                "DESCRIPTION",
-                "DATE",
-                "USER"
-              ]
+              "enum": ["PROJECT", "TASK", "TAGS", "DESCRIPTION", "DATE", "USER"]
             }
           },
           "timeEntryGroupType": {
             "type": "string",
             "description": "Represents a time entry group type.",
             "example": "GROUPED",
-            "enum": [
-              "SINGLE_ITEM",
-              "GROUPED",
-              "DETAILED"
-            ]
+            "enum": ["SINGLE_ITEM", "GROUPED", "DETAILED"]
           },
           "timeEntryPrimaryGroupBy": {
             "type": "string",
             "description": "Represents a primary group field when using the GROUPED time entry grouping type.",
             "example": "PROJECT",
-            "enum": [
-              "USER",
-              "PROJECT",
-              "DATE"
-            ]
+            "enum": ["USER", "PROJECT", "DATE"]
           },
           "timeEntrySecondaryGroupBy": {
             "type": "string",
             "description": "Represents a secondary group field when using the GROUPED time entry grouping type. Should not have the same grouping type as the primary group field.",
             "example": "TASK",
-            "enum": [
-              "PROJECT",
-              "USER",
-              "TASK",
-              "DATE",
-              "DESCRIPTION",
-              "NONE"
-            ]
+            "enum": ["PROJECT", "USER", "TASK", "DATE", "DESCRIPTION", "NONE"]
           },
           "to": {
             "type": "string",
@@ -12151,20 +11489,13 @@
             "type": "string",
             "description": "Represents a tax type.",
             "example": "COMPOUND",
-            "enum": [
-              "COMPOUND",
-              "SIMPLE",
-              "NONE"
-            ]
+            "enum": ["COMPOUND", "SIMPLE", "NONE"]
           }
         },
         "description": "Represents an invoice default settings object."
       },
       "InvoiceDefaultSettingsRequestV1": {
-        "required": [
-          "notes",
-          "subject"
-        ],
+        "required": ["notes", "subject"],
         "type": "object",
         "properties": {
           "companyId": {
@@ -12209,11 +11540,7 @@
             "type": "string",
             "description": "Represents a tax type.",
             "example": "COMPOUND",
-            "enum": [
-              "COMPOUND",
-              "SIMPLE",
-              "NONE"
-            ]
+            "enum": ["COMPOUND", "SIMPLE", "NONE"]
           }
         },
         "description": "Represents an invoice default settings object."
@@ -12280,14 +11607,7 @@
             "type": "string",
             "description": "Represents the status of an invoice.",
             "example": "PAID",
-            "enum": [
-              "UNSENT",
-              "SENT",
-              "PAID",
-              "PARTIALLY_PAID",
-              "VOID",
-              "OVERDUE"
-            ]
+            "enum": ["UNSENT", "SENT", "PAID", "PARTIALLY_PAID", "VOID", "OVERDUE"]
           }
         },
         "description": "Represents a list of invoices."
@@ -12425,44 +11745,23 @@
             "type": "string",
             "description": "Represents the column name to be used as sorting criteria.",
             "example": "ID",
-            "enum": [
-              "ID",
-              "CLIENT",
-              "DUE_ON",
-              "ISSUE_DATE",
-              "AMOUNT",
-              "BALANCE"
-            ]
+            "enum": ["ID", "CLIENT", "DUE_ON", "ISSUE_DATE", "AMOUNT", "BALANCE"]
           },
           "sortOrder": {
             "type": "string",
             "description": "Represents the sorting order.",
             "example": "ASCENDING",
-            "enum": [
-              "ASCENDING",
-              "DESCENDING"
-            ]
+            "enum": ["ASCENDING", "DESCENDING"]
           },
           "statuses": {
             "type": "array",
             "description": "Represents a list of invoice statuses. If provided, you'll get a filtered list of invoices that matches any of the invoice status provided.",
-            "example": [
-              "SENT",
-              "PAID",
-              "PARTIALLY_PAID"
-            ],
+            "example": ["SENT", "PAID", "PARTIALLY_PAID"],
             "items": {
               "type": "string",
               "description": "Represents a list of invoice statuses. If provided, you'll get a filtered list of invoices that matches any of the invoice status provided.",
               "example": "[\"SENT\",\"PAID\",\"PARTIALLY_PAID\"]",
-              "enum": [
-                "UNSENT",
-                "SENT",
-                "PAID",
-                "PARTIALLY_PAID",
-                "VOID",
-                "OVERDUE"
-              ]
+              "enum": ["UNSENT", "SENT", "PAID", "PARTIALLY_PAID", "VOID", "OVERDUE"]
             }
           },
           "strictSearch": {
@@ -12563,14 +11862,7 @@
             "type": "string",
             "description": "Represents the status of an invoice.",
             "example": "PAID",
-            "enum": [
-              "UNSENT",
-              "SENT",
-              "PAID",
-              "PARTIALLY_PAID",
-              "VOID",
-              "OVERDUE"
-            ]
+            "enum": ["UNSENT", "SENT", "PAID", "PARTIALLY_PAID", "VOID", "OVERDUE"]
           },
           "visibleZeroFields": {
             "$ref": "#/components/schemas/VisibleZeroFieldsInvoice"
@@ -12609,11 +11901,7 @@
             "type": "string",
             "description": "Represents the invoice item import type.",
             "example": "NOT_IMPORTED",
-            "enum": [
-              "NOT_IMPORTED",
-              "TIME_ENTRY_IMPORT",
-              "EXPENSE_IMPORT"
-            ]
+            "enum": ["NOT_IMPORTED", "TIME_ENTRY_IMPORT", "EXPENSE_IMPORT"]
           },
           "itemType": {
             "type": "string",
@@ -12765,14 +12053,7 @@
             "type": "string",
             "description": "Represents the status of an invoice.",
             "example": "PAID",
-            "enum": [
-              "UNSENT",
-              "SENT",
-              "PAID",
-              "PARTIALLY_PAID",
-              "VOID",
-              "OVERDUE"
-            ]
+            "enum": ["UNSENT", "SENT", "PAID", "PARTIALLY_PAID", "VOID", "OVERDUE"]
           },
           "subject": {
             "type": "string",
@@ -13122,9 +12403,7 @@
         "description": "Represents a label customization object."
       },
       "LimitedUserRequest": {
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "type": "object",
         "properties": {
           "costRate": {
@@ -13157,15 +12436,7 @@
           },
           "weekStart": {
             "type": "string",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ]
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
           },
           "workCapacity": {
             "type": "string"
@@ -13174,15 +12445,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "MONDAY",
-                "TUESDAY",
-                "WEDNESDAY",
-                "THURSDAY",
-                "FRIDAY",
-                "SATURDAY",
-                "SUNDAY"
-              ]
+              "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
             }
           }
         }
@@ -13244,15 +12507,7 @@
             "type": "string",
             "description": "Represents a day of the week.",
             "example": "MONDAY",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ]
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
           },
           "workCapacity": {
             "type": "string",
@@ -13263,15 +12518,7 @@
             "type": "string",
             "description": "Represents a list of days of the week.",
             "example": "[\"MONDAY\",\"TUESDAY\",\"WEDNESDAY\",\"THURSDAY\",\"FRIDAY\"]",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ]
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
           },
           "workspaceNumber": {
             "type": "integer",
@@ -13313,15 +12560,7 @@
             "type": "string",
             "description": "Represents a day of the week.",
             "example": "MONDAY",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ]
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
           },
           "workCapacity": {
             "type": "string",
@@ -13332,15 +12571,7 @@
             "type": "string",
             "description": "Represents a list of days of the week.",
             "example": "[\"MONDAY\",\"TUESDAY\",\"WEDNESDAY\",\"THURSDAY\",\"FRIDAY\"]",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ]
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
           }
         }
       },
@@ -13357,23 +12588,13 @@
             "type": "string",
             "description": "Represents a membership status enum.",
             "example": "PENDING",
-            "enum": [
-              "PENDING",
-              "ACTIVE",
-              "DECLINED",
-              "INACTIVE",
-              "ALL"
-            ]
+            "enum": ["PENDING", "ACTIVE", "DECLINED", "INACTIVE", "ALL"]
           },
           "membershipType": {
             "type": "string",
             "description": "Represents membership type enum.",
             "example": "PROJECT",
-            "enum": [
-              "WORKSPACE",
-              "PROJECT",
-              "USERGROUP"
-            ]
+            "enum": ["WORKSPACE", "PROJECT", "USERGROUP"]
           },
           "targetId": {
             "type": "string",
@@ -13398,23 +12619,13 @@
             "type": "string",
             "description": "Represents a membership status enum.",
             "example": "PENDING",
-            "enum": [
-              "PENDING",
-              "ACTIVE",
-              "DECLINED",
-              "INACTIVE",
-              "ALL"
-            ]
+            "enum": ["PENDING", "ACTIVE", "DECLINED", "INACTIVE", "ALL"]
           },
           "membershipType": {
             "type": "string",
             "description": "Represents membership type enum.",
             "example": "PROJECT",
-            "enum": [
-              "WORKSPACE",
-              "PROJECT",
-              "USERGROUP"
-            ]
+            "enum": ["WORKSPACE", "PROJECT", "USERGROUP"]
           },
           "userId": {
             "type": "string",
@@ -13476,9 +12687,7 @@
         "description": "Represents the data about negative balance including amount, time unit and period."
       },
       "NegativeBalanceRequest": {
-        "required": [
-          "amount"
-        ],
+        "required": ["amount"],
         "type": "object",
         "properties": {
           "amount": {
@@ -13492,10 +12701,7 @@
             "type": "string",
             "description": "Represents negative balance period.",
             "example": "MONTH",
-            "enum": [
-              "MONTH",
-              "YEAR"
-            ]
+            "enum": ["MONTH", "YEAR"]
           },
           "shouldReset": {
             "type": "boolean",
@@ -13589,10 +12795,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Represents set of user's identifier across the system",
-            "example": [
-              "6579d126c2fe3b25f20ea001",
-              "6579d126c2fe3b25f20ea002"
-            ],
+            "example": ["6579d126c2fe3b25f20ea001", "6579d126c2fe3b25f20ea002"],
             "items": {
               "type": "string",
               "description": "Represents set of user's identifier across the system",
@@ -13659,20 +12862,13 @@
             "type": "string",
             "description": "Represents the time unit of the policy.",
             "example": "DAYS",
-            "enum": [
-              "DAYS",
-              "HOURS"
-            ]
+            "enum": ["DAYS", "HOURS"]
           },
           "userGroupIds": {
             "uniqueItems": true,
             "type": "array",
             "description": "Represents user groups' identifiers across the system. Indicates which user groups are included in the policy.",
-            "example": [
-              "5b715612b079875110791342",
-              "5b715612b079875110791324",
-              "5b715612b079875110793142"
-            ],
+            "example": ["5b715612b079875110791342", "5b715612b079875110791324", "5b715612b079875110793142"],
             "items": {
               "type": "string",
               "description": "Represents user groups' identifiers across the system. Indicates which user groups are included in the policy.",
@@ -13683,10 +12879,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Represents users' identifiers across the system. Indicates which users are included in the policy.",
-            "example": [
-              "5b715612b079875110791432",
-              "5b715612b079875110791234"
-            ],
+            "example": ["5b715612b079875110791432", "5b715612b079875110791234"],
             "items": {
               "type": "string",
               "description": "Represents users' identifiers across the system. Indicates which users are included in the policy.",
@@ -13921,9 +13114,7 @@
         "description": "Represents a project info object."
       },
       "ProjectRequest": {
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "type": "object",
         "properties": {
           "billable": {
@@ -14002,9 +13193,7 @@
         "description": "Represents a list of template's projects and tasks."
       },
       "ProjectTaskTupleRequest": {
-        "required": [
-          "projectId"
-        ],
+        "required": ["projectId"],
         "type": "object",
         "properties": {
           "projectId": {
@@ -14027,10 +13216,7 @@
         "description": "Represents a list of template's projects and tasks."
       },
       "ProjectTotalsRequestV1": {
-        "required": [
-          "end",
-          "start"
-        ],
+        "required": ["end", "start"],
         "type": "object",
         "properties": {
           "end": {
@@ -14069,19 +13255,12 @@
             "type": "string",
             "description": "Filters assignments by status.",
             "example": "PUBLISHED",
-            "enum": [
-              "PUBLISHED",
-              "UNPUBLISHED",
-              "ALL"
-            ]
+            "enum": ["PUBLISHED", "UNPUBLISHED", "ALL"]
           }
         }
       },
       "PublishAssignmentsRequestV1": {
-        "required": [
-          "end",
-          "start"
-        ],
+        "required": ["end", "start"],
         "type": "object",
         "properties": {
           "end": {
@@ -14114,11 +13293,7 @@
             "type": "string",
             "description": "Represents view type.",
             "example": "PROJECTS",
-            "enum": [
-              "PROJECTS",
-              "TEAM",
-              "ALL"
-            ]
+            "enum": ["PROJECTS", "TEAM", "ALL"]
           }
         }
       },
@@ -14157,10 +13332,7 @@
         "description": "Represents cost rate object."
       },
       "RateWithCurrencyRequestV1": {
-        "required": [
-          "amount",
-          "currency"
-        ],
+        "required": ["amount", "currency"],
         "type": "object",
         "properties": {
           "amount": {
@@ -14208,9 +13380,7 @@
         "description": "Represents recurring assignment object."
       },
       "RecurringAssignmentRequestV1": {
-        "required": [
-          "weeks"
-        ],
+        "required": ["weeks"],
         "type": "object",
         "properties": {
           "repeat": {
@@ -14266,10 +13436,7 @@
         "description": "Represents a role data transfer object."
       },
       "RoleRequestV1": {
-        "required": [
-          "entityId",
-          "role"
-        ],
+        "required": ["entityId", "role"],
         "type": "object",
         "properties": {
           "entityId": {
@@ -14282,19 +13449,13 @@
             "type": "string",
             "description": "Represents a valid role.",
             "example": "TEAM_MANAGER",
-            "enum": [
-              "WORKSPACE_ADMIN",
-              "TEAM_MANAGER",
-              "PROJECT_MANAGER"
-            ]
+            "enum": ["WORKSPACE_ADMIN", "TEAM_MANAGER", "PROJECT_MANAGER"]
           },
           "sourceType": {
             "type": "string",
             "description": "Optional field used to indicate that the target of the operation is a\nuser group, in which case the value USER_GROUP should be used, alongside a valid user group\nID for the entityId field. If omitted, a user ID should be used for the entityId field.\n",
             "example": "USER_GROUP",
-            "enum": [
-              "USER_GROUP"
-            ]
+            "enum": ["USER_GROUP"]
           }
         }
       },
@@ -14325,11 +13486,7 @@
             "type": "string",
             "description": "Represents the scheduling exclude day enum.",
             "example": "WEEKEND",
-            "enum": [
-              "WEEKEND",
-              "HOLIDAY",
-              "TIME_OFF"
-            ]
+            "enum": ["WEEKEND", "HOLIDAY", "TIME_OFF"]
           }
         },
         "description": "Represents a list of excluded days objects"
@@ -14443,15 +13600,7 @@
             "type": "string",
             "description": "Represents list of days of the week.",
             "example": "[\"MONDAY\",\"TUESDAY\",\"WEDNESDAY\",\"THURSDAY\",\"FRIDAY\"]",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ]
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
           },
           "workspaceId": {
             "type": "string",
@@ -14472,17 +13621,12 @@
             "type": "string",
             "description": "Provide the status you would like to use for changing the time off request.",
             "example": "APPROVED",
-            "enum": [
-              "APPROVED",
-              "REJECTED"
-            ]
+            "enum": ["APPROVED", "REJECTED"]
           }
         }
       },
       "StopTimeEntryRequest": {
-        "required": [
-          "end"
-        ],
+        "required": ["end"],
         "type": "object",
         "properties": {
           "end": {
@@ -14494,10 +13638,7 @@
         }
       },
       "SummaryReportSettingsDtoV1": {
-        "required": [
-          "group",
-          "subgroup"
-        ],
+        "required": ["group", "subgroup"],
         "type": "object",
         "properties": {
           "group": {
@@ -14587,10 +13728,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Represents list of assignee ids for the task.",
-            "example": [
-              "45b687e29ae1f428e7ebe123",
-              "67s687e29ae1f428e7ebe678"
-            ],
+            "example": ["45b687e29ae1f428e7ebe123", "67s687e29ae1f428e7ebe678"],
             "items": {
               "type": "string",
               "description": "Represents list of assignee ids for the task.",
@@ -14646,10 +13784,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Represents list of user group ids for the task.",
-            "example": [
-              "67b687e29ae1f428e7ebe123",
-              "12s687e29ae1f428e7ebe678"
-            ],
+            "example": ["67b687e29ae1f428e7ebe123", "12s687e29ae1f428e7ebe678"],
             "items": {
               "type": "string",
               "description": "Represents list of user group ids for the task.",
@@ -14675,9 +13810,7 @@
         "description": "Represents a project info object."
       },
       "TaskRequest": {
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "type": "object",
         "properties": {
           "assigneeId": {
@@ -14688,10 +13821,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Represents list of assignee ids for the task.",
-            "example": [
-              "45b687e29ae1f428e7ebe123",
-              "67s687e29ae1f428e7ebe678"
-            ],
+            "example": ["45b687e29ae1f428e7ebe123", "67s687e29ae1f428e7ebe678"],
             "items": {
               "type": "string",
               "description": "Represents list of assignee ids for the task.",
@@ -14743,10 +13873,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Represents list of user group ids for the task.",
-            "example": [
-              "67b687e29ae1f428e7ebe123",
-              "12s687e29ae1f428e7ebe678"
-            ],
+            "example": ["67b687e29ae1f428e7ebe123", "12s687e29ae1f428e7ebe678"],
             "items": {
               "type": "string",
               "description": "Represents list of user group ids for the task.",
@@ -14757,9 +13884,7 @@
         "description": "Represents a list of task request objects."
       },
       "TaskRequestV1": {
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "type": "object",
         "properties": {
           "assigneeId": {
@@ -14770,10 +13895,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Represents list of assignee ids for the task.",
-            "example": [
-              "45b687e29ae1f428e7ebe123",
-              "67s687e29ae1f428e7ebe678"
-            ],
+            "example": ["45b687e29ae1f428e7ebe123", "67s687e29ae1f428e7ebe678"],
             "items": {
               "type": "string",
               "description": "Represents list of assignee ids for the task.",
@@ -14808,20 +13930,13 @@
             "type": "string",
             "description": "Represents task status.",
             "example": "DONE",
-            "enum": [
-              "ACTIVE",
-              "DONE",
-              "ALL"
-            ]
+            "enum": ["ACTIVE", "DONE", "ALL"]
           },
           "userGroupIds": {
             "uniqueItems": true,
             "type": "array",
             "description": "Represents list of user group ids for the task.",
-            "example": [
-              "67b687e29ae1f428e7ebe123",
-              "12s687e29ae1f428e7ebe678"
-            ],
+            "example": ["67b687e29ae1f428e7ebe123", "12s687e29ae1f428e7ebe678"],
             "items": {
               "type": "string",
               "description": "Represents list of user group ids for the task.",
@@ -14837,37 +13952,21 @@
         "oneOf": [
           {
             "type": "string",
-            "enum": [
-              "ACTIVE",
-              "DONE",
-              "ALL"
-            ]
+            "enum": ["ACTIVE", "DONE", "ALL"]
           }
         ],
         "properties": {
           "ACTIVE": {
             "type": "string",
-            "enum": [
-              "ACTIVE",
-              "DONE",
-              "ALL"
-            ]
+            "enum": ["ACTIVE", "DONE", "ALL"]
           },
           "ALL": {
             "type": "string",
-            "enum": [
-              "ACTIVE",
-              "DONE",
-              "ALL"
-            ]
+            "enum": ["ACTIVE", "DONE", "ALL"]
           },
           "DONE": {
             "type": "string",
-            "enum": [
-              "ACTIVE",
-              "DONE",
-              "ALL"
-            ]
+            "enum": ["ACTIVE", "DONE", "ALL"]
           },
           "active": {
             "type": "boolean"
@@ -14881,37 +13980,21 @@
         "oneOf": [
           {
             "type": "string",
-            "enum": [
-              "COMPOUND",
-              "SIMPLE",
-              "NONE"
-            ]
+            "enum": ["COMPOUND", "SIMPLE", "NONE"]
           }
         ],
         "properties": {
           "COMPOUND": {
             "type": "string",
-            "enum": [
-              "COMPOUND",
-              "SIMPLE",
-              "NONE"
-            ]
+            "enum": ["COMPOUND", "SIMPLE", "NONE"]
           },
           "NONE": {
             "type": "string",
-            "enum": [
-              "COMPOUND",
-              "SIMPLE",
-              "NONE"
-            ]
+            "enum": ["COMPOUND", "SIMPLE", "NONE"]
           },
           "SIMPLE": {
             "type": "string",
-            "enum": [
-              "COMPOUND",
-              "SIMPLE",
-              "NONE"
-            ]
+            "enum": ["COMPOUND", "SIMPLE", "NONE"]
           },
           "value": {
             "type": "string"
@@ -14988,9 +14071,7 @@
         }
       },
       "TemplatePatchRequest": {
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "type": "object",
         "properties": {
           "name": {
@@ -15002,10 +14083,7 @@
         }
       },
       "TemplateRequest": {
-        "required": [
-          "name",
-          "projectsAndTasks"
-        ],
+        "required": ["name", "projectsAndTasks"],
         "type": "object",
         "properties": {
           "name": {
@@ -15025,9 +14103,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Represents a set of template time entry ids.",
-            "example": [
-              "64c777ddd3fcab07cfbb210c"
-            ],
+            "example": ["64c777ddd3fcab07cfbb210c"],
             "items": {
               "type": "string",
               "description": "Represents a set of template time entry ids.",
@@ -15085,10 +14161,7 @@
           "tagIds": {
             "type": "array",
             "description": "Represents a list of tag identifiers across the system.",
-            "example": [
-              "321r77ddd3fcab07cfbb567y",
-              "44x777ddd3fcab07cfbb88f"
-            ],
+            "example": ["321r77ddd3fcab07cfbb567y", "44x777ddd3fcab07cfbb88f"],
             "items": {
               "type": "string",
               "description": "Represents a list of tag identifiers across the system.",
@@ -15107,12 +14180,7 @@
             "type": "string",
             "description": "Represents a time entry type enum.",
             "example": "BREAK",
-            "enum": [
-              "REGULAR",
-              "BREAK",
-              "HOLIDAY",
-              "TIME_OFF"
-            ]
+            "enum": ["REGULAR", "BREAK", "HOLIDAY", "TIME_OFF"]
           },
           "userId": {
             "type": "string",
@@ -15169,10 +14237,7 @@
           "tagIds": {
             "type": "array",
             "description": "Represents a list of tag identifiers across the system.",
-            "example": [
-              "321r77ddd3fcab07cfbb567y",
-              "44x777ddd3fcab07cfbb88f"
-            ],
+            "example": ["321r77ddd3fcab07cfbb567y", "44x777ddd3fcab07cfbb88f"],
             "items": {
               "type": "string",
               "description": "Represents a list of tag identifiers across the system.",
@@ -15191,12 +14256,7 @@
             "type": "string",
             "description": "Represents a time entry type enum.",
             "example": "BREAK",
-            "enum": [
-              "REGULAR",
-              "BREAK",
-              "HOLIDAY",
-              "TIME_OFF"
-            ]
+            "enum": ["REGULAR", "BREAK", "HOLIDAY", "TIME_OFF"]
           },
           "userId": {
             "type": "string",
@@ -15219,10 +14279,7 @@
           }
         },
         "description": "Represents a list of invoiced time entry ids",
-        "example": [
-          "54m377ddd3fcab07cfbb432w",
-          "25b687e29ae1f428e7ebe123"
-        ]
+        "example": ["54m377ddd3fcab07cfbb432w", "25b687e29ae1f428e7ebe123"]
       },
       "TimeEntryInfoDto": {
         "type": "object",
@@ -15285,12 +14342,7 @@
             "type": "string",
             "description": "Represents a time entry type enum.",
             "example": "REGULAR",
-            "enum": [
-              "REGULAR",
-              "BREAK",
-              "HOLIDAY",
-              "TIME_OFF"
-            ]
+            "enum": ["REGULAR", "BREAK", "HOLIDAY", "TIME_OFF"]
           }
         },
         "description": "Represents a list of time entry info data transfer objects."
@@ -15328,10 +14380,7 @@
           "tagIds": {
             "type": "array",
             "description": "Represents a list of tag identifiers across the system.",
-            "example": [
-              "321r77ddd3fcab07cfbb567y",
-              "44x777ddd3fcab07cfbb88f"
-            ],
+            "example": ["321r77ddd3fcab07cfbb567y", "44x777ddd3fcab07cfbb88f"],
             "items": {
               "type": "string",
               "description": "Represents a list of tag identifiers across the system.",
@@ -15350,12 +14399,7 @@
             "type": "string",
             "description": "Represents a time entry type enum.",
             "example": "REGULAR",
-            "enum": [
-              "REGULAR",
-              "BREAK",
-              "HOLIDAY",
-              "TIME_OFF"
-            ]
+            "enum": ["REGULAR", "BREAK", "HOLIDAY", "TIME_OFF"]
           },
           "userId": {
             "type": "string",
@@ -15419,10 +14463,7 @@
           "tagIds": {
             "type": "array",
             "description": "Represents a list of tag identifiers across the system.",
-            "example": [
-              "321r77ddd3fcab07cfbb567y",
-              "44x777ddd3fcab07cfbb88f"
-            ],
+            "example": ["321r77ddd3fcab07cfbb567y", "44x777ddd3fcab07cfbb88f"],
             "items": {
               "type": "string",
               "description": "Represents a list of tag identifiers across the system.",
@@ -15441,12 +14482,7 @@
             "type": "string",
             "description": "Represents a time entry type enum.",
             "example": "BREAK",
-            "enum": [
-              "REGULAR",
-              "BREAK",
-              "HOLIDAY",
-              "TIME_OFF"
-            ]
+            "enum": ["REGULAR", "BREAK", "HOLIDAY", "TIME_OFF"]
           },
           "userId": {
             "type": "string",
@@ -15478,20 +14514,13 @@
             "type": "string",
             "description": "Represents a reset option enum.",
             "example": "WEEKLY",
-            "enum": [
-              "WEEKLY",
-              "MONTHLY",
-              "YEARLY"
-            ]
+            "enum": ["WEEKLY", "MONTHLY", "YEARLY"]
           },
           "type": {
             "type": "string",
             "description": "Represents an estimate type enum.",
             "example": "AUTO",
-            "enum": [
-              "AUTO",
-              "MANUAL"
-            ]
+            "enum": ["AUTO", "MANUAL"]
           }
         },
         "description": "Represents a project time estimate object."
@@ -15518,20 +14547,13 @@
             "type": "string",
             "description": "Represents a reset option enum.",
             "example": "MONTHLY",
-            "enum": [
-              "WEEKLY",
-              "MONTHLY",
-              "YEARLY"
-            ]
+            "enum": ["WEEKLY", "MONTHLY", "YEARLY"]
           },
           "type": {
             "type": "string",
             "description": "Represents an estimate type enum.",
             "example": "AUTO",
-            "enum": [
-              "AUTO",
-              "MANUAL"
-            ]
+            "enum": ["AUTO", "MANUAL"]
           }
         },
         "description": "Represents project time estimate request object."
@@ -15658,10 +14680,7 @@
             "type": "string",
             "description": "Represents the time unit of the time off request.",
             "example": "DAYS",
-            "enum": [
-              "DAYS",
-              "HOURS"
-            ]
+            "enum": ["DAYS", "HOURS"]
           },
           "userEmail": {
             "type": "string",
@@ -15710,20 +14729,14 @@
         "description": "Represents the period the time off request."
       },
       "TimeOffRequestPeriodV1Request": {
-        "required": [
-          "period"
-        ],
+        "required": ["period"],
         "type": "object",
         "properties": {
           "halfDayPeriod": {
             "type": "string",
             "description": "Represents the half day period.",
             "example": "NOT_DEFINED",
-            "enum": [
-              "FIRST_HALF",
-              "SECOND_HALF",
-              "NOT_DEFINED"
-            ]
+            "enum": ["FIRST_HALF", "SECOND_HALF", "NOT_DEFINED"]
           },
           "isHalfDay": {
             "type": "boolean",
@@ -15736,11 +14749,7 @@
           },
           "timeOffHalfDayPeriod": {
             "type": "string",
-            "enum": [
-              "FIRST_HALF",
-              "SECOND_HALF",
-              "NOT_DEFINED"
-            ]
+            "enum": ["FIRST_HALF", "SECOND_HALF", "NOT_DEFINED"]
           }
         },
         "description": "Provide the period you would like to use for creating the time off request. If `timeZone` isn't set, should be aligned with time zone for user in settings. Can be shifted from user time zone with explicit setting of `timeZone`."
@@ -15766,12 +14775,7 @@
           },
           "statusType": {
             "type": "string",
-            "enum": [
-              "PENDING",
-              "APPROVED",
-              "REJECTED",
-              "ALL"
-            ]
+            "enum": ["PENDING", "APPROVED", "REJECTED", "ALL"]
           }
         },
         "description": "Represents the status the time off request."
@@ -15872,9 +14876,7 @@
         "description": "Represents total hours per day object."
       },
       "UpdateApprovalRequest": {
-        "required": [
-          "state"
-        ],
+        "required": ["state"],
         "type": "object",
         "properties": {
           "note": {
@@ -15886,21 +14888,12 @@
             "type": "string",
             "description": "Specifies the approval state to set.",
             "example": "PENDING",
-            "enum": [
-              "PENDING",
-              "APPROVED",
-              "WITHDRAWN_SUBMISSION",
-              "WITHDRAWN_APPROVAL",
-              "REJECTED"
-            ]
+            "enum": ["PENDING", "APPROVED", "WITHDRAWN_SUBMISSION", "WITHDRAWN_APPROVAL", "REJECTED"]
           }
         }
       },
       "UpdateBalanceRequestV1": {
-        "required": [
-          "userIds",
-          "value"
-        ],
+        "required": ["userIds", "value"],
         "type": "object",
         "properties": {
           "note": {
@@ -15913,10 +14906,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Represents the list of users' identifiers whose balance is to be updated.",
-            "example": [
-              "5b715448b079875110792222",
-              "5b715448b079875110791111"
-            ],
+            "example": ["5b715448b079875110792222", "5b715448b079875110791111"],
             "items": {
               "type": "string",
               "description": "Represents the list of users' identifiers whose balance is to be updated.",
@@ -15985,9 +14975,7 @@
         }
       },
       "UpdateCustomFieldRequest": {
-        "required": [
-          "customFieldId"
-        ],
+        "required": ["customFieldId"],
         "type": "object",
         "properties": {
           "customFieldId": {
@@ -15999,11 +14987,7 @@
             "type": "string",
             "description": "Represents a custom field value source type.",
             "example": "WORKSPACE",
-            "enum": [
-              "WORKSPACE",
-              "PROJECT",
-              "TIMEENTRY"
-            ]
+            "enum": ["WORKSPACE", "PROJECT", "TIMEENTRY"]
           },
           "value": {
             "type": "object",
@@ -16014,22 +14998,13 @@
         "description": "Represents a list of value objects for user’s custom fields."
       },
       "UpdateCustomFieldRequestV1": {
-        "required": [
-          "name",
-          "type"
-        ],
+        "required": ["name", "type"],
         "type": "object",
         "properties": {
           "allowedValues": {
             "type": "array",
             "description": "Represents a list of custom field's allowed values.",
-            "example": [
-              "New York",
-              "London",
-              "Manila",
-              "Sydney",
-              "Belgrade"
-            ],
+            "example": ["New York", "London", "Manila", "Sydney", "Belgrade"],
             "items": {
               "type": "string",
               "description": "Represents a list of custom field's allowed values.",
@@ -16067,24 +15042,13 @@
             "type": "string",
             "description": "Represents a custom field status",
             "example": "VISIBLE",
-            "enum": [
-              "INACTIVE",
-              "VISIBLE",
-              "INVISIBLE"
-            ]
+            "enum": ["INACTIVE", "VISIBLE", "INVISIBLE"]
           },
           "type": {
             "type": "string",
             "description": "Represents a custom field type.",
             "example": "DROPDOWN_MULTIPLE",
-            "enum": [
-              "TXT",
-              "NUMBER",
-              "DROPDOWN_SINGLE",
-              "DROPDOWN_MULTIPLE",
-              "CHECKBOX",
-              "LINK"
-            ]
+            "enum": ["TXT", "NUMBER", "DROPDOWN_SINGLE", "DROPDOWN_MULTIPLE", "CHECKBOX", "LINK"]
           },
           "workspaceDefaultValue": {
             "type": "object",
@@ -16094,14 +15058,7 @@
         }
       },
       "UpdateExpenseV1Request": {
-        "required": [
-          "amount",
-          "categoryId",
-          "changeFields",
-          "date",
-          "file",
-          "userId"
-        ],
+        "required": ["amount", "categoryId", "changeFields", "date", "file", "userId"],
         "type": "object",
         "properties": {
           "amount": {
@@ -16125,26 +15082,12 @@
           "changeFields": {
             "type": "array",
             "description": "Represents a list of expense change fields.",
-            "example": [
-              "USER",
-              "DATE",
-              "PROJECT"
-            ],
+            "example": ["USER", "DATE", "PROJECT"],
             "items": {
               "type": "string",
               "description": "Represents a list of expense change fields.",
               "example": "[\"USER\",\"DATE\",\"PROJECT\"]",
-              "enum": [
-                "USER",
-                "DATE",
-                "PROJECT",
-                "TASK",
-                "CATEGORY",
-                "NOTES",
-                "AMOUNT",
-                "BILLABLE",
-                "FILE"
-              ]
+              "enum": ["USER", "DATE", "PROJECT", "TASK", "CATEGORY", "NOTES", "AMOUNT", "BILLABLE", "FILE"]
             }
           },
           "date": {
@@ -16183,11 +15126,7 @@
         }
       },
       "UpdateHolidayRequestV1": {
-        "required": [
-          "datePeriod",
-          "name",
-          "occursAnnually"
-        ],
+        "required": ["datePeriod", "name", "occursAnnually"],
         "type": "object",
         "properties": {
           "automaticTimeEntryCreation": {
@@ -16229,15 +15168,7 @@
         }
       },
       "UpdateInvoiceRequestV1": {
-        "required": [
-          "currency",
-          "discountPercent",
-          "dueDate",
-          "issuedDate",
-          "number",
-          "tax2Percent",
-          "taxPercent"
-        ],
+        "required": ["currency", "discountPercent", "dueDate", "issuedDate", "number", "tax2Percent", "taxPercent"],
         "type": "object",
         "properties": {
           "clientId": {
@@ -16310,18 +15241,12 @@
             "type": "string",
             "description": "Represents a list of zero value invoice fields that will be visible.",
             "example": "[\"TAX\",\"TAX_2\",\"DISCOUNT\"]",
-            "enum": [
-              "TAX",
-              "TAX_2",
-              "DISCOUNT"
-            ]
+            "enum": ["TAX", "TAX_2", "DISCOUNT"]
           }
         }
       },
       "UpdateInvoiceSettingsRequestV1": {
-        "required": [
-          "labels"
-        ],
+        "required": ["labels"],
         "type": "object",
         "properties": {
           "defaults": {
@@ -16336,10 +15261,7 @@
         }
       },
       "UpdateInvoicedStatusRequest": {
-        "required": [
-          "invoiced",
-          "timeEntryIds"
-        ],
+        "required": ["invoiced", "timeEntryIds"],
         "type": "object",
         "properties": {
           "invoiced": {
@@ -16352,10 +15274,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Represents a list of invoiced time entry ids",
-            "example": [
-              "54m377ddd3fcab07cfbb432w",
-              "25b687e29ae1f428e7ebe123"
-            ],
+            "example": ["54m377ddd3fcab07cfbb432w", "25b687e29ae1f428e7ebe123"],
             "items": {
               "$ref": "#/components/schemas/TimeEntryId"
             }
@@ -16457,9 +15376,7 @@
         }
       },
       "UpdateProjectMembershipsRequest": {
-        "required": [
-          "memberships"
-        ],
+        "required": ["memberships"],
         "type": "object",
         "properties": {
           "memberships": {
@@ -16542,9 +15459,7 @@
         }
       },
       "UpdateTaskRequest": {
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "type": "object",
         "properties": {
           "assigneeId": {
@@ -16555,10 +15470,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Represents list of assignee ids for the task.",
-            "example": [
-              "45b687e29ae1f428e7ebe123",
-              "67s687e29ae1f428e7ebe678"
-            ],
+            "example": ["45b687e29ae1f428e7ebe123", "67s687e29ae1f428e7ebe678"],
             "items": {
               "type": "string",
               "description": "Represents list of assignee ids for the task.",
@@ -16593,20 +15505,13 @@
             "type": "string",
             "description": "Represents task status.",
             "example": "DONE",
-            "enum": [
-              "ACTIVE",
-              "DONE",
-              "ALL"
-            ]
+            "enum": ["ACTIVE", "DONE", "ALL"]
           },
           "userGroupIds": {
             "uniqueItems": true,
             "type": "array",
             "description": "Represents list of user group ids for the task.",
-            "example": [
-              "67b687e29ae1f428e7ebe123",
-              "12s687e29ae1f428e7ebe678"
-            ],
+            "example": ["67b687e29ae1f428e7ebe123", "12s687e29ae1f428e7ebe678"],
             "items": {
               "type": "string",
               "description": "Represents list of user group ids for the task.",
@@ -16616,9 +15521,7 @@
         }
       },
       "UpdateTimeEntryBulkRequest": {
-        "required": [
-          "id"
-        ],
+        "required": ["id"],
         "type": "object",
         "properties": {
           "billable": {
@@ -16667,10 +15570,7 @@
           "tagIds": {
             "type": "array",
             "description": "Represents a list of tag ids.",
-            "example": [
-              "321r77ddd3fcab07cfbb567y",
-              "44x777ddd3fcab07cfbb88f"
-            ],
+            "example": ["321r77ddd3fcab07cfbb567y", "44x777ddd3fcab07cfbb88f"],
             "items": {
               "type": "string",
               "description": "Represents a list of tag ids.",
@@ -16684,17 +15584,12 @@
           },
           "type": {
             "type": "string",
-            "enum": [
-              "REGULAR",
-              "BREAK"
-            ]
+            "enum": ["REGULAR", "BREAK"]
           }
         }
       },
       "UpdateTimeEntryRequest": {
-        "required": [
-          "start"
-        ],
+        "required": ["start"],
         "type": "object",
         "properties": {
           "billable": {
@@ -16738,10 +15633,7 @@
           "tagIds": {
             "type": "array",
             "description": "Represents a list of tag ids.",
-            "example": [
-              "321r77ddd3fcab07cfbb567y",
-              "44x777ddd3fcab07cfbb88f"
-            ],
+            "example": ["321r77ddd3fcab07cfbb567y", "44x777ddd3fcab07cfbb88f"],
             "items": {
               "type": "string",
               "description": "Represents a list of tag ids.",
@@ -16755,10 +15647,7 @@
           },
           "type": {
             "type": "string",
-            "enum": [
-              "REGULAR",
-              "BREAK"
-            ]
+            "enum": ["REGULAR", "BREAK"]
           }
         }
       },
@@ -16775,29 +15664,19 @@
         }
       },
       "UpdateUserStatusRequest": {
-        "required": [
-          "status"
-        ],
+        "required": ["status"],
         "type": "object",
         "properties": {
           "status": {
             "type": "string",
             "description": "Represents membership status.",
             "example": "ACTIVE",
-            "enum": [
-              "ACTIVE",
-              "INACTIVE"
-            ]
+            "enum": ["ACTIVE", "INACTIVE"]
           }
         }
       },
       "UpdateWebhookRequestV1": {
-        "required": [
-          "triggerSource",
-          "triggerSourceType",
-          "url",
-          "webhookEvent"
-        ],
+        "required": ["triggerSource", "triggerSourceType", "url", "webhookEvent"],
         "type": "object",
         "properties": {
           "name": {
@@ -16810,10 +15689,7 @@
           "triggerSource": {
             "type": "array",
             "description": "Represents a list of trigger sources.",
-            "example": [
-              "54a687e29ae1f428e7ebe909",
-              "87p187e29ae1f428e7ebej56"
-            ],
+            "example": ["54a687e29ae1f428e7ebe909", "87p187e29ae1f428e7ebej56"],
             "items": {
               "type": "string",
               "description": "Represents a list of trigger sources.",
@@ -16824,15 +15700,7 @@
             "type": "string",
             "description": "Represents a webhook event trigger source type.",
             "example": "PROJECT_ID",
-            "enum": [
-              "PROJECT_ID",
-              "USER_ID",
-              "TAG_ID",
-              "TASK_ID",
-              "WORKSPACE_ID",
-              "ASSIGNMENT_ID",
-              "EXPENSE_ID"
-            ]
+            "enum": ["PROJECT_ID", "USER_ID", "TAG_ID", "TASK_ID", "WORKSPACE_ID", "ASSIGNMENT_ID", "EXPENSE_ID"]
           },
           "url": {
             "minLength": 1,
@@ -16916,9 +15784,7 @@
         }
       },
       "UpsertUserCustomFieldRequest": {
-        "required": [
-          "customFieldId"
-        ],
+        "required": ["customFieldId"],
         "type": "object",
         "properties": {
           "customFieldId": {
@@ -16992,23 +15858,13 @@
             "type": "string",
             "description": "Represents user custom field source type.",
             "example": "WORKSPACE",
-            "enum": [
-              "WORKSPACE",
-              "USER"
-            ]
+            "enum": ["WORKSPACE", "USER"]
           },
           "type": {
             "type": "string",
             "description": "Represents custom field type.",
             "example": "DROPDOWN_MULTIPLE",
-            "enum": [
-              "TXT",
-              "NUMBER",
-              "DROPDOWN_SINGLE",
-              "DROPDOWN_MULTIPLE",
-              "CHECKBOX",
-              "LINK"
-            ]
+            "enum": ["TXT", "NUMBER", "DROPDOWN_SINGLE", "DROPDOWN_MULTIPLE", "CHECKBOX", "LINK"]
           },
           "userId": {
             "type": "string",
@@ -17107,10 +15963,7 @@
           "userIds": {
             "type": "array",
             "description": "Represents a list of users' identifiers across the system.",
-            "example": [
-              "5a0ab5acb07987125438b60f",
-              "98j4b5acb07987125437y32"
-            ],
+            "example": ["5a0ab5acb07987125438b60f", "98j4b5acb07987125437y32"],
             "items": {
               "type": "string",
               "description": "Represents a list of users' identifiers across the system.",
@@ -17130,19 +15983,13 @@
           "contains": {
             "type": "string",
             "example": "CONTAINS",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN"
-            ]
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN"]
           },
           "ids": {
             "uniqueItems": true,
             "type": "array",
             "description": "Represents ids upon which filtering is performed.",
-            "example": [
-              "5b715612b079875110791111",
-              "5b715612b079875110791222"
-            ],
+            "example": ["5b715612b079875110791111", "5b715612b079875110791222"],
             "items": {
               "type": "string",
               "description": "Represents ids upon which filtering is performed.",
@@ -17153,11 +16000,7 @@
             "type": "string",
             "description": "Represents user status.",
             "example": "ALL",
-            "enum": [
-              "ALL",
-              "ACTIVE",
-              "INACTIVE"
-            ]
+            "enum": ["ALL", "ACTIVE", "INACTIVE"]
           }
         },
         "description": "Provide list with user group ids and corresponding status."
@@ -17175,9 +16018,7 @@
         }
       },
       "UserGroupUserRequest": {
-        "required": [
-          "userId"
-        ],
+        "required": ["userId"],
         "type": "object",
         "properties": {
           "userId": {
@@ -17188,9 +16029,7 @@
         }
       },
       "UserIdWithRatesRequest": {
-        "required": [
-          "userId"
-        ],
+        "required": ["userId"],
         "type": "object",
         "properties": {
           "costRate": {
@@ -17213,19 +16052,13 @@
           "contains": {
             "type": "string",
             "example": "CONTAINS",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN"
-            ]
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN"]
           },
           "ids": {
             "uniqueItems": true,
             "type": "array",
             "description": "Represents ids upon which filtering is performed.",
-            "example": [
-              "5b715612b079875110791111",
-              "5b715612b079875110791222"
-            ],
+            "example": ["5b715612b079875110791111", "5b715612b079875110791222"],
             "items": {
               "type": "string",
               "description": "Represents ids upon which filtering is performed.",
@@ -17236,11 +16069,7 @@
             "type": "string",
             "description": "Represents user status.",
             "example": "ALL",
-            "enum": [
-              "ALL",
-              "ACTIVE",
-              "INACTIVE"
-            ]
+            "enum": ["ALL", "ACTIVE", "INACTIVE"]
           }
         },
         "description": "Provide list with user ids and corresponding status."
@@ -17264,11 +16093,7 @@
         ]
       },
       "UserSettingsDtoV1": {
-        "required": [
-          "dateFormat",
-          "timeFormat",
-          "timeZone"
-        ],
+        "required": ["dateFormat", "timeFormat", "timeZone"],
         "type": "object",
         "properties": {
           "alerts": {
@@ -17294,18 +16119,12 @@
           "dashboardSelection": {
             "type": "string",
             "example": "ME",
-            "enum": [
-              "ME",
-              "TEAM"
-            ]
+            "enum": ["ME", "TEAM"]
           },
           "dashboardViewType": {
             "type": "string",
             "example": "BILLABILITY",
-            "enum": [
-              "PROJECT",
-              "BILLABILITY"
-            ]
+            "enum": ["PROJECT", "BILLABILITY"]
           },
           "dateFormat": {
             "minLength": 1,
@@ -17397,20 +16216,14 @@
           "theme": {
             "type": "string",
             "example": "DARK",
-            "enum": [
-              "DARK",
-              "DEFAULT"
-            ]
+            "enum": ["DARK", "DEFAULT"]
           },
           "timeFormat": {
             "minLength": 1,
             "type": "string",
             "description": "Represents a time format enum.",
             "example": "HOUR24",
-            "enum": [
-              "HOUR12",
-              "HOUR24"
-            ]
+            "enum": ["HOUR12", "HOUR24"]
           },
           "timeTrackingManual": {
             "type": "boolean",
@@ -17427,15 +16240,7 @@
             "type": "string",
             "description": "Represents a day of the week.",
             "example": "MONDAY",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ]
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
           },
           "weeklyUpdates": {
             "type": "boolean",
@@ -17448,45 +16253,25 @@
       "VisibleZeroFieldsInvoice": {
         "type": "object",
         "description": "Represents a list of zero value invoice fields that will be visible.",
-        "example": [
-          "TAX",
-          "TAX_2",
-          "DISCOUNT"
-        ],
+        "example": ["TAX", "TAX_2", "DISCOUNT"],
         "oneOf": [
           {
             "type": "string",
-            "enum": [
-              "TAX",
-              "TAX_2",
-              "DISCOUNT"
-            ]
+            "enum": ["TAX", "TAX_2", "DISCOUNT"]
           }
         ],
         "properties": {
           "DISCOUNT": {
             "type": "string",
-            "enum": [
-              "TAX",
-              "TAX_2",
-              "DISCOUNT"
-            ]
+            "enum": ["TAX", "TAX_2", "DISCOUNT"]
           },
           "TAX": {
             "type": "string",
-            "enum": [
-              "TAX",
-              "TAX_2",
-              "DISCOUNT"
-            ]
+            "enum": ["TAX", "TAX_2", "DISCOUNT"]
           },
           "TAX_2": {
             "type": "string",
-            "enum": [
-              "TAX",
-              "TAX_2",
-              "DISCOUNT"
-            ]
+            "enum": ["TAX", "TAX_2", "DISCOUNT"]
           }
         }
       },
@@ -17526,10 +16311,7 @@
           "triggerSource": {
             "type": "array",
             "description": "Represents a list of trigger sources.",
-            "example": [
-              "54a687e29ae1f428e7ebe909",
-              "87p187e29ae1f428e7ebej56"
-            ],
+            "example": ["54a687e29ae1f428e7ebe909", "87p187e29ae1f428e7ebej56"],
             "items": {
               "type": "string",
               "description": "Represents a list of trigger sources.",
@@ -17618,101 +16400,37 @@
         "oneOf": [
           {
             "type": "string",
-            "enum": [
-              "PROJECT_ID",
-              "USER_ID",
-              "TAG_ID",
-              "TASK_ID",
-              "WORKSPACE_ID",
-              "ASSIGNMENT_ID",
-              "EXPENSE_ID"
-            ]
+            "enum": ["PROJECT_ID", "USER_ID", "TAG_ID", "TASK_ID", "WORKSPACE_ID", "ASSIGNMENT_ID", "EXPENSE_ID"]
           }
         ],
         "properties": {
           "ASSIGNMENT_ID": {
             "type": "string",
-            "enum": [
-              "PROJECT_ID",
-              "USER_ID",
-              "TAG_ID",
-              "TASK_ID",
-              "WORKSPACE_ID",
-              "ASSIGNMENT_ID",
-              "EXPENSE_ID"
-            ]
+            "enum": ["PROJECT_ID", "USER_ID", "TAG_ID", "TASK_ID", "WORKSPACE_ID", "ASSIGNMENT_ID", "EXPENSE_ID"]
           },
           "EXPENSE_ID": {
             "type": "string",
-            "enum": [
-              "PROJECT_ID",
-              "USER_ID",
-              "TAG_ID",
-              "TASK_ID",
-              "WORKSPACE_ID",
-              "ASSIGNMENT_ID",
-              "EXPENSE_ID"
-            ]
+            "enum": ["PROJECT_ID", "USER_ID", "TAG_ID", "TASK_ID", "WORKSPACE_ID", "ASSIGNMENT_ID", "EXPENSE_ID"]
           },
           "PROJECT_ID": {
             "type": "string",
-            "enum": [
-              "PROJECT_ID",
-              "USER_ID",
-              "TAG_ID",
-              "TASK_ID",
-              "WORKSPACE_ID",
-              "ASSIGNMENT_ID",
-              "EXPENSE_ID"
-            ]
+            "enum": ["PROJECT_ID", "USER_ID", "TAG_ID", "TASK_ID", "WORKSPACE_ID", "ASSIGNMENT_ID", "EXPENSE_ID"]
           },
           "TAG_ID": {
             "type": "string",
-            "enum": [
-              "PROJECT_ID",
-              "USER_ID",
-              "TAG_ID",
-              "TASK_ID",
-              "WORKSPACE_ID",
-              "ASSIGNMENT_ID",
-              "EXPENSE_ID"
-            ]
+            "enum": ["PROJECT_ID", "USER_ID", "TAG_ID", "TASK_ID", "WORKSPACE_ID", "ASSIGNMENT_ID", "EXPENSE_ID"]
           },
           "TASK_ID": {
             "type": "string",
-            "enum": [
-              "PROJECT_ID",
-              "USER_ID",
-              "TAG_ID",
-              "TASK_ID",
-              "WORKSPACE_ID",
-              "ASSIGNMENT_ID",
-              "EXPENSE_ID"
-            ]
+            "enum": ["PROJECT_ID", "USER_ID", "TAG_ID", "TASK_ID", "WORKSPACE_ID", "ASSIGNMENT_ID", "EXPENSE_ID"]
           },
           "USER_ID": {
             "type": "string",
-            "enum": [
-              "PROJECT_ID",
-              "USER_ID",
-              "TAG_ID",
-              "TASK_ID",
-              "WORKSPACE_ID",
-              "ASSIGNMENT_ID",
-              "EXPENSE_ID"
-            ]
+            "enum": ["PROJECT_ID", "USER_ID", "TAG_ID", "TASK_ID", "WORKSPACE_ID", "ASSIGNMENT_ID", "EXPENSE_ID"]
           },
           "WORKSPACE_ID": {
             "type": "string",
-            "enum": [
-              "PROJECT_ID",
-              "USER_ID",
-              "TAG_ID",
-              "TASK_ID",
-              "WORKSPACE_ID",
-              "ASSIGNMENT_ID",
-              "EXPENSE_ID"
-            ]
+            "enum": ["PROJECT_ID", "USER_ID", "TAG_ID", "TASK_ID", "WORKSPACE_ID", "ASSIGNMENT_ID", "EXPENSE_ID"]
           },
           "entityType": {
             "type": "string",
@@ -20829,15 +19547,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "PROJECT_ID",
-                "USER_ID",
-                "TAG_ID",
-                "TASK_ID",
-                "WORKSPACE_ID",
-                "ASSIGNMENT_ID",
-                "EXPENSE_ID"
-              ]
+              "enum": ["PROJECT_ID", "USER_ID", "TAG_ID", "TASK_ID", "WORKSPACE_ID", "ASSIGNMENT_ID", "EXPENSE_ID"]
             }
           }
         }
@@ -20900,11 +19610,7 @@
           "status": {
             "type": "string",
             "description": "Filters logs by status.",
-            "enum": [
-              "ALL",
-              "SUCCEEDED",
-              "FAILED"
-            ]
+            "enum": ["ALL", "SUCCEEDED", "FAILED"]
           },
           "to": {
             "type": "string",
@@ -21001,11 +19707,7 @@
             "type": "string",
             "description": "Represents a unique list of protected page enums.",
             "example": "[\"PROJECT\",\"TEAM\",\"REPORTS\"]",
-            "enum": [
-              "PROJECT",
-              "TEAM",
-              "REPORTS"
-            ]
+            "enum": ["PROJECT", "TEAM", "REPORTS"]
           },
           "automaticLock": {
             "$ref": "#/components/schemas/AutomaticLockDtoV1"
@@ -21024,12 +19726,7 @@
             "type": "string",
             "description": "Represents a clockify currency format enum.",
             "example": "CURRENCY_SPACE_VALUE",
-            "enum": [
-              "CURRENCY_SPACE_VALUE",
-              "VALUE_SPACE_CURRENCY",
-              "CURRENCY_VALUE",
-              "VALUE_CURRENCY"
-            ]
+            "enum": ["CURRENCY_SPACE_VALUE", "VALUE_SPACE_CURRENCY", "CURRENCY_VALUE", "VALUE_CURRENCY"]
           },
           "defaultBillableProjects": {
             "type": "boolean",
@@ -21040,11 +19737,7 @@
             "type": "string",
             "description": "Represents a clockify duration format enum. Used to set Duration format instead of setting decimalFormat and trackTimeDownToSecond.",
             "example": "FULL",
-            "enum": [
-              "FULL",
-              "COMPACT",
-              "DECIMAL"
-            ]
+            "enum": ["FULL", "COMPACT", "DECIMAL"]
           },
           "entityCreationPermissions": {
             "$ref": "#/components/schemas/EntityCreationPermissionsDtoV1"
@@ -21089,12 +19782,7 @@
             "type": "string",
             "description": "Represents a clockify number format enum.",
             "example": "COMMA_PERIOD",
-            "enum": [
-              "COMMA_PERIOD",
-              "PERIOD_COMMA",
-              "QUOTATION_MARK_PERIOD",
-              "SPACE_COMMA"
-            ]
+            "enum": ["COMMA_PERIOD", "PERIOD_COMMA", "QUOTATION_MARK_PERIOD", "SPACE_COMMA"]
           },
           "onlyAdminsCanChangeBillableStatus": {
             "type": "boolean",
@@ -21171,10 +19859,7 @@
             "type": "string",
             "description": "Represents a time tracking mode enum.",
             "example": "DEFAULT",
-            "enum": [
-              "DEFAULT",
-              "STOPWATCH_ONLY"
-            ]
+            "enum": ["DEFAULT", "STOPWATCH_ONLY"]
           },
           "trackTimeDownToSecond": {
             "type": "boolean",
@@ -21189,15 +19874,7 @@
             "items": {
               "type": "string",
               "description": "Represents a list of working days.",
-              "enum": [
-                "MONDAY",
-                "TUESDAY",
-                "WEDNESDAY",
-                "THURSDAY",
-                "FRIDAY",
-                "SATURDAY",
-                "SUNDAY"
-              ]
+              "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
             }
           }
         },
@@ -21226,13 +19903,7 @@
           "type": {
             "type": "string",
             "description": "Represents amount type",
-            "enum": [
-              "EARNED",
-              "COST",
-              "PROFIT",
-              "HIDE_AMOUNT",
-              "EXPORT"
-            ],
+            "enum": ["EARNED", "COST", "PROFIT", "HIDE_AMOUNT", "EXPORT"],
             "example": "PROFIT"
           },
           "value": {
@@ -21408,37 +20079,21 @@
           "amountShown": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided amount shown.",
-            "enum": [
-              "EARNED",
-              "COST",
-              "PROFIT",
-              "HIDE_AMOUNT",
-              "EXPORT"
-            ],
+            "enum": ["EARNED", "COST", "PROFIT", "HIDE_AMOUNT", "EXPORT"],
             "example": "COST"
           },
           "amounts": {
             "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "EARNED",
-                "COST",
-                "PROFIT",
-                "HIDE_AMOUNT",
-                "EXPORT"
-              ],
+              "enum": ["EARNED", "COST", "PROFIT", "HIDE_AMOUNT", "EXPORT"],
               "example": "[EARNED, COST]"
             }
           },
           "approvalState": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided approval state.",
-            "enum": [
-              "APPROVED",
-              "UNAPPROVED",
-              "ALL"
-            ],
+            "enum": ["APPROVED", "UNAPPROVED", "ALL"],
             "example": "APPROVED"
           },
           "archived": {
@@ -21511,24 +20166,13 @@
           "exportType": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided export type.",
-            "enum": [
-              "JSON",
-              "JSON_V1",
-              "PDF",
-              "CSV",
-              "XLSX",
-              "ZIP"
-            ],
+            "enum": ["JSON", "JSON_V1", "PDF", "CSV", "XLSX", "ZIP"],
             "example": "JSON"
           },
           "invoicingState": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided invoicing state.",
-            "enum": [
-              "INVOICED",
-              "UNINVOICED",
-              "ALL"
-            ],
+            "enum": ["INVOICED", "UNINVOICED", "ALL"],
             "example": "INVOICED"
           },
           "projects": {
@@ -21542,10 +20186,7 @@
           "sortOrder": {
             "type": "string",
             "description": "If provided, you'll get sorted result by provided sort order.",
-            "enum": [
-              "ASCENDING",
-              "DESCENDING"
-            ],
+            "enum": ["ASCENDING", "DESCENDING"],
             "example": "ASCENDING"
           },
           "summaryFilter": {
@@ -21581,15 +20222,7 @@
           "weekStart": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided week start.",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ],
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
             "example": "MONDAY"
           },
           "weeklyFilter": {
@@ -21603,19 +20236,11 @@
           "zoomLevel": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided zoom level.",
-            "enum": [
-              "WEEK",
-              "MONTH",
-              "YEAR"
-            ],
+            "enum": ["WEEK", "MONTH", "YEAR"],
             "example": "WEEK"
           }
         },
-        "required": [
-          "attendanceFilter",
-          "dateRangeEnd",
-          "dateRangeStart"
-        ]
+        "required": ["attendanceFilter", "dateRangeEnd", "dateRangeStart"]
       },
       "AuditFilterV1": {
         "type": "object",
@@ -21648,11 +20273,7 @@
         "properties": {
           "filtrationType": {
             "type": "string",
-            "enum": [
-              "EXACTLY",
-              "LARGER_THAN",
-              "SMALLER_THAN"
-            ]
+            "enum": ["EXACTLY", "LARGER_THAN", "SMALLER_THAN"]
           },
           "value": {
             "type": "string",
@@ -21666,11 +20287,7 @@
         "properties": {
           "filtrationType": {
             "type": "string",
-            "enum": [
-              "EXACTLY",
-              "LARGER_THAN",
-              "SMALLER_THAN"
-            ]
+            "enum": ["EXACTLY", "LARGER_THAN", "SMALLER_THAN"]
           },
           "value": {
             "type": "string",
@@ -21684,11 +20301,7 @@
         "properties": {
           "filtrationType": {
             "type": "string",
-            "enum": [
-              "EXACTLY",
-              "LARGER_THAN",
-              "SMALLER_THAN"
-            ]
+            "enum": ["EXACTLY", "LARGER_THAN", "SMALLER_THAN"]
           },
           "value": {
             "type": "string",
@@ -21702,11 +20315,7 @@
         "properties": {
           "filtrationType": {
             "type": "string",
-            "enum": [
-              "EXACTLY",
-              "LARGER_THAN",
-              "SMALLER_THAN"
-            ]
+            "enum": ["EXACTLY", "LARGER_THAN", "SMALLER_THAN"]
           },
           "value": {
             "type": "string",
@@ -21720,11 +20329,7 @@
         "properties": {
           "filtrationType": {
             "type": "string",
-            "enum": [
-              "EXACTLY",
-              "LARGER_THAN",
-              "SMALLER_THAN"
-            ]
+            "enum": ["EXACTLY", "LARGER_THAN", "SMALLER_THAN"]
           },
           "value": {
             "type": "string",
@@ -21738,11 +20343,7 @@
         "properties": {
           "filtrationType": {
             "type": "string",
-            "enum": [
-              "EXACTLY",
-              "LARGER_THAN",
-              "SMALLER_THAN"
-            ]
+            "enum": ["EXACTLY", "LARGER_THAN", "SMALLER_THAN"]
           },
           "value": {
             "type": "string",
@@ -21756,11 +20357,7 @@
         "properties": {
           "filtrationType": {
             "type": "string",
-            "enum": [
-              "EXACTLY",
-              "LARGER_THAN",
-              "SMALLER_THAN"
-            ]
+            "enum": ["EXACTLY", "LARGER_THAN", "SMALLER_THAN"]
           },
           "value": {
             "type": "string",
@@ -21774,11 +20371,7 @@
         "properties": {
           "filtrationType": {
             "type": "string",
-            "enum": [
-              "EXACTLY",
-              "LARGER_THAN",
-              "SMALLER_THAN"
-            ]
+            "enum": ["EXACTLY", "LARGER_THAN", "SMALLER_THAN"]
           },
           "value": {
             "type": "string",
@@ -21793,20 +20386,13 @@
           "contains": {
             "type": "string",
             "description": "Represents a contains type.",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN",
-              "CONTAINS_ONLY"
-            ],
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN", "CONTAINS_ONLY"],
             "example": "CONTAINS"
           },
           "ids": {
             "type": "array",
             "description": "Filter includes provided list of ids.",
-            "example": [
-              "5b715448b079875110792222",
-              "5b715448b079875110791111"
-            ],
+            "example": ["5b715448b079875110792222", "5b715448b079875110791111"],
             "items": {
               "type": "string",
               "description": "Filter includes provided list of ids.",
@@ -21817,11 +20403,7 @@
           "status": {
             "type": "string",
             "description": "Filter entities in 'contains' by their status.",
-            "enum": [
-              "ACTIVE",
-              "ARCHIVED",
-              "ALL"
-            ],
+            "enum": ["ACTIVE", "ARCHIVED", "ALL"],
             "example": "ACTIVE"
           }
         }
@@ -21833,30 +20415,19 @@
           "containedInTimeentry": {
             "type": "string",
             "description": "If provided, you'll get result filtered by value of contained in time entry.",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN",
-              "CONTAINS_ONLY"
-            ],
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN", "CONTAINS_ONLY"],
             "example": "CONTAINS_ONLY"
           },
           "contains": {
             "type": "string",
             "description": "Represents a contains type.",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN",
-              "CONTAINS_ONLY"
-            ],
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN", "CONTAINS_ONLY"],
             "example": "CONTAINS"
           },
           "ids": {
             "type": "array",
             "description": "Filter includes provided list of ids.",
-            "example": [
-              "5b715448b079875110792222",
-              "5b715448b079875110791111"
-            ],
+            "example": ["5b715448b079875110792222", "5b715448b079875110791111"],
             "items": {
               "type": "string",
               "description": "Filter includes provided list of ids.",
@@ -21867,11 +20438,7 @@
           "status": {
             "type": "string",
             "description": "Filter entities in 'contains' by their status.",
-            "enum": [
-              "ACTIVE",
-              "ARCHIVED",
-              "ALL"
-            ],
+            "enum": ["ACTIVE", "ARCHIVED", "ALL"],
             "example": "ACTIVE"
           }
         }
@@ -21883,20 +20450,13 @@
           "contains": {
             "type": "string",
             "description": "Represents a contains type.",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN",
-              "CONTAINS_ONLY"
-            ],
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN", "CONTAINS_ONLY"],
             "example": "CONTAINS"
           },
           "ids": {
             "type": "array",
             "description": "Filter includes provided list of ids.",
-            "example": [
-              "5b715448b079875110792222",
-              "5b715448b079875110791111"
-            ],
+            "example": ["5b715448b079875110792222", "5b715448b079875110791111"],
             "items": {
               "type": "string",
               "description": "Filter includes provided list of ids.",
@@ -21907,11 +20467,7 @@
           "status": {
             "type": "string",
             "description": "Filter entities in 'contains' by their status.",
-            "enum": [
-              "ACTIVE",
-              "ARCHIVED",
-              "ALL"
-            ],
+            "enum": ["ACTIVE", "ARCHIVED", "ALL"],
             "example": "ACTIVE"
           }
         }
@@ -21922,20 +20478,13 @@
           "contains": {
             "type": "string",
             "description": "Represents a contains type.",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN",
-              "CONTAINS_ONLY"
-            ],
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN", "CONTAINS_ONLY"],
             "example": "CONTAINS"
           },
           "ids": {
             "type": "array",
             "description": "Filter includes provided list of ids.",
-            "example": [
-              "5b715448b079875110792222",
-              "5b715448b079875110791111"
-            ],
+            "example": ["5b715448b079875110792222", "5b715448b079875110791111"],
             "items": {
               "type": "string",
               "description": "Filter includes provided list of ids.",
@@ -21946,13 +20495,7 @@
           "status": {
             "type": "string",
             "description": "Filter entities in 'contains' by their status.",
-            "enum": [
-              "ALL",
-              "ACTIVE_WITH_PENDING",
-              "ACTIVE",
-              "PENDING",
-              "INACTIVE"
-            ],
+            "enum": ["ALL", "ACTIVE_WITH_PENDING", "ACTIVE", "PENDING", "INACTIVE"],
             "example": "ACTIVE"
           }
         }
@@ -21974,24 +20517,13 @@
           "numberCondition": {
             "type": "string",
             "description": "Represents a custom field number condition.",
-            "enum": [
-              "EQUAL",
-              "GREATER_THAN",
-              "LESS_THAN"
-            ],
+            "enum": ["EQUAL", "GREATER_THAN", "LESS_THAN"],
             "example": "EQUAL"
           },
           "type": {
             "type": "string",
             "description": "Represents a type of custom field.",
-            "enum": [
-              "TXT",
-              "NUMBER",
-              "DROPDOWN_SINGLE",
-              "DROPDOWN_MULTIPLE",
-              "CHECKBOX",
-              "LINK"
-            ],
+            "enum": ["TXT", "NUMBER", "DROPDOWN_SINGLE", "DROPDOWN_MULTIPLE", "CHECKBOX", "LINK"],
             "example": "NUMBER"
           },
           "value": {
@@ -22039,16 +20571,7 @@
           "sortColumn": {
             "type": "string",
             "description": "If provided, you'll get sorted result by sort column.",
-            "enum": [
-              "ID",
-              "DESCRIPTION",
-              "USER",
-              "DURATION",
-              "DATE",
-              "ZONED_DATE",
-              "NATURAL",
-              "USER_DATE"
-            ],
+            "enum": ["ID", "DESCRIPTION", "USER", "DURATION", "DATE", "ZONED_DATE", "NATURAL", "USER_DATE"],
             "example": "ID"
           }
         }
@@ -22058,10 +20581,7 @@
         "properties": {
           "totals": {
             "type": "string",
-            "enum": [
-              "CALCULATE",
-              "EXCLUDE"
-            ],
+            "enum": ["CALCULATE", "EXCLUDE"],
             "example": "CALCULATE"
           }
         }
@@ -22072,37 +20592,21 @@
           "amountShown": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided amount shown.",
-            "enum": [
-              "EARNED",
-              "COST",
-              "PROFIT",
-              "HIDE_AMOUNT",
-              "EXPORT"
-            ],
+            "enum": ["EARNED", "COST", "PROFIT", "HIDE_AMOUNT", "EXPORT"],
             "example": "COST"
           },
           "amounts": {
             "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "EARNED",
-                "COST",
-                "PROFIT",
-                "HIDE_AMOUNT",
-                "EXPORT"
-              ],
+              "enum": ["EARNED", "COST", "PROFIT", "HIDE_AMOUNT", "EXPORT"],
               "example": "[EARNED, COST]"
             }
           },
           "approvalState": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided approval state.",
-            "enum": [
-              "APPROVED",
-              "UNAPPROVED",
-              "ALL"
-            ],
+            "enum": ["APPROVED", "UNAPPROVED", "ALL"],
             "example": "APPROVED"
           },
           "archived": {
@@ -22175,24 +20679,13 @@
           "exportType": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided export type.",
-            "enum": [
-              "JSON",
-              "JSON_V1",
-              "PDF",
-              "CSV",
-              "XLSX",
-              "ZIP"
-            ],
+            "enum": ["JSON", "JSON_V1", "PDF", "CSV", "XLSX", "ZIP"],
             "example": "JSON"
           },
           "invoicingState": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided invoicing state.",
-            "enum": [
-              "INVOICED",
-              "UNINVOICED",
-              "ALL"
-            ],
+            "enum": ["INVOICED", "UNINVOICED", "ALL"],
             "example": "INVOICED"
           },
           "projects": {
@@ -22206,10 +20699,7 @@
           "sortOrder": {
             "type": "string",
             "description": "If provided, you'll get sorted result by provided sort order.",
-            "enum": [
-              "ASCENDING",
-              "DESCENDING"
-            ],
+            "enum": ["ASCENDING", "DESCENDING"],
             "example": "ASCENDING"
           },
           "summaryFilter": {
@@ -22252,15 +20742,7 @@
           "weekStart": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided week start.",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ],
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
             "example": "MONDAY"
           },
           "weeklyFilter": {
@@ -22274,19 +20756,11 @@
           "zoomLevel": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided zoom level.",
-            "enum": [
-              "WEEK",
-              "MONTH",
-              "YEAR"
-            ],
+            "enum": ["WEEK", "MONTH", "YEAR"],
             "example": "WEEK"
           }
         },
-        "required": [
-          "dateRangeEnd",
-          "dateRangeStart",
-          "detailedFilter"
-        ]
+        "required": ["dateRangeEnd", "dateRangeStart", "detailedFilter"]
       },
       "EntityName": {
         "type": "object",
@@ -22533,11 +21007,7 @@
           "approvalState": {
             "type": "string",
             "description": "Represents an approval state",
-            "enum": [
-              "APPROVED",
-              "UNAPPROVED",
-              "ALL"
-            ],
+            "enum": ["APPROVED", "UNAPPROVED", "ALL"],
             "example": "APPROVED"
           },
           "billable": {
@@ -22586,24 +21056,13 @@
           "exportType": {
             "type": "string",
             "description": "Represents an export type",
-            "enum": [
-              "JSON",
-              "JSON_V1",
-              "PDF",
-              "CSV",
-              "XLSX",
-              "ZIP"
-            ],
+            "enum": ["JSON", "JSON_V1", "PDF", "CSV", "XLSX", "ZIP"],
             "example": "JSON"
           },
           "invoicingState": {
             "type": "string",
             "description": "Represents an invoicing state",
-            "enum": [
-              "INVOICED",
-              "UNINVOICED",
-              "ALL"
-            ],
+            "enum": ["INVOICED", "UNINVOICED", "ALL"],
             "example": "INVOICED"
           },
           "note": {
@@ -22631,23 +21090,13 @@
           "sortColumn": {
             "type": "string",
             "description": "Represents expenses sort column",
-            "enum": [
-              "ID",
-              "PROJECT",
-              "USER",
-              "CATEGORY",
-              "DATE",
-              "AMOUNT"
-            ],
+            "enum": ["ID", "PROJECT", "USER", "CATEGORY", "DATE", "AMOUNT"],
             "example": "ID"
           },
           "sortOrder": {
             "type": "string",
             "description": "Represents a sort order",
-            "enum": [
-              "ASCENDING",
-              "DESCENDING"
-            ],
+            "enum": ["ASCENDING", "DESCENDING"],
             "example": "ASCENDING"
           },
           "tasks": {
@@ -22672,15 +21121,7 @@
           "weekStart": {
             "type": "string",
             "description": "Represents week start",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ],
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
             "example": "MONDAY"
           },
           "withoutNote": {
@@ -22691,18 +21132,11 @@
           "zoomLevel": {
             "type": "string",
             "description": "Represents a zoom level",
-            "enum": [
-              "WEEK",
-              "MONTH",
-              "YEAR"
-            ],
+            "enum": ["WEEK", "MONTH", "YEAR"],
             "example": "WEEK"
           }
         },
-        "required": [
-          "dateRangeEnd",
-          "dateRangeStart"
-        ]
+        "required": ["dateRangeEnd", "dateRangeStart"]
       },
       "ExpenseTotalsDtoV1": {
         "type": "object",
@@ -22784,37 +21218,21 @@
           "amountShown": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided amount shown.",
-            "enum": [
-              "EARNED",
-              "COST",
-              "PROFIT",
-              "HIDE_AMOUNT",
-              "EXPORT"
-            ],
+            "enum": ["EARNED", "COST", "PROFIT", "HIDE_AMOUNT", "EXPORT"],
             "example": "COST"
           },
           "amounts": {
             "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "EARNED",
-                "COST",
-                "PROFIT",
-                "HIDE_AMOUNT",
-                "EXPORT"
-              ],
+              "enum": ["EARNED", "COST", "PROFIT", "HIDE_AMOUNT", "EXPORT"],
               "example": "[EARNED, COST]"
             }
           },
           "approvalState": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided approval state.",
-            "enum": [
-              "APPROVED",
-              "UNAPPROVED",
-              "ALL"
-            ],
+            "enum": ["APPROVED", "UNAPPROVED", "ALL"],
             "example": "APPROVED"
           },
           "archived": {
@@ -22887,24 +21305,13 @@
           "exportType": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided export type.",
-            "enum": [
-              "JSON",
-              "JSON_V1",
-              "PDF",
-              "CSV",
-              "XLSX",
-              "ZIP"
-            ],
+            "enum": ["JSON", "JSON_V1", "PDF", "CSV", "XLSX", "ZIP"],
             "example": "JSON"
           },
           "invoicingState": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided invoicing state.",
-            "enum": [
-              "INVOICED",
-              "UNINVOICED",
-              "ALL"
-            ],
+            "enum": ["INVOICED", "UNINVOICED", "ALL"],
             "example": "INVOICED"
           },
           "projects": {
@@ -22918,10 +21325,7 @@
           "sortOrder": {
             "type": "string",
             "description": "If provided, you'll get sorted result by provided sort order.",
-            "enum": [
-              "ASCENDING",
-              "DESCENDING"
-            ],
+            "enum": ["ASCENDING", "DESCENDING"],
             "example": "ASCENDING"
           },
           "summaryFilter": {
@@ -22964,15 +21368,7 @@
           "weekStart": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided week start.",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ],
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
             "example": "MONDAY"
           },
           "weeklyFilter": {
@@ -22986,18 +21382,11 @@
           "zoomLevel": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided zoom level.",
-            "enum": [
-              "WEEK",
-              "MONTH",
-              "YEAR"
-            ],
+            "enum": ["WEEK", "MONTH", "YEAR"],
             "example": "WEEK"
           }
         },
-        "required": [
-          "dateRangeEnd",
-          "dateRangeStart"
-        ]
+        "required": ["dateRangeEnd", "dateRangeStart"]
       },
       "ReportTagDto": {
         "type": "object",
@@ -23169,11 +21558,7 @@
           "visibleToUsers": {
             "type": "array",
             "description": "Represents user ids.",
-            "example": [
-              "5b715448b079875110791234",
-              "5b715448b079875110791432",
-              "5b715448b079875110791324"
-            ],
+            "example": ["5b715448b079875110791234", "5b715448b079875110791432", "5b715448b079875110791324"],
             "items": {
               "type": "string",
               "description": "Represents user ids.",
@@ -23241,11 +21626,7 @@
           "visibleToUserGroups": {
             "type": "array",
             "description": "Indicates to which user groups are visible shared report",
-            "example": [
-              "5b715612b079875110791342",
-              "5b715612b079875110791324",
-              "5b715612b079875110793142"
-            ],
+            "example": ["5b715612b079875110791342", "5b715612b079875110791324", "5b715612b079875110793142"],
             "items": {
               "type": "string",
               "description": "Indicates to which user groups are visible shared report",
@@ -23256,10 +21637,7 @@
           "visibleToUsers": {
             "type": "array",
             "description": "Indicates to whom users are visible shared report",
-            "example": [
-              "5b715612b079875110791432",
-              "5b715612b079875110791234"
-            ],
+            "example": ["5b715612b079875110791432", "5b715612b079875110791234"],
             "items": {
               "type": "string",
               "description": "Indicates to whom users are visible shared report",
@@ -23308,23 +21686,13 @@
           "sortColumn": {
             "type": "string",
             "description": "If provided, you'll get sorted result by provided sort column.",
-            "enum": [
-              "GROUP",
-              "DURATION",
-              "AMOUNT",
-              "EARNED",
-              "COST",
-              "PROFIT"
-            ],
+            "enum": ["GROUP", "DURATION", "AMOUNT", "EARNED", "COST", "PROFIT"],
             "example": "GROUP"
           },
           "summaryChartType": {
             "type": "string",
             "description": "If provided, you'll get sorted result by provided summary chart type.",
-            "enum": [
-              "BILLABILITY",
-              "PROJECT"
-            ],
+            "enum": ["BILLABILITY", "PROJECT"],
             "example": "PROJECT"
           }
         }
@@ -23366,37 +21734,21 @@
           "amountShown": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided amount shown.",
-            "enum": [
-              "EARNED",
-              "COST",
-              "PROFIT",
-              "HIDE_AMOUNT",
-              "EXPORT"
-            ],
+            "enum": ["EARNED", "COST", "PROFIT", "HIDE_AMOUNT", "EXPORT"],
             "example": "COST"
           },
           "amounts": {
             "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "EARNED",
-                "COST",
-                "PROFIT",
-                "HIDE_AMOUNT",
-                "EXPORT"
-              ],
+              "enum": ["EARNED", "COST", "PROFIT", "HIDE_AMOUNT", "EXPORT"],
               "example": "[EARNED, COST]"
             }
           },
           "approvalState": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided approval state.",
-            "enum": [
-              "APPROVED",
-              "UNAPPROVED",
-              "ALL"
-            ],
+            "enum": ["APPROVED", "UNAPPROVED", "ALL"],
             "example": "APPROVED"
           },
           "archived": {
@@ -23469,24 +21821,13 @@
           "exportType": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided export type.",
-            "enum": [
-              "JSON",
-              "JSON_V1",
-              "PDF",
-              "CSV",
-              "XLSX",
-              "ZIP"
-            ],
+            "enum": ["JSON", "JSON_V1", "PDF", "CSV", "XLSX", "ZIP"],
             "example": "JSON"
           },
           "invoicingState": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided invoicing state.",
-            "enum": [
-              "INVOICED",
-              "UNINVOICED",
-              "ALL"
-            ],
+            "enum": ["INVOICED", "UNINVOICED", "ALL"],
             "example": "INVOICED"
           },
           "projects": {
@@ -23500,10 +21841,7 @@
           "sortOrder": {
             "type": "string",
             "description": "If provided, you'll get sorted result by provided sort order.",
-            "enum": [
-              "ASCENDING",
-              "DESCENDING"
-            ],
+            "enum": ["ASCENDING", "DESCENDING"],
             "example": "ASCENDING"
           },
           "summaryFilter": {
@@ -23546,15 +21884,7 @@
           "weekStart": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided week start.",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ],
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
             "example": "MONDAY"
           },
           "weeklyFilter": {
@@ -23568,19 +21898,11 @@
           "zoomLevel": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided zoom level.",
-            "enum": [
-              "WEEK",
-              "MONTH",
-              "YEAR"
-            ],
+            "enum": ["WEEK", "MONTH", "YEAR"],
             "example": "WEEK"
           }
         },
-        "required": [
-          "dateRangeEnd",
-          "dateRangeStart",
-          "summaryFilter"
-        ]
+        "required": ["dateRangeEnd", "dateRangeStart", "summaryFilter"]
       },
       "TimeEntryDetailedReportDto": {
         "type": "object",
@@ -23828,11 +22150,7 @@
           "visibleToUsers": {
             "type": "array",
             "description": "Provide user ids to which the shared report is visible.",
-            "example": [
-              "5b715448b079875110791234",
-              "5b715448b079875110791432",
-              "5b715448b079875110791324"
-            ],
+            "example": ["5b715448b079875110791234", "5b715448b079875110791432", "5b715448b079875110791324"],
             "items": {
               "type": "string",
               "description": "Provide user ids to which the shared report is visible.",
@@ -23841,9 +22159,7 @@
             "uniqueItems": true
           }
         },
-        "required": [
-          "name"
-        ]
+        "required": ["name"]
       },
       "UserDto": {
         "type": "object",
@@ -23893,37 +22209,21 @@
           "amountShown": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided amount shown.",
-            "enum": [
-              "EARNED",
-              "COST",
-              "PROFIT",
-              "HIDE_AMOUNT",
-              "EXPORT"
-            ],
+            "enum": ["EARNED", "COST", "PROFIT", "HIDE_AMOUNT", "EXPORT"],
             "example": "COST"
           },
           "amounts": {
             "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "EARNED",
-                "COST",
-                "PROFIT",
-                "HIDE_AMOUNT",
-                "EXPORT"
-              ],
+              "enum": ["EARNED", "COST", "PROFIT", "HIDE_AMOUNT", "EXPORT"],
               "example": "[EARNED, COST]"
             }
           },
           "approvalState": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided approval state.",
-            "enum": [
-              "APPROVED",
-              "UNAPPROVED",
-              "ALL"
-            ],
+            "enum": ["APPROVED", "UNAPPROVED", "ALL"],
             "example": "APPROVED"
           },
           "archived": {
@@ -23996,24 +22296,13 @@
           "exportType": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided export type.",
-            "enum": [
-              "JSON",
-              "JSON_V1",
-              "PDF",
-              "CSV",
-              "XLSX",
-              "ZIP"
-            ],
+            "enum": ["JSON", "JSON_V1", "PDF", "CSV", "XLSX", "ZIP"],
             "example": "JSON"
           },
           "invoicingState": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided invoicing state.",
-            "enum": [
-              "INVOICED",
-              "UNINVOICED",
-              "ALL"
-            ],
+            "enum": ["INVOICED", "UNINVOICED", "ALL"],
             "example": "INVOICED"
           },
           "projects": {
@@ -24027,10 +22316,7 @@
           "sortOrder": {
             "type": "string",
             "description": "If provided, you'll get sorted result by provided sort order.",
-            "enum": [
-              "ASCENDING",
-              "DESCENDING"
-            ],
+            "enum": ["ASCENDING", "DESCENDING"],
             "example": "ASCENDING"
           },
           "summaryFilter": {
@@ -24073,15 +22359,7 @@
           "weekStart": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided week start.",
-            "enum": [
-              "MONDAY",
-              "TUESDAY",
-              "WEDNESDAY",
-              "THURSDAY",
-              "FRIDAY",
-              "SATURDAY",
-              "SUNDAY"
-            ],
+            "enum": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"],
             "example": "MONDAY"
           },
           "weeklyFilter": {
@@ -24095,19 +22373,11 @@
           "zoomLevel": {
             "type": "string",
             "description": "If provided, you'll get filtered result including reports with provided zoom level.",
-            "enum": [
-              "WEEK",
-              "MONTH",
-              "YEAR"
-            ],
+            "enum": ["WEEK", "MONTH", "YEAR"],
             "example": "WEEK"
           }
         },
-        "required": [
-          "dateRangeEnd",
-          "dateRangeStart",
-          "weeklyFilter"
-        ]
+        "required": ["dateRangeEnd", "dateRangeStart", "weeklyFilter"]
       },
       "invoicingInfo": {
         "type": "object",
@@ -24214,12 +22484,7 @@
         }
       },
       "AuditLogGetRequestV1": {
-        "required": [
-          "actions",
-          "authors",
-          "end",
-          "start"
-        ],
+        "required": ["actions", "authors", "end", "start"],
         "type": "object",
         "properties": {
           "actions": {
@@ -24227,11 +22492,7 @@
             "uniqueItems": true,
             "type": "array",
             "description": "Represents a set of audit log actions.",
-            "example": [
-              "CREATE_TIME_PERSONAL_MANUAL",
-              "CREATE_TIME_PERSONAL_TIMER",
-              "CREATE_PROJECT"
-            ],
+            "example": ["CREATE_TIME_PERSONAL_MANUAL", "CREATE_TIME_PERSONAL_TIMER", "CREATE_PROJECT"],
             "items": {
               "type": "string",
               "description": "Represents a set of audit log actions.",
@@ -24325,21 +22586,14 @@
         }
       },
       "authors": {
-        "required": [
-          "authorIds",
-          "contains"
-        ],
+        "required": ["authorIds", "contains"],
         "type": "object",
         "properties": {
           "authorIds": {
             "uniqueItems": true,
             "type": "array",
             "description": "Represents a set of author user ids. Include \"SYSTEM\" in this set to retrieve system related audit logs.",
-            "example": [
-              "45b687e29ae1f428e7ebe123",
-              "67s687e29ae1f428e7ebe678",
-              "SYSTEM"
-            ],
+            "example": ["45b687e29ae1f428e7ebe123", "67s687e29ae1f428e7ebe678", "SYSTEM"],
             "items": {
               "type": "string",
               "description": "Represents a set of author user ids. Include \"SYSTEM\" in this set to retrieve system related audit logs.",
@@ -24353,10 +22607,7 @@
             "type": "string",
             "example": "CONTAINS",
             "default": "",
-            "enum": [
-              "CONTAINS",
-              "DOES_NOT_CONTAIN"
-            ]
+            "enum": ["CONTAINS", "DOES_NOT_CONTAIN"]
           }
         },
         "description": "Represents the audit log author filter.",
@@ -24412,38 +22663,23 @@
     },
     {
       "name": "Clockify Reports API",
-      "tags": [
-        "Shared Report",
-        "Team Report",
-        "Time Entry Report",
-        "Expense Report"
-      ]
+      "tags": ["Shared Report", "Team Report", "Time Entry Report", "Expense Report"]
     },
     {
       "name": "Clockify Audit Log API",
-      "tags": [
-        "Audit Log Report"
-      ]
+      "tags": ["Audit Log Report"]
     },
     {
       "name": "Deprecated API",
-      "tags": [
-        "Template (Deprecated)",
-        "Scheduling (Deprecated)",
-        "Workspace (Deprecated)"
-      ]
+      "tags": ["Template (Deprecated)", "Scheduling (Deprecated)", "Workspace (Deprecated)"]
     },
     {
       "name": "Experimental API",
-      "tags": [
-        "Entity changes (Experimental)"
-      ]
+      "tags": ["Entity changes (Experimental)"]
     },
     {
       "name": "Guide",
-      "tags": [
-        "Entity Changes: Use cases"
-      ]
+      "tags": ["Entity Changes: Use cases"]
     }
   ],
   "servers": [

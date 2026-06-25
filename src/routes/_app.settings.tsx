@@ -439,7 +439,11 @@ function AppUpdatesControl() {
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <button className="btn btn-primary btn-sm" type="button" disabled={checking || installing} onClick={checkForUpdate}>
+        <button
+          className="btn btn-primary btn-sm"
+          type="button"
+          disabled={checking || installing}
+          onClick={checkForUpdate}>
           {checking ? <span className="loading loading-spinner loading-xs" /> : <IconRefresh className="size-4" />}
           Check
         </button>
@@ -487,9 +491,7 @@ function AppUpdatesControl() {
       {progress ? (
         <div className="flex w-full max-w-sm flex-col gap-1">
           <progress className="progress progress-primary w-full" value={progressPercent ?? 0} max={100} />
-          <div className="text-base-content/60 text-xs leading-5">
-            {formatUpdateProgress(progress)}
-          </div>
+          <div className="text-base-content/60 text-xs leading-5">{formatUpdateProgress(progress)}</div>
         </div>
       ) : null}
     </div>
