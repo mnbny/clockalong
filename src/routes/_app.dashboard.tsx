@@ -25,7 +25,7 @@ import {
 } from '../services/clockify'
 import { formatClockifyDescriptionTemplate } from '../services/clockify/descriptionTemplate'
 import { getAssignedLinearTickets } from '../services/linear/tickets'
-import { sortLinearTickets } from '../services/linear/ticketSorting'
+import { sortLinearTickets } from '../services/linear/tickets-sorting'
 import { linearTicketSortOrderOptions } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
 import { getContrastingColor } from '../utils/colors'
