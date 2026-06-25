@@ -18,7 +18,7 @@ export async function getClinearAuthState() {
   return clinearAuth.getState()
 }
 
-export const useTauriClinearAuthState = createTauriReactiveStateHook({
+export const useAppAuth = createTauriReactiveStateHook({
   browserValue: {
     linearAuthenticated: false,
     clockifyAuthenticated: false,
@@ -30,5 +30,5 @@ export const useTauriClinearAuthState = createTauriReactiveStateHook({
     clockifyAuthenticated: false,
   },
   logScope: 'clinear auth',
-  stateName: 'useTauriClinearAuthState',
+  stateName: 'useAppAuth',
 })

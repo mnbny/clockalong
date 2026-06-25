@@ -3,7 +3,7 @@ import { createFileRoute, Navigate, Outlet } from '@tanstack/react-router'
 import { useEffect } from 'react'
 
 import { useAppInit } from '../hooks/useAppInit'
-import { useTauriClinearAuthState } from '../hooks/useTauriClinearAuthState'
+import { useAppAuth } from '../hooks/useAppAuth'
 import { clockifyProjectOptionsQueryKey, getClockifyProjectOptions } from '../services/clockify'
 import { useStorage } from '../services/storage/useStorage'
 import { isClinearAuthenticated } from '../services/tauri/authClient'
@@ -14,7 +14,7 @@ export const Route = createFileRoute('/_app')({
 
 function AppLayout() {
   const appInitializationState = useAppInit()
-  const authState = useTauriClinearAuthState()
+  const authState = useAppAuth()
   const authenticated =
     !appInitializationState.value.appInitializing && !authState.loading && isClinearAuthenticated(authState.value)
 

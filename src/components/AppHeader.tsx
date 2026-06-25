@@ -5,7 +5,7 @@ import { isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useCallback, useEffect } from 'react'
 
-import { useTauriClinearAuthState } from '../hooks/useTauriClinearAuthState'
+import { useAppAuth } from '../hooks/useAppAuth'
 import { useStorage } from '../services/storage/useStorage'
 import { clinearAuth, isClinearAuthenticated } from '../services/tauri/authClient'
 import { appToast } from './AppToaster'
@@ -13,7 +13,7 @@ import { MoonBunnyLogo } from './MoonBunnyLogo'
 
 export function AppHeader() {
   const [theme, setTheme] = useStorage('theme')
-  const authState = useTauriClinearAuthState()
+  const authState = useAppAuth()
   const authenticated = isClinearAuthenticated(authState.value)
 
   const toggleTheme = useCallback(() => {

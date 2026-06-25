@@ -5,7 +5,7 @@ import { type FormEvent, type ReactNode, useRef, useState } from 'react'
 import { appToast } from '../components/AppToaster'
 import { ClockifyIcon } from '../components/icons/ClockifyIcon'
 import { LinearIcon } from '../components/icons/LinearIcon'
-import { useTauriClinearAuthState } from '../hooks/useTauriClinearAuthState'
+import { useAppAuth } from '../hooks/useAppAuth'
 import { clinearAuth, type ClinearAuthProvider } from '../services/tauri/authClient'
 import { cx } from '../utils/cx'
 
@@ -14,7 +14,7 @@ export const Route = createFileRoute('/_auth/sign-in')({
 })
 
 function SignInScreen() {
-  const authState = useTauriClinearAuthState()
+  const authState = useAppAuth()
   const clockifyDialogRef = useRef<HTMLDialogElement>(null)
   const [clockifyApiKey, setClockifyApiKey] = useState('')
   const [pendingProvider, setPendingProvider] = useState<ClinearAuthProvider | null>(null)
