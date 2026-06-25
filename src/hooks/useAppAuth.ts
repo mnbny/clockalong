@@ -1,7 +1,7 @@
 import { isTauri } from '@tauri-apps/api/core'
 
 import { clinearAuth } from '../services/tauri/authClient'
-import { createTauriReactiveStateHook } from '../utils/createTauriReactiveStateHook'
+import { createTauriReactiveStateHook } from '../utils/create-tauri-reactive-state-hook'
 
 export const clinearAuthStateChangedEvent = 'clinear-auth:state-changed'
 

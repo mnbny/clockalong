@@ -1,7 +1,7 @@
 import { isTauri } from '@tauri-apps/api/core'
 
 import { app } from '../services/tauri/appClient'
-import { createTauriReactiveStateHook } from '../utils/createTauriReactiveStateHook'
+import { createTauriReactiveStateHook } from '../utils/create-tauri-reactive-state-hook'
 
 type AppLogsSnapshot = {
   contents: string
