@@ -1,7 +1,6 @@
 # Logging
 
-Clinear follows the Streamlink Tauri logging pattern. Rust logs and forwarded browser console logs land in the same app
-log file, and the settings screen reads that file for diagnostics.
+Clinear follows the Streamlink Tauri logging pattern. Rust logs and forwarded browser console logs land in the same app log file, and the settings screen reads that file for diagnostics.
 
 ## Ownership
 
@@ -26,24 +25,17 @@ The app exposes two narrow commands for diagnostics UI:
 ## Frontend
 
 - Initialize console forwarding once from the frontend entrypoint before React renders.
-- Console forwarding lives in `src/utils/console-logging.ts`.
-- Use `console.info`, `console.warn`, `console.error`, or `console.debug` with a stable bracketed prefix for logs that
-  belong in the settings drawer.
+- Console forwarding lives in `src/lib/logging.ts`.
+- Use `console.info`, `console.warn`, `console.error`, or `console.debug` with a stable bracketed prefix for logs that belong in the settings drawer.
 - Provider bridge helpers should log safe lifecycle messages, not credential values.
-- Clockify API request logs use `[clockify api]` and should include endpoint, query params, and sanitized report/body
-  fields only. Do not log API keys or raw response bodies.
+- Clockify API request logs use `[clockify api]` and should include endpoint, query params, and sanitized report/body fields only. Do not log API keys or raw response bodies.
 - The app log hook should read logs through the typed Tauri app client.
 
 ## Frontend prefixes
 
-- `[linear tickets]`: Linear ticket fetch and client-side ordering diagnostics. Log request parameters, page counts,
-  aggregate counts, cursor presence, state-type counts, linked-ticket counts, and top identifiers. Do not log issue
-  titles, descriptions, assignee names, or credential values.
-- `[clockify api]`: Clockify REST request diagnostics. Keep request bodies summarized and scrubbed to operational fields.
-  Time-tracking lifecycle and ticket-summary diagnostics use the same prefix with subphrases such as `timer ...` and
-  `ticket summaries ...`.
-- `[app updates]`: Root-shell update check diagnostics. Log lifecycle/error state only; do not log release manifest raw
-  bodies or signature material.
+- `[linear tickets]`: Linear ticket fetch and client-side ordering diagnostics. Log request parameters, page counts, aggregate counts, cursor presence, state-type counts, linked-ticket counts, and top identifiers. Do not log issue titles, descriptions, assignee names, or credential values.
+- `[clockify api]`: Clockify REST request diagnostics. Keep request bodies summarized and scrubbed to operational fields. Time-tracking lifecycle and ticket-summary diagnostics use the same prefix with subphrases such as `timer ...` and `ticket summaries ...`.
+- `[app updates]`: App-wide update hook diagnostics. Log lifecycle/error state only; do not log release manifest raw bodies or signature material.
 
 ## Settings UI
 

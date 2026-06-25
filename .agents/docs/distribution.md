@@ -5,8 +5,7 @@ Clinear is currently planned for direct macOS distribution, not the Mac App Stor
 ## macOS identity
 
 - Bundle identifier: `app.moonbunny.clinear`
-- Release version source: `src-tauri/tauri.conf.json`; `package.json` and `src-tauri/Cargo.toml` intentionally use
-  `0.0.0`
+- Release version source: `src-tauri/tauri.conf.json`; `package.json` and `src-tauri/Cargo.toml` intentionally use `0.0.0`
 - Signing identity: `Developer ID Application: Yulian Glukhenko (XRRAJG7BU8)`
 - Initial supported architecture: Apple Silicon only, using `aarch64-apple-darwin`
 
@@ -28,8 +27,7 @@ export TAURI_SIGNING_PRIVATE_KEY_PATH="$HOME/Documents/clinear-updater.key"
 pnpm release:mac
 ```
 
-`pnpm release:mac` builds the app, submits the DMG to Apple notarization, staples the notarization ticket, then verifies
-the stapled DMG with Gatekeeper and `hdiutil`.
+`pnpm release:mac` builds the app, submits the DMG to Apple notarization, staples the notarization ticket, then verifies the stapled DMG with Gatekeeper and `hdiutil`.
 
 ## Notarization
 
@@ -53,8 +51,7 @@ Release hosting target:
 https://github.com/mnbny/clinear
 ```
 
-Clinear releases are built locally and published through the GitHub CLI. Do not add GitHub Actions release automation
-unless the project deliberately changes release ownership later.
+Clinear releases are built locally and published through the GitHub CLI. Do not add GitHub Actions release automation unless the project deliberately changes release ownership later.
 
 Local release publishing uses:
 
@@ -62,12 +59,24 @@ Local release publishing uses:
 pnpm release:github
 ```
 
-This creates a draft GitHub release for the version in `src-tauri/tauri.conf.json`. Pass `--publish` to publish
-immediately:
+This creates a draft GitHub release for the version in `src-tauri/tauri.conf.json`. Pass `--publish` to publish immediately:
 
 ```sh
 pnpm release:github -- --publish
 ```
+
+Pass GitHub release notes through stdin when publishing:
+
+```sh
+pnpm release:github << 'EOF'
+## Changes
+
+- Added native provider auth refresh handling.
+- Cleaned up app service module names.
+EOF
+```
+
+The same notes are written into the Tauri updater manifest. If the GitHub release already exists, the script updates the release body only when notes are provided.
 
 The release script expects `gh` authentication and a clean working tree unless `ALLOW_DIRTY_RELEASE=1` is set.
 

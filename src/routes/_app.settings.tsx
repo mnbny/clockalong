@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { appToast } from '../components/AppToaster'
 import { PageHeader } from '../components/PageHeader'
-import { useTauriAppLogs } from '../hooks/useTauriAppLogs'
+import { useAppLogs } from '../hooks/useAppLogs'
 import {
   type ClockifyDescriptionTemplateToken,
   clockifyDescriptionTemplateTokenGroups,
@@ -26,7 +26,7 @@ import {
   formatClockifyDescriptionTemplate,
   getUnknownClockifyDescriptionTemplateTokens,
   sampleClockifyDescriptionTemplateValues,
-} from '../services/clockify/descriptionTemplate'
+} from '../services/clockify/description-template'
 import {
   clockifyProjectOptionsQueryKey,
   getClockifyProjectOptions,
@@ -43,9 +43,10 @@ import {
   themeOptions,
 } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
-import { app } from '../services/tauri/appClient'
-import { type AppUpdate, type AppUpdateDownloadProgress, appUpdates } from '../services/tauri/appUpdates'
+import { app } from '../services/tauri/app-client'
+import { type AppUpdate, type AppUpdateDownloadProgress, appUpdates } from '../services/tauri/app-updates'
 import { cx } from '../utils/cx'
+import { getErrorMessage } from '../utils/errors'
 
 export const Route = createFileRoute('/_app/settings')({
   component: SettingsScreen,
@@ -67,7 +68,7 @@ function SettingsScreen() {
     resetClockifyDescriptionTemplateFallback,
   ] = useStorage('clockifyDescriptionTemplateFallback')
   const [appLogsDrawerOpen, setAppLogsDrawerOpen] = useState(false)
-  const appLogs = useTauriAppLogs({ enabled: appLogsDrawerOpen })
+  const appLogs = useAppLogs({ enabled: appLogsDrawerOpen })
   const clockifyProjectsQuery = useQuery({
     queryKey: clockifyProjectOptionsQueryKey,
     queryFn: getClockifyProjectOptions,
@@ -438,7 +439,11 @@ function AppUpdatesControl() {
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <button className="btn btn-primary btn-sm" type="button" disabled={checking || installing} onClick={checkForUpdate}>
+        <button
+          className="btn btn-primary btn-sm"
+          type="button"
+          disabled={checking || installing}
+          onClick={checkForUpdate}>
           {checking ? <span className="loading loading-spinner loading-xs" /> : <IconRefresh className="size-4" />}
           Check
         </button>
@@ -486,9 +491,7 @@ function AppUpdatesControl() {
       {progress ? (
         <div className="flex w-full max-w-sm flex-col gap-1">
           <progress className="progress progress-primary w-full" value={progressPercent ?? 0} max={100} />
-          <div className="text-base-content/60 text-xs leading-5">
-            {formatUpdateProgress(progress)}
-          </div>
+          <div className="text-base-content/60 text-xs leading-5">{formatUpdateProgress(progress)}</div>
         </div>
       ) : null}
     </div>
@@ -805,14 +808,6 @@ function isRustAppLogLine(line: string) {
 
 function isCustomFrontendLogLine(line: string) {
   return line.includes('][webview:') && customFrontendLogPrefixes.some(prefix => line.includes(prefix))
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return String(error)
 }
 
 const customFrontendLogPrefixes = [

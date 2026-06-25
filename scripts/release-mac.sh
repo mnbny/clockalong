@@ -24,7 +24,7 @@ require_env() {
 require_command() {
   local name="$1"
 
-  if ! command -v "${name}" >/dev/null 2>&1; then
+  if ! command -v "${name}" > /dev/null 2>&1; then
     echo "Missing required command: ${name}" >&2
     exit 1
   fi

@@ -2,14 +2,14 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { createHashHistory, createRouter, RouterProvider } from '@tanstack/react-router'
 import ReactDOM from 'react-dom/client'
 
+import { registerConsoleLogging } from './lib/logging'
 import { queryClient } from './lib/query-client'
 import { routeTree } from './routeTree.gen'
-import { initializeConsoleLogging } from './utils/console-logging'
 import { ProviderRegistry } from './utils/provider-registry'
 
 import './styles.css'
 
-initializeConsoleLogging()
+registerConsoleLogging()
 
 const router = createRouter({
   routeTree,

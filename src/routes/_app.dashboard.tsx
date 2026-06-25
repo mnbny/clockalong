@@ -13,22 +13,22 @@ import humanizeDuration from 'humanize-duration'
 import { useCallback, useMemo } from 'react'
 
 import { appToast } from '../components/AppToaster'
-import { ClockifyWidget, clockifyDashboardWidgetQueryKey, getClockifyWidgetData } from '../components/ClockifyWidget'
+import { clockifyDashboardWidgetQueryKey, ClockifyWidget, getClockifyWidgetData } from '../components/ClockifyWidget'
 import { LinearIcon } from '../components/icons/LinearIcon'
+import { clockify } from '../services/clockify/client'
+import { formatClockifyDescriptionTemplate } from '../services/clockify/description-template'
+import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../services/clockify/generated/clockify'
 import {
-  clockify,
+  type ClockifyTicketTimeSummaries,
   clockifyTicketTimeSummariesQueryKey,
   getClockifyTicketTimeSummaries,
-  type ClockifyTicketTimeSummaries,
-  type CreateTimeEntryRequest,
-  type TimeEntryDtoImplV1,
-} from '../services/clockify'
-import { formatClockifyDescriptionTemplate } from '../services/clockify/descriptionTemplate'
+} from '../services/clockify/ticket-summaries'
 import { getAssignedLinearTickets } from '../services/linear/tickets'
-import { sortLinearTickets } from '../services/linear/ticketSorting'
+import { sortLinearTickets } from '../services/linear/tickets-sorting'
 import { linearTicketSortOrderOptions } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
 import { getContrastingColor } from '../utils/colors'
+import { getErrorMessage } from '../utils/errors'
 
 export const Route = createFileRoute('/_app/dashboard')({
   component: DashboardScreen,
@@ -128,7 +128,7 @@ function DashboardScreen() {
       getAssignedLinearTickets({
         fetchLimit: linearTicketFetchLimit,
         sortBy: linearTicketSortBy,
-    }),
+      }),
     refetchInterval: getLinearTicketRefetchIntervalMilliseconds(linearTicketRefetchInterval),
   })
   const ticketTimeSummariesQuery = useQuery({
@@ -633,14 +633,6 @@ class MissingRunningClockifyEntryError extends Error {
   constructor() {
     super('Missing running Clockify timer.')
   }
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return String(error)
 }
 
 function clockifyTimerLog(message: string, details?: unknown) {
