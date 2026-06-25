@@ -7,7 +7,8 @@ import humanizeDuration from 'humanize-duration'
 import { useMemo } from 'react'
 import { useStopwatch } from 'react-timer-hook'
 
-import { clockify, clockifyReports, type TimeEntryWithRatesDtoV1 } from '../services/clockify'
+import { clockify, clockifyReports } from '../services/clockify/client'
+import type { TimeEntryWithRatesDtoV1 } from '../services/clockify/generated/clockify'
 import { ClockifyIcon } from './icons/ClockifyIcon'
 
 type ClockifyPeriodStat = {

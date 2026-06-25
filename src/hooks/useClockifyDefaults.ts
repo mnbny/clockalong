@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 
-import { clockifyProjectOptionsQueryKey, getClockifyProjectOptions } from '../services/clockify'
+import { clockifyProjectOptionsQueryKey, getClockifyProjectOptions } from '../services/clockify/projects'
 import { useStorage } from '../services/storage/useStorage'
 import { useAppAuth } from './useAppAuth'
 import { useAppInit } from './useAppInit'

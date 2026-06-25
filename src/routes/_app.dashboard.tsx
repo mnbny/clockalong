@@ -15,14 +15,16 @@ import { useCallback, useMemo } from 'react'
 import { appToast } from '../components/AppToaster'
 import { ClockifyWidget, clockifyDashboardWidgetQueryKey, getClockifyWidgetData } from '../components/ClockifyWidget'
 import { LinearIcon } from '../components/icons/LinearIcon'
+import { clockify } from '../services/clockify/client'
 import {
-  clockify,
+  type CreateTimeEntryRequest,
+  type TimeEntryDtoImplV1,
+} from '../services/clockify/generated/clockify'
+import {
   clockifyTicketTimeSummariesQueryKey,
   getClockifyTicketTimeSummaries,
   type ClockifyTicketTimeSummaries,
-  type CreateTimeEntryRequest,
-  type TimeEntryDtoImplV1,
-} from '../services/clockify'
+} from '../services/clockify/ticket-summaries'
 import { formatClockifyDescriptionTemplate } from '../services/clockify/description-template'
 import { getAssignedLinearTickets } from '../services/linear/tickets'
 import { sortLinearTickets } from '../services/linear/tickets-sorting'
