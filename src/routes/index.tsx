@@ -2,7 +2,7 @@ import { createFileRoute, Navigate } from '@tanstack/react-router'
 import { listen } from '@tauri-apps/api/event'
 import { useEffect, useState } from 'react'
 
-import { appInitializationStateChangedEvent, getAppInitializationState } from '../hooks/useAppInitState'
+import { appInitializationStateChangedEvent, getAppInitializationState } from '../hooks/useAppInit'
 
 export const Route = createFileRoute('/')({
   component: IndexScreen,

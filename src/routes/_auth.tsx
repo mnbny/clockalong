@@ -1,6 +1,6 @@
 import { createFileRoute, Navigate, Outlet } from '@tanstack/react-router'
 
-import { useAppInitState } from '../hooks/useAppInitState'
+import { useAppInit } from '../hooks/useAppInit'
 import { useTauriClinearAuthState } from '../hooks/useTauriClinearAuthState'
 import { isClinearAuthenticated } from '../services/tauri/authClient'
 
@@ -9,7 +9,7 @@ export const Route = createFileRoute('/_auth')({
 })
 
 function AuthLayout() {
-  const appInitializationState = useAppInitState()
+  const appInitializationState = useAppInit()
   const authState = useTauriClinearAuthState()
 
   if (appInitializationState.value.appInitializing || authState.loading) {
