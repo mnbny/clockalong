@@ -8,6 +8,7 @@ import { useCallback, useEffect } from 'react'
 import { useAppAuth } from '../hooks/useAppAuth'
 import { useStorage } from '../services/storage/useStorage'
 import { clinearAuth, isClinearAuthenticated } from '../services/tauri/authClient'
+import { getErrorMessage } from '../utils/errors'
 import { appToast } from './AppToaster'
 import { MoonBunnyLogo } from './MoonBunnyLogo'
 
@@ -88,12 +89,4 @@ export function AppHeader() {
       </div>
     </div>
   )
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return String(error)
 }

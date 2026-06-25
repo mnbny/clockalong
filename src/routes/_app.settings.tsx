@@ -46,6 +46,7 @@ import { useStorage } from '../services/storage/useStorage'
 import { app } from '../services/tauri/appClient'
 import { type AppUpdate, type AppUpdateDownloadProgress, appUpdates } from '../services/tauri/appUpdates'
 import { cx } from '../utils/cx'
+import { getErrorMessage } from '../utils/errors'
 
 export const Route = createFileRoute('/_app/settings')({
   component: SettingsScreen,
@@ -805,14 +806,6 @@ function isRustAppLogLine(line: string) {
 
 function isCustomFrontendLogLine(line: string) {
   return line.includes('][webview:') && customFrontendLogPrefixes.some(prefix => line.includes(prefix))
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return String(error)
 }
 
 const customFrontendLogPrefixes = [

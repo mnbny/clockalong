@@ -2,6 +2,8 @@ import { isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useCallback, useEffect, useState } from 'react'
 
+import { getErrorMessage } from './errors'
+
 type TauriReactiveStateHookOptions = {
   enabled?: boolean
 }
@@ -166,14 +168,6 @@ export function createTauriReactiveStateHook<GetSnapshot extends () => Promise<u
 
     return { ...state, refresh }
   }
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return String(error)
 }
 
 function log(scope: string, message: string) {

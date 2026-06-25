@@ -29,6 +29,7 @@ import { sortLinearTickets } from '../services/linear/ticketSorting'
 import { linearTicketSortOrderOptions } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
 import { getContrastingColor } from '../utils/colors'
+import { getErrorMessage } from '../utils/errors'
 
 export const Route = createFileRoute('/_app/dashboard')({
   component: DashboardScreen,
@@ -633,14 +634,6 @@ class MissingRunningClockifyEntryError extends Error {
   constructor() {
     super('Missing running Clockify timer.')
   }
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return String(error)
 }
 
 function clockifyTimerLog(message: string, details?: unknown) {

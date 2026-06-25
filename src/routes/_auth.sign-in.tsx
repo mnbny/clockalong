@@ -8,6 +8,7 @@ import { LinearIcon } from '../components/icons/LinearIcon'
 import { useAppAuth } from '../hooks/useAppAuth'
 import { clinearAuth, type ClinearAuthProvider } from '../services/tauri/authClient'
 import { cx } from '../utils/cx'
+import { getErrorMessage } from '../utils/errors'
 
 export const Route = createFileRoute('/_auth/sign-in')({
   component: SignInScreen,
@@ -169,14 +170,6 @@ function AuthenticationButton({ connected, icon, label, loading, onClick }: Auth
       )}
     </button>
   )
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return String(error)
 }
 
 function signInLog(message: string) {
