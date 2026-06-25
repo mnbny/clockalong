@@ -65,6 +65,19 @@ This creates a draft GitHub release for the version in `src-tauri/tauri.conf.jso
 pnpm release:github -- --publish
 ```
 
+Pass GitHub release notes through stdin when publishing:
+
+```sh
+pnpm release:github << 'EOF'
+## Changes
+
+- Added native provider auth refresh handling.
+- Cleaned up app service module names.
+EOF
+```
+
+The same notes are written into the Tauri updater manifest. If the GitHub release already exists, the script updates the release body only when notes are provided.
+
 The release script expects `gh` authentication and a clean working tree unless `ALLOW_DIRTY_RELEASE=1` is set.
 
 ## Updates
