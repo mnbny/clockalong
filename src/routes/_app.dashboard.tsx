@@ -13,7 +13,7 @@ import humanizeDuration from 'humanize-duration'
 import { useCallback, useMemo } from 'react'
 
 import { appToast } from '../components/AppToaster'
-import { ClockifyWidget, getClockifyWidgetData } from '../components/ClockifyWidget'
+import { ClockifyWidget } from '../components/ClockifyWidget'
 import { LinearIcon } from '../components/icons/LinearIcon'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
@@ -143,13 +143,52 @@ function DashboardScreen() {
     clockifyLinearEntryLinks,
     sortOrder: linearTicketSortOrder,
   })
-  const clockifyWidgetQuery = useQuery({
-    queryKey: queryKeys.clockify.dashboardWidget,
-    queryFn: getClockifyWidgetData,
-    notifyOnChangeProps: ['data'],
+  const clockifyUserQuery = useQuery({
+    queryKey: queryKeys.clockify.loggedUser,
+    queryFn: () => clockify.getLoggedUser(),
+    staleTime: 5 * 60_000,
+  })
+  const clockifyWorkspacesQuery = useQuery({
+    queryKey: queryKeys.clockify.workspaces,
+    queryFn: () => clockify.getWorkspacesOfUser(),
+    staleTime: 5 * 60_000,
+  })
+  const selectedClockifyWorkspace = useMemo(() => {
+    const user = clockifyUserQuery.data
+    const workspaces = clockifyWorkspacesQuery.data
+
+    if (!user || !workspaces?.length) {
+      return null
+    }
+
+    return (
+      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
+      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
+      workspaces[0]
+    )
+  }, [clockifyUserQuery.data, clockifyWorkspacesQuery.data])
+  const runningEntriesQuery = useQuery({
+    enabled: Boolean(clockifyUserQuery.data?.id && selectedClockifyWorkspace?.id),
+    queryKey: queryKeys.clockify.runningTimeEntries({
+      params: { userId: clockifyUserQuery.data?.id, workspaceId: selectedClockifyWorkspace?.id },
+    }),
+    queryFn: () =>
+      clockify.getTimeEntries({
+        params: { workspaceId: selectedClockifyWorkspace!.id!, userId: clockifyUserQuery.data!.id! },
+        queries: {
+          hydrated: true,
+          'in-progress': 'true',
+          page: 1,
+          'page-size': 1,
+        },
+      }),
+    refetchInterval: 15 * 60_000,
     staleTime: 60_000,
   })
-  const runningEntry = clockifyWidgetQuery.data?.runningEntry ?? null
+  const runningEntry = useMemo(() => {
+    const runningEntries = runningEntriesQuery.data ?? []
+    return runningEntries.find(entry => entry.userId === clockifyUserQuery.data?.id) ?? runningEntries[0] ?? null
+  }, [clockifyUserQuery.data?.id, runningEntriesQuery.data])
   const runningEntryId = runningEntry?.id ?? null
   const activeLinearIssueId = runningEntryId ? clockifyLinearEntryLinks[runningEntryId]?.linearIssueId : undefined
   const startTrackingMutation = useMutation({
@@ -219,7 +258,8 @@ function DashboardScreen() {
         ticketIdentifier: ticket.identifier,
       })
       appToast.success(`Started timer for ${ticket.identifier}`)
-      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.dashboardWidget })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningTimeEntries() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.ticketTimeSummaries() })
     },
   })
@@ -257,7 +297,8 @@ function DashboardScreen() {
         ticketIdentifier: ticket.identifier,
       })
       appToast.success(`Stopped timer for ${ticket.identifier}`)
-      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.dashboardWidget })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningTimeEntries() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.ticketTimeSummaries() })
     },
   })

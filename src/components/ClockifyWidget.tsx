@@ -3,7 +3,7 @@ import type { TimeEntrySummaryReportDto } from '../services/clockify/generated/r
 
 import { formatCurrency } from '@automattic/format-currency'
 import { IconCalendarDue, IconCalendarMonth, IconCalendarWeek, IconClockPlay, IconRefresh } from '@tabler/icons-react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import humanizeDuration from 'humanize-duration'
 import { useMemo } from 'react'
 import { useStopwatch } from 'react-timer-hook'
@@ -18,10 +18,11 @@ type ClockifyPeriodStat = {
   time: string
 }
 
-export type ClockifyWidgetData = {
-  periodStats: ClockifyPeriodStat[]
-  runningEntry: TimeEntryWithRatesDtoV1 | null
-}
+const clockifyReportPeriods = [
+  { id: 'today', label: 'Today' },
+  { id: 'week', label: 'Week' },
+  { id: 'month', label: 'Month' },
+] as const
 
 function ClockifyRefreshButton({ fetching }: { fetching: boolean }) {
   const queryClient = useQueryClient()
@@ -32,7 +33,14 @@ function ClockifyRefreshButton({ fetching }: { fetching: boolean }) {
       type="button"
       aria-label="Refresh Clockify"
       disabled={fetching}
-      onClick={() => void queryClient.refetchQueries({ queryKey: queryKeys.clockify.dashboardWidget })}>
+      onClick={() =>
+        void Promise.all([
+          queryClient.refetchQueries({ queryKey: queryKeys.clockify.loggedUser }),
+          queryClient.refetchQueries({ queryKey: queryKeys.clockify.workspaces }),
+          queryClient.refetchQueries({ queryKey: queryKeys.clockify.runningTimeEntries() }),
+          queryClient.refetchQueries({ queryKey: queryKeys.clockify.summaryReport() }),
+        ])
+      }>
       <IconRefresh className="size-4" />
     </button>
   )
@@ -55,20 +63,109 @@ const formatShortDuration = humanizeDuration.humanizer({
 })
 
 export function ClockifyWidget() {
-  const widgetQuery = useQuery({
-    queryKey: queryKeys.clockify.dashboardWidget,
-    queryFn: getClockifyWidgetData,
+  const userQuery = useQuery({
+    queryKey: queryKeys.clockify.loggedUser,
+    queryFn: () => clockify.getLoggedUser(),
+    staleTime: 5 * 60_000,
+  })
+  const workspacesQuery = useQuery({
+    queryKey: queryKeys.clockify.workspaces,
+    queryFn: () => clockify.getWorkspacesOfUser(),
+    staleTime: 5 * 60_000,
+  })
+  const selectedWorkspace = useMemo(() => {
+    const user = userQuery.data
+    const workspaces = workspacesQuery.data
+
+    if (!user || !workspaces?.length) {
+      return null
+    }
+
+    return (
+      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
+      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
+      workspaces[0]
+    )
+  }, [userQuery.data, workspacesQuery.data])
+  const runningEntriesQuery = useQuery({
+    enabled: Boolean(userQuery.data?.id && selectedWorkspace?.id),
+    queryKey: queryKeys.clockify.runningTimeEntries({
+      params: { userId: userQuery.data?.id, workspaceId: selectedWorkspace?.id },
+    }),
+    queryFn: () =>
+      clockify.getTimeEntries({
+        params: { workspaceId: selectedWorkspace!.id!, userId: userQuery.data!.id! },
+        queries: {
+          hydrated: true,
+          'in-progress': 'true',
+          page: 1,
+          'page-size': 1,
+        },
+      }),
     refetchInterval: 15 * 60_000,
     staleTime: 60_000,
   })
-  const runningEntry = widgetQuery.data?.runningEntry ?? null
-  const periodStats = widgetQuery.data?.periodStats ?? getEmptyPeriodStats()
+  const reportQueries = useQueries({
+    queries: clockifyReportPeriods.map(period => ({
+      enabled: Boolean(userQuery.data?.id && selectedWorkspace?.id),
+      queryKey: queryKeys.clockify.summaryReport({
+        params: { period: period.id, userId: userQuery.data?.id, workspaceId: selectedWorkspace?.id },
+      }),
+      queryFn: () => {
+        const now = new Date()
+
+        return clockifyReports.generateSummaryReport(
+          {
+            amountShown: 'EARNED',
+            amounts: ['EARNED'],
+            dateRangeEnd: toClockifyReportDate(now),
+            dateRangeStart: toClockifyReportDate(getReportPeriodStart(period.id, now)),
+            dateRangeType: 'ABSOLUTE',
+            exportType: 'JSON',
+            rounding: false,
+            summaryFilter: {
+              groups: ['USER'],
+              sortColumn: 'GROUP',
+              summaryChartType: 'BILLABILITY',
+            },
+            users: {
+              contains: 'CONTAINS',
+              ids: [userQuery.data!.id!],
+              status: 'ACTIVE',
+            },
+          },
+          { params: { workspaceId: selectedWorkspace!.id! } },
+        )
+      },
+      refetchInterval: 15 * 60_000,
+      staleTime: 60_000,
+    })),
+  })
+  const runningEntry = useMemo(() => {
+    const runningEntries = runningEntriesQuery.data ?? []
+    return runningEntries.find(entry => entry.userId === userQuery.data?.id) ?? runningEntries[0] ?? null
+  }, [runningEntriesQuery.data, userQuery.data?.id])
+  const todayReport = reportQueries[0]?.data
+  const weekReport = reportQueries[1]?.data
+  const monthReport = reportQueries[2]?.data
+  const periodStats = useMemo(
+    () =>
+      clockifyReportPeriods.map((period, index) =>
+        formatReportPeriodStat(period.label, [todayReport, weekReport, monthReport][index]),
+      ),
+    [monthReport, todayReport, weekReport],
+  )
+  const fetching =
+    userQuery.isFetching ||
+    workspacesQuery.isFetching ||
+    runningEntriesQuery.isFetching ||
+    reportQueries.some(query => query.isFetching)
 
   return (
     <section className="border-base-content/5 bg-base-100 rounded-box overflow-hidden border">
       <header className="border-base-content/5 flex min-w-0 items-center justify-between gap-3 border-b px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          {widgetQuery.isFetching ? (
+          {fetching ? (
             <span className="text-primary grid size-6 place-items-center">
               <span className="loading loading-spinner size-6" />
             </span>
@@ -81,7 +178,7 @@ export function ClockifyWidget() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <ClockifyRefreshButton fetching={widgetQuery.isFetching} />
+          <ClockifyRefreshButton fetching={fetching} />
           <ClockifyStatusBadge running={Boolean(runningEntry)} />
         </div>
       </header>
@@ -169,33 +266,6 @@ function RunningTimerElapsed({ start }: { start: string | undefined }) {
   )
 }
 
-export async function getClockifyWidgetData(): Promise<ClockifyWidgetData> {
-  const [user, workspaces] = await Promise.all([clockify.getLoggedUser(), clockify.getWorkspacesOfUser()])
-  const workspaceId = user.activeWorkspace ?? user.defaultWorkspace ?? workspaces[0]?.id
-
-  if (!user.id || !workspaceId) {
-    return { periodStats: getEmptyPeriodStats(), runningEntry: null }
-  }
-
-  const now = new Date()
-
-  const [runningEntries, periodStats] = await Promise.all([
-    clockify.getTimeEntries({
-      params: { workspaceId, userId: user.id },
-      queries: {
-        hydrated: true,
-        'in-progress': 'true',
-        page: 1,
-        'page-size': 1,
-      },
-    }),
-    getReportPeriodStats({ now, userId: user.id, workspaceId }),
-  ])
-
-  const runningEntry = runningEntries.find(entry => entry.userId === user.id) ?? runningEntries[0] ?? null
-  return { periodStats, runningEntry }
-}
-
 function getStopwatchOffsetTimestamp(startValue: string | undefined) {
   const start = parseDate(startValue)
 
@@ -207,61 +277,8 @@ function getStopwatchOffsetTimestamp(startValue: string | undefined) {
   return new Date(Date.now() + elapsedMilliseconds)
 }
 
-async function getReportPeriodStats({
-  now,
-  userId,
-  workspaceId,
-}: {
-  now: Date
-  userId: string
-  workspaceId: string
-}): Promise<ClockifyPeriodStat[]> {
-  const periods = [
-    { label: 'Today', start: getDayStart(now) },
-    { label: 'Week', start: getWeekStart(now) },
-    { label: 'Month', start: getMonthStart(now) },
-  ]
-
-  const reports = await Promise.all(
-    periods.map(period =>
-      clockifyReports.generateSummaryReport(
-        {
-          amountShown: 'EARNED',
-          amounts: ['EARNED'],
-          dateRangeEnd: toClockifyReportDate(now),
-          dateRangeStart: toClockifyReportDate(period.start),
-          dateRangeType: 'ABSOLUTE',
-          exportType: 'JSON',
-          rounding: false,
-          summaryFilter: {
-            groups: ['USER'],
-            sortColumn: 'GROUP',
-            summaryChartType: 'BILLABILITY',
-          },
-          users: {
-            contains: 'CONTAINS',
-            ids: [userId],
-            status: 'ACTIVE',
-          },
-        },
-        { params: { workspaceId } },
-      ),
-    ),
-  )
-
-  return periods.map((period, index) => formatReportPeriodStat(period.label, reports[index]))
-}
-
-function getEmptyPeriodStats(): ClockifyPeriodStat[] {
-  return ['Today', 'Week', 'Month'].map(label => ({
-    amount: formatCurrency(0, 'USD'),
-    label,
-    time: '0m',
-  }))
-}
-
-function formatReportPeriodStat(label: string, report: TimeEntrySummaryReportDto): ClockifyPeriodStat {
-  const totals = report.totals ?? []
+function formatReportPeriodStat(label: string, report: TimeEntrySummaryReportDto | undefined): ClockifyPeriodStat {
+  const totals = report?.totals ?? []
   const seconds = totals.reduce((total, entryTotal) => total + (entryTotal.totalTime ?? 0), 0)
   const amount = totals.reduce((total, entryTotal) => {
     const earned = entryTotal.amounts?.find(entryAmount => entryAmount.type === 'EARNED')
@@ -290,6 +307,17 @@ function parseDate(value: string | undefined) {
 
 function toClockifyReportDate(date: Date) {
   return date.toISOString().replace(/Z$/, '')
+}
+
+function getReportPeriodStart(period: (typeof clockifyReportPeriods)[number]['id'], now: Date) {
+  switch (period) {
+    case 'today':
+      return getDayStart(now)
+    case 'week':
+      return getWeekStart(now)
+    case 'month':
+      return getMonthStart(now)
+  }
 }
 
 function getDayStart(date: Date) {
