@@ -12,6 +12,10 @@ type AssignedLinearTicketsQueryParams = {
   sortBy: LinearTicketSortByOption
 }
 
+type ClockifyProjectsQueryParams = {
+  workspaceId?: string
+}
+
 function spreadQueryKeySegments(keys?: QueryKeySegments<unknown>) {
   return [...(keys?.params ? [keys.params] : []), ...(keys?.other ?? [])]
 }
@@ -19,9 +23,12 @@ function spreadQueryKeySegments(keys?: QueryKeySegments<unknown>) {
 export const queryKeys = {
   clockify: {
     dashboardWidget: ['clockify', 'dashboard-widget'] as const,
-    projectOptions: ['clockify', 'project-options'] as const,
+    loggedUser: ['clockify', 'logged-user'] as const,
+    projects: (keys?: QueryKeySegments<ClockifyProjectsQueryParams>) =>
+      ['clockify', 'projects', ...spreadQueryKeySegments(keys)] as const,
     ticketTimeSummaries: (keys?: QueryKeySegments<unknown>) =>
       ['clockify', 'ticket-time-summaries', ...spreadQueryKeySegments(keys)] as const,
+    workspaces: ['clockify', 'workspaces'] as const,
   },
   linear: {
     assignedTickets: (keys?: QueryKeySegments<AssignedLinearTicketsQueryParams>) =>
