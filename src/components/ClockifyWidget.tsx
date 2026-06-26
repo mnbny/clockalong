@@ -35,9 +35,7 @@ function ClockifyRefreshButton({ fetching }: { fetching: boolean }) {
       disabled={fetching}
       onClick={() =>
         void Promise.all([
-          queryClient.refetchQueries({ queryKey: queryKeys.clockify.loggedUser }),
-          queryClient.refetchQueries({ queryKey: queryKeys.clockify.workspaces }),
-          queryClient.refetchQueries({ queryKey: queryKeys.clockify.runningTimeEntries() }),
+          queryClient.refetchQueries({ queryKey: queryKeys.clockify.runningEntry() }),
           queryClient.refetchQueries({ queryKey: queryKeys.clockify.summaryReport() }),
         ])
       }>
@@ -87,9 +85,9 @@ export function ClockifyWidget() {
       workspaces[0]
     )
   }, [userQuery.data, workspacesQuery.data])
-  const runningEntriesQuery = useQuery({
+  const runningEntryQuery = useQuery({
     enabled: Boolean(userQuery.data?.id && selectedWorkspace?.id),
-    queryKey: queryKeys.clockify.runningTimeEntries({
+    queryKey: queryKeys.clockify.runningEntry({
       params: { userId: userQuery.data?.id, workspaceId: selectedWorkspace?.id },
     }),
     queryFn: () =>
@@ -142,9 +140,9 @@ export function ClockifyWidget() {
     })),
   })
   const runningEntry = useMemo(() => {
-    const runningEntries = runningEntriesQuery.data ?? []
+    const runningEntries = runningEntryQuery.data ?? []
     return runningEntries.find(entry => entry.userId === userQuery.data?.id) ?? runningEntries[0] ?? null
-  }, [runningEntriesQuery.data, userQuery.data?.id])
+  }, [runningEntryQuery.data, userQuery.data?.id])
   const todayReport = reportQueries[0]?.data
   const weekReport = reportQueries[1]?.data
   const monthReport = reportQueries[2]?.data
@@ -158,7 +156,7 @@ export function ClockifyWidget() {
   const fetching =
     userQuery.isFetching ||
     workspacesQuery.isFetching ||
-    runningEntriesQuery.isFetching ||
+    runningEntryQuery.isFetching ||
     reportQueries.some(query => query.isFetching)
 
   return (

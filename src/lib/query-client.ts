@@ -16,13 +16,19 @@ type ClockifyProjectsQueryParams = {
   workspaceId?: string
 }
 
-type ClockifyRunningTimeEntriesQueryParams = {
+type ClockifyRunningEntryQueryParams = {
   userId?: string
   workspaceId?: string
 }
 
 type ClockifySummaryReportQueryParams = {
   period?: string
+  userId?: string
+  workspaceId?: string
+}
+
+type ClockifyTimeEntriesQueryParams = {
+  start?: string
   userId?: string
   workspaceId?: string
 }
@@ -36,12 +42,12 @@ export const queryKeys = {
     loggedUser: ['clockify', 'logged-user'] as const,
     projects: (keys?: QueryKeySegments<ClockifyProjectsQueryParams>) =>
       ['clockify', 'projects', ...spreadQueryKeySegments(keys)] as const,
-    runningTimeEntries: (keys?: QueryKeySegments<ClockifyRunningTimeEntriesQueryParams>) =>
-      ['clockify', 'running-time-entries', ...spreadQueryKeySegments(keys)] as const,
+    runningEntry: (keys?: QueryKeySegments<ClockifyRunningEntryQueryParams>) =>
+      ['clockify', 'running-entry', ...spreadQueryKeySegments(keys)] as const,
     summaryReport: (keys?: QueryKeySegments<ClockifySummaryReportQueryParams>) =>
       ['clockify', 'summary-report', ...spreadQueryKeySegments(keys)] as const,
-    ticketTimeSummaries: (keys?: QueryKeySegments<unknown>) =>
-      ['clockify', 'ticket-time-summaries', ...spreadQueryKeySegments(keys)] as const,
+    timeEntries: (keys?: QueryKeySegments<ClockifyTimeEntriesQueryParams>) =>
+      ['clockify', 'time-entries', ...spreadQueryKeySegments(keys)] as const,
     workspaces: ['clockify', 'workspaces'] as const,
   },
   linear: {

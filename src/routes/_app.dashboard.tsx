@@ -4,13 +4,13 @@ import type { ColumnDef } from '@tanstack/react-table'
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
 
 import { IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import humanizeDuration from 'humanize-duration'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 
 import { appToast } from '../components/AppToaster'
 import { ClockifyWidget } from '../components/ClockifyWidget'
@@ -19,7 +19,11 @@ import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
 import { formatClockifyDescriptionTemplate } from '../services/clockify/description-template'
 import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../services/clockify/generated/clockify'
-import { type ClockifyTicketTimeSummaries, getClockifyTicketTimeSummaries } from '../services/clockify/ticket-summaries'
+import {
+  type ClockifyTicketTimeSummaries,
+  getClockifyTicketSummaryStart,
+  summarizeClockifyTicketTimeEntries,
+} from '../services/clockify/ticket-summaries'
 import { getAssignedLinearTickets } from '../services/linear/tickets'
 import { sortLinearTickets } from '../services/linear/tickets-sorting'
 import { linearTicketSortOrderOptions } from '../services/storage/config'
@@ -48,6 +52,8 @@ const formatTrackedDuration = humanizeDuration.humanizer({
   spacer: '',
   units: ['h', 'm', 's'],
 })
+
+const clockifyTimeEntriesPageSize = 100
 
 type TicketTableMeta = {
   activeLinearIssueId: string | undefined
@@ -130,19 +136,6 @@ function DashboardScreen() {
       }),
     refetchInterval: getLinearTicketRefetchIntervalMilliseconds(linearTicketRefetchInterval),
   })
-  const ticketTimeSummariesQuery = useQuery({
-    queryKey: queryKeys.clockify.ticketTimeSummaries({ other: [clockifyLinearEntryLinks] }),
-    queryFn: () => getClockifyTicketTimeSummaries({ clockifyLinearEntryLinks }),
-    staleTime: 60_000,
-  })
-  const ticketsWithTracking = useMemo(
-    () => mergeTicketTimeSummaries(ticketsQuery.data ?? [], ticketTimeSummariesQuery.data ?? {}),
-    [ticketTimeSummariesQuery.data, ticketsQuery.data],
-  )
-  const tickets = sortLinearTickets(ticketsWithTracking, {
-    clockifyLinearEntryLinks,
-    sortOrder: linearTicketSortOrder,
-  })
   const clockifyUserQuery = useQuery({
     queryKey: queryKeys.clockify.loggedUser,
     queryFn: () => clockify.getLoggedUser(),
@@ -167,9 +160,9 @@ function DashboardScreen() {
       workspaces[0]
     )
   }, [clockifyUserQuery.data, clockifyWorkspacesQuery.data])
-  const runningEntriesQuery = useQuery({
+  const runningEntryQuery = useQuery({
     enabled: Boolean(clockifyUserQuery.data?.id && selectedClockifyWorkspace?.id),
-    queryKey: queryKeys.clockify.runningTimeEntries({
+    queryKey: queryKeys.clockify.runningEntry({
       params: { userId: clockifyUserQuery.data?.id, workspaceId: selectedClockifyWorkspace?.id },
     }),
     queryFn: () =>
@@ -186,9 +179,66 @@ function DashboardScreen() {
     staleTime: 60_000,
   })
   const runningEntry = useMemo(() => {
-    const runningEntries = runningEntriesQuery.data ?? []
+    const runningEntries = runningEntryQuery.data ?? []
     return runningEntries.find(entry => entry.userId === clockifyUserQuery.data?.id) ?? runningEntries[0] ?? null
-  }, [clockifyUserQuery.data?.id, runningEntriesQuery.data])
+  }, [clockifyUserQuery.data?.id, runningEntryQuery.data])
+  const summaryStart = useMemo(
+    () => getClockifyTicketSummaryStart(clockifyLinearEntryLinks),
+    [clockifyLinearEntryLinks],
+  )
+  const timeEntriesQuery = useInfiniteQuery({
+    enabled: Boolean(clockifyUserQuery.data?.id && selectedClockifyWorkspace?.id && summaryStart),
+    queryKey: queryKeys.clockify.timeEntries({
+      params: {
+        start: summaryStart?.toISOString(),
+        userId: clockifyUserQuery.data?.id,
+        workspaceId: selectedClockifyWorkspace?.id,
+      },
+    }),
+    queryFn: ({ pageParam }) =>
+      clockify.getTimeEntries({
+        params: { workspaceId: selectedClockifyWorkspace!.id!, userId: clockifyUserQuery.data!.id! },
+        queries: {
+          end: new Date().toISOString(),
+          hydrated: true,
+          page: pageParam,
+          'page-size': clockifyTimeEntriesPageSize,
+          start: summaryStart!.toISOString(),
+        },
+      }),
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.length === clockifyTimeEntriesPageSize ? lastPageParam + 1 : undefined,
+    initialPageParam: 1,
+    staleTime: 60_000,
+  })
+  const {
+    fetchNextPage: fetchNextTimeEntriesPage,
+    hasNextPage: hasNextTimeEntriesPage,
+    isError: timeEntriesError,
+    isFetchingNextPage: fetchingNextTimeEntriesPage,
+  } = timeEntriesQuery
+
+  useEffect(() => {
+    if (!hasNextTimeEntriesPage || fetchingNextTimeEntriesPage || timeEntriesError) {
+      return
+    }
+
+    void fetchNextTimeEntriesPage()
+  }, [fetchNextTimeEntriesPage, fetchingNextTimeEntriesPage, hasNextTimeEntriesPage, timeEntriesError])
+  const ticketTimeSummaries = useMemo(() => {
+    return summarizeClockifyTicketTimeEntries({
+      clockifyLinearEntryLinks,
+      entries: [...(timeEntriesQuery.data?.pages.flat() ?? []), ...(runningEntryQuery.data ?? [])],
+    })
+  }, [clockifyLinearEntryLinks, runningEntryQuery.data, timeEntriesQuery.data])
+  const ticketsWithTracking = useMemo(
+    () => mergeTicketTimeSummaries(ticketsQuery.data ?? [], ticketTimeSummaries),
+    [ticketTimeSummaries, ticketsQuery.data],
+  )
+  const tickets = sortLinearTickets(ticketsWithTracking, {
+    clockifyLinearEntryLinks,
+    sortOrder: linearTicketSortOrder,
+  })
   const runningEntryId = runningEntry?.id ?? null
   const activeLinearIssueId = runningEntryId ? clockifyLinearEntryLinks[runningEntryId]?.linearIssueId : undefined
   const startTrackingMutation = useMutation({
@@ -258,9 +308,9 @@ function DashboardScreen() {
         ticketIdentifier: ticket.identifier,
       })
       appToast.success(`Started timer for ${ticket.identifier}`)
-      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningTimeEntries() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.ticketTimeSummaries() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.timeEntries() })
     },
   })
   const stopTrackingMutation = useMutation({
@@ -297,9 +347,9 @@ function DashboardScreen() {
         ticketIdentifier: ticket.identifier,
       })
       appToast.success(`Stopped timer for ${ticket.identifier}`)
-      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningTimeEntries() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.ticketTimeSummaries() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.timeEntries() })
     },
   })
   const pendingTicketId = startTrackingMutation.isPending ? startTrackingMutation.variables?.id : null
@@ -324,12 +374,9 @@ function DashboardScreen() {
     [runningEntryId, stopTrackingMutation],
   )
   const refreshTickets = useCallback(() => {
-    void Promise.all([
-      ticketsQuery.refetch(),
-      queryClient.refetchQueries({ queryKey: queryKeys.clockify.ticketTimeSummaries() }),
-    ])
-  }, [queryClient, ticketsQuery])
-  const ticketsRefreshing = ticketsQuery.isFetching || ticketTimeSummariesQuery.isFetching
+    void ticketsQuery.refetch()
+  }, [ticketsQuery])
+  const ticketsRefreshing = ticketsQuery.isFetching
 
   const table = useReactTable({
     columns: ticketColumns,
