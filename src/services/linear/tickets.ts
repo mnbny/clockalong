@@ -4,7 +4,7 @@ import type { Issue, LinearClient, User, WorkflowState } from '@linear/sdk'
 import { auth } from '../tauri/auth-client'
 import { createLinearClient } from './client'
 
-const linearTicketsPageSize = 50
+export const linearTicketsPageSize = 50
 
 export type LinearTicketAssignee = Pick<
   User,
@@ -33,12 +33,7 @@ export type LinearTicket = {
   updatedAt: string
 }
 
-export type GetAssignedLinearTicketsOptions = {
-  fetchLimit: number
-  sortBy: LinearTicketSortByOption
-}
-
-type AssignedIssueNode = SerializedIssueFields & {
+export type AssignedIssueNode = SerializedIssueFields & {
   assignee: LinearTicketAssignee | null
   state: LinearTicketStatus
 }
@@ -54,8 +49,8 @@ type AssignedIssuesResponse = {
     }
   }
 }
-type AssignedIssuesPage = AssignedIssuesResponse['viewer']['assignedIssues']
-type AssignedIssuesVariables = {
+export type AssignedIssuesPage = AssignedIssuesResponse['viewer']['assignedIssues']
+export type AssignedIssuesVariables = {
   after?: string | null
   first: number
   orderBy: LinearTicketSortByOption
@@ -96,83 +91,26 @@ const assignedTicketsQuery = `
   }
 `
 
-export async function getAssignedLinearTickets(options: GetAssignedLinearTicketsOptions): Promise<LinearTicket[]> {
-  const fetchLimit = normalizeFetchLimit(options.fetchLimit)
-  const assignedIssues: AssignedIssuesResponse['viewer']['assignedIssues']['nodes'] = []
-  let after: string | null = null
-  let hasNextPage = true
-  let pageNumber = 0
-
-  linearTicketsLog('assigned fetch start', {
-    fetchLimit,
-    pageSize: linearTicketsPageSize,
-    sortBy: options.sortBy,
+export async function requestAssignedIssuesPage(variables: AssignedIssuesVariables) {
+  linearTicketsLog('assigned fetch page request', {
+    afterPresent: Boolean(variables.after),
+    first: variables.first,
+    sortBy: variables.orderBy,
   })
 
-  while (assignedIssues.length < fetchLimit && hasNextPage) {
-    const first = Math.min(linearTicketsPageSize, fetchLimit - assignedIssues.length)
-
-    pageNumber += 1
-    linearTicketsLog('assigned fetch page request', {
-      afterPresent: Boolean(after),
-      first,
-      pageNumber,
-      sortBy: options.sortBy,
-    })
-
-    const response = await requestAssignedIssuesPage({
-      after,
-      first,
-      orderBy: options.sortBy,
-    })
-    const nextPage: AssignedIssuesPage | undefined = response.data?.viewer.assignedIssues
-
-    if (!nextPage) {
-      linearTicketsLog('assigned fetch page missing data', {
-        pageNumber,
-        responseStatus: response.status,
-      })
-      break
-    }
-
-    assignedIssues.push(...nextPage.nodes)
-    after = nextPage.pageInfo.endCursor
-    hasNextPage = nextPage.pageInfo.hasNextPage && Boolean(after)
-
-    linearTicketsLog('assigned fetch page response', {
-      aggregateCount: assignedIssues.length,
-      endCursorPresent: Boolean(nextPage.pageInfo.endCursor),
-      hasNextPage: nextPage.pageInfo.hasNextPage,
-      nodeCount: nextPage.nodes.length,
-      pageNumber,
-      stateTypeCounts: getStateTypeCounts(nextPage.nodes),
-    })
-  }
-
-  const tickets = assignedIssues.map(issue => ({
-    assignee: issue.assignee,
-    createdAt: issue.createdAt,
-    id: issue.id,
-    identifier: issue.identifier,
-    lastTrackedAt: null,
-    status: issue.state,
-    title: issue.title,
-    totalTrackedSeconds: null,
-    updatedAt: issue.updatedAt,
-  }))
-
-  linearTicketsLog('assigned fetch complete', {
-    fetchedCount: tickets.length,
-    pageCount: pageNumber,
-    stateTypeCounts: getTicketStateTypeCounts(tickets),
-  })
-
-  return tickets
-}
-
-async function requestAssignedIssuesPage(variables: AssignedIssuesVariables) {
   const linearClient = await createLinearClient()
-  return requestAssignedIssuesPageWithClient(linearClient, variables, true)
+  const response = await requestAssignedIssuesPageWithClient(linearClient, variables, true)
+  const page = response.data?.viewer.assignedIssues
+
+  linearTicketsLog('assigned fetch page response', {
+    endCursorPresent: Boolean(page?.pageInfo.endCursor),
+    hasNextPage: page?.pageInfo.hasNextPage,
+    nodeCount: page?.nodes.length ?? 0,
+    responseStatus: response.status,
+    stateTypeCounts: getStateTypeCounts(page?.nodes ?? []),
+  })
+
+  return response
 }
 
 async function requestAssignedIssuesPageWithClient(
@@ -214,24 +152,9 @@ function isUnauthorizedLinearError(error: unknown) {
   return maybeError.status === 401 || maybeError.response?.status === 401
 }
 
-function normalizeFetchLimit(fetchLimit: number) {
-  if (!Number.isFinite(fetchLimit)) {
-    return linearTicketsPageSize
-  }
-
-  return Math.max(1, Math.floor(fetchLimit))
-}
-
 function getStateTypeCounts(issues: AssignedIssueNode[]) {
   return issues.reduce<Record<string, number>>((counts, issue) => {
     counts[issue.state.type] = (counts[issue.state.type] ?? 0) + 1
-    return counts
-  }, {})
-}
-
-function getTicketStateTypeCounts(tickets: LinearTicket[]) {
-  return tickets.reduce<Record<string, number>>((counts, ticket) => {
-    counts[ticket.status.type] = (counts[ticket.status.type] ?? 0) + 1
     return counts
   }, {})
 }

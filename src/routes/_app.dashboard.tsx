@@ -1,4 +1,4 @@
-import type { LinearTicket, LinearTicketStatus } from '../services/linear/tickets'
+import type { AssignedIssueNode, LinearTicket, LinearTicketStatus } from '../services/linear/tickets'
 import type { LinearTicketRefetchIntervalOption, LinearTicketSortOrderOption } from '../services/storage/config'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
@@ -24,7 +24,7 @@ import {
   getClockifyTicketSummaryStart,
   summarizeClockifyTicketTimeEntries,
 } from '../services/clockify/ticket-summaries'
-import { getAssignedLinearTickets } from '../services/linear/tickets'
+import { linearTicketsPageSize, requestAssignedIssuesPage } from '../services/linear/tickets'
 import { sortLinearTickets } from '../services/linear/tickets-sorting'
 import { linearTicketSortOrderOptions } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
@@ -54,6 +54,11 @@ const formatTrackedDuration = humanizeDuration.humanizer({
 })
 
 const clockifyTimeEntriesPageSize = 100
+
+type AssignedIssuesPageParam = {
+  after: string | null
+  fetchedCount: number
+}
 
 type TicketTableMeta = {
   activeLinearIssueId: string | undefined
@@ -125,15 +130,37 @@ function DashboardScreen() {
   const [linearTicketSortBy] = useStorage('linearTicketSortBy')
   const [linearTicketSortOrder, setLinearTicketSortOrder] = useStorage('linearTicketSortOrder')
   const [clockifyLinearEntryLinks, setClockifyLinearEntryLinks] = useStorage('clockifyLinearEntryLinks')
-  const ticketsQuery = useQuery({
+  const normalizedLinearTicketFetchLimit = normalizeLinearTicketFetchLimit(linearTicketFetchLimit)
+  const initialAssignedIssuesPageParam: AssignedIssuesPageParam = { after: null, fetchedCount: 0 }
+  const ticketsQuery = useInfiniteQuery({
     queryKey: queryKeys.linear.assignedTickets({
-      params: { fetchLimit: linearTicketFetchLimit, sortBy: linearTicketSortBy },
+      params: { fetchLimit: normalizedLinearTicketFetchLimit, sortBy: linearTicketSortBy },
     }),
-    queryFn: () =>
-      getAssignedLinearTickets({
-        fetchLimit: linearTicketFetchLimit,
-        sortBy: linearTicketSortBy,
+    queryFn: ({ pageParam }) =>
+      requestAssignedIssuesPage({
+        after: pageParam.after,
+        first: Math.min(linearTicketsPageSize, normalizedLinearTicketFetchLimit - pageParam.fetchedCount),
+        orderBy: linearTicketSortBy,
       }),
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+      const page = lastPage.data?.viewer.assignedIssues
+
+      if (!page?.pageInfo.hasNextPage || !page.pageInfo.endCursor || page.nodes.length === 0) {
+        return undefined
+      }
+
+      const fetchedCount = lastPageParam.fetchedCount + page.nodes.length
+
+      if (fetchedCount >= normalizedLinearTicketFetchLimit) {
+        return undefined
+      }
+
+      return {
+        after: page.pageInfo.endCursor,
+        fetchedCount,
+      } satisfies AssignedIssuesPageParam
+    },
+    initialPageParam: initialAssignedIssuesPageParam,
     refetchInterval: getLinearTicketRefetchIntervalMilliseconds(linearTicketRefetchInterval),
   })
   const clockifyUserQuery = useQuery({
@@ -225,6 +252,27 @@ function DashboardScreen() {
 
     void fetchNextTimeEntriesPage()
   }, [fetchNextTimeEntriesPage, fetchingNextTimeEntriesPage, hasNextTimeEntriesPage, timeEntriesError])
+  const {
+    fetchNextPage: fetchNextTicketsPage,
+    hasNextPage: hasNextTicketsPage,
+    isError: ticketsError,
+    isFetchingNextPage: fetchingNextTicketsPage,
+  } = ticketsQuery
+
+  useEffect(() => {
+    if (!hasNextTicketsPage || fetchingNextTicketsPage || ticketsError) {
+      return
+    }
+
+    void fetchNextTicketsPage()
+  }, [fetchNextTicketsPage, fetchingNextTicketsPage, hasNextTicketsPage, ticketsError])
+  const linearTickets = useMemo(
+    () =>
+      (ticketsQuery.data?.pages.flatMap(page => page.data?.viewer.assignedIssues.nodes ?? []) ?? [])
+        .slice(0, normalizedLinearTicketFetchLimit)
+        .map(toLinearTicket),
+    [normalizedLinearTicketFetchLimit, ticketsQuery.data],
+  )
   const ticketTimeSummaries = useMemo(() => {
     return summarizeClockifyTicketTimeEntries({
       clockifyLinearEntryLinks,
@@ -232,8 +280,8 @@ function DashboardScreen() {
     })
   }, [clockifyLinearEntryLinks, runningEntryQuery.data, timeEntriesQuery.data])
   const ticketsWithTracking = useMemo(
-    () => mergeTicketTimeSummaries(ticketsQuery.data ?? [], ticketTimeSummaries),
-    [ticketTimeSummaries, ticketsQuery.data],
+    () => mergeTicketTimeSummaries(linearTickets, ticketTimeSummaries),
+    [linearTickets, ticketTimeSummaries],
   )
   const tickets = sortLinearTickets(ticketsWithTracking, {
     clockifyLinearEntryLinks,
@@ -483,7 +531,7 @@ function DashboardScreen() {
           </div>
         ) : null}
 
-        {ticketsQuery.isSuccess && ticketsQuery.data.length === 0 ? (
+        {ticketsQuery.isSuccess && linearTickets.length === 0 ? (
           <div className="text-base-content/60 grid min-h-48 place-items-center px-4 text-center text-sm">
             No assigned tickets found.
           </div>
@@ -620,6 +668,28 @@ function mergeTicketTimeSummaries(
       totalTrackedSeconds: summary.totalTrackedSeconds,
     }
   })
+}
+
+function toLinearTicket(issue: AssignedIssueNode): LinearTicket {
+  return {
+    assignee: issue.assignee,
+    createdAt: issue.createdAt,
+    id: issue.id,
+    identifier: issue.identifier,
+    lastTrackedAt: null,
+    status: issue.state,
+    title: issue.title,
+    totalTrackedSeconds: null,
+    updatedAt: issue.updatedAt,
+  }
+}
+
+function normalizeLinearTicketFetchLimit(fetchLimit: number) {
+  if (!Number.isFinite(fetchLimit)) {
+    return linearTicketsPageSize
+  }
+
+  return Math.max(1, Math.floor(fetchLimit))
 }
 
 function getTicketTableCellClassName(columnId: string) {
