@@ -2,8 +2,6 @@ import type { ClockifyDefaultProject } from '../storage/config'
 
 import { clockify } from './client'
 
-export const clockifyProjectOptionsQueryKey = ['clockify', 'project-options'] as const
-
 export type ClockifyProjectOption = NonNullable<ClockifyDefaultProject>
 
 export async function getClockifyProjectOptions(): Promise<ClockifyProjectOption[]> {

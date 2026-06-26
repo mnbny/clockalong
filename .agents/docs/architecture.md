@@ -29,6 +29,19 @@
 
 - Logging follows the shared Rust/frontend diagnostics pattern documented in `logging.md`.
 
+## Frontend query keys
+
+TanStack Query cache keys live in `src/lib/query-client.ts` next to the shared `QueryClient`. Add new app-level keys to the exported `queryKeys` namespace instead of defining arrays in routes, components, hooks, or provider service modules.
+
+Use `QueryKeySegments<T>` for keys that need inputs:
+
+- `params` is for request parameters, usually a small object whose fields mirror the query function options.
+- `other` is for cache identity values that are not API params, such as local registries or objects used to derive merged client state.
+
+For reads, import `queryKeys` and pass the helper result directly to `useQuery`. For invalidation or broad refetch, use the namespace root helper without input segments, for example `queryKeys.clockify.ticketTimeSummaries()`, so all segmented variants under that prefix are matched.
+
+Provider service files should export fetch functions and DTO types, not query key constants. Cache identity belongs in one place; service modules stay focused on API behavior.
+
 ## Commands
 
 - `pnpm dev`: run the Vite dev server.

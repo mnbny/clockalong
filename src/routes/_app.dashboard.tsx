@@ -13,16 +13,13 @@ import humanizeDuration from 'humanize-duration'
 import { useCallback, useMemo } from 'react'
 
 import { appToast } from '../components/AppToaster'
-import { clockifyDashboardWidgetQueryKey, ClockifyWidget, getClockifyWidgetData } from '../components/ClockifyWidget'
+import { ClockifyWidget, getClockifyWidgetData } from '../components/ClockifyWidget'
 import { LinearIcon } from '../components/icons/LinearIcon'
+import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
 import { formatClockifyDescriptionTemplate } from '../services/clockify/description-template'
 import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../services/clockify/generated/clockify'
-import {
-  type ClockifyTicketTimeSummaries,
-  clockifyTicketTimeSummariesQueryKey,
-  getClockifyTicketTimeSummaries,
-} from '../services/clockify/ticket-summaries'
+import { type ClockifyTicketTimeSummaries, getClockifyTicketTimeSummaries } from '../services/clockify/ticket-summaries'
 import { getAssignedLinearTickets } from '../services/linear/tickets'
 import { sortLinearTickets } from '../services/linear/tickets-sorting'
 import { linearTicketSortOrderOptions } from '../services/storage/config'
@@ -123,7 +120,9 @@ function DashboardScreen() {
   const [linearTicketSortOrder, setLinearTicketSortOrder] = useStorage('linearTicketSortOrder')
   const [clockifyLinearEntryLinks, setClockifyLinearEntryLinks] = useStorage('clockifyLinearEntryLinks')
   const ticketsQuery = useQuery({
-    queryKey: ['linear', 'assigned-tickets', linearTicketFetchLimit, linearTicketSortBy],
+    queryKey: queryKeys.linear.assignedTickets({
+      params: { fetchLimit: linearTicketFetchLimit, sortBy: linearTicketSortBy },
+    }),
     queryFn: () =>
       getAssignedLinearTickets({
         fetchLimit: linearTicketFetchLimit,
@@ -132,7 +131,7 @@ function DashboardScreen() {
     refetchInterval: getLinearTicketRefetchIntervalMilliseconds(linearTicketRefetchInterval),
   })
   const ticketTimeSummariesQuery = useQuery({
-    queryKey: [...clockifyTicketTimeSummariesQueryKey, clockifyLinearEntryLinks],
+    queryKey: queryKeys.clockify.ticketTimeSummaries({ other: [clockifyLinearEntryLinks] }),
     queryFn: () => getClockifyTicketTimeSummaries({ clockifyLinearEntryLinks }),
     staleTime: 60_000,
   })
@@ -145,7 +144,7 @@ function DashboardScreen() {
     sortOrder: linearTicketSortOrder,
   })
   const clockifyWidgetQuery = useQuery({
-    queryKey: clockifyDashboardWidgetQueryKey,
+    queryKey: queryKeys.clockify.dashboardWidget,
     queryFn: getClockifyWidgetData,
     notifyOnChangeProps: ['data'],
     staleTime: 60_000,
@@ -220,8 +219,8 @@ function DashboardScreen() {
         ticketIdentifier: ticket.identifier,
       })
       appToast.success(`Started timer for ${ticket.identifier}`)
-      void queryClient.invalidateQueries({ queryKey: clockifyDashboardWidgetQueryKey })
-      void queryClient.invalidateQueries({ queryKey: clockifyTicketTimeSummariesQueryKey })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.dashboardWidget })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.ticketTimeSummaries() })
     },
   })
   const stopTrackingMutation = useMutation({
@@ -258,8 +257,8 @@ function DashboardScreen() {
         ticketIdentifier: ticket.identifier,
       })
       appToast.success(`Stopped timer for ${ticket.identifier}`)
-      void queryClient.invalidateQueries({ queryKey: clockifyDashboardWidgetQueryKey })
-      void queryClient.invalidateQueries({ queryKey: clockifyTicketTimeSummariesQueryKey })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.dashboardWidget })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.ticketTimeSummaries() })
     },
   })
   const pendingTicketId = startTrackingMutation.isPending ? startTrackingMutation.variables?.id : null
@@ -286,7 +285,7 @@ function DashboardScreen() {
   const refreshTickets = useCallback(() => {
     void Promise.all([
       ticketsQuery.refetch(),
-      queryClient.refetchQueries({ queryKey: clockifyTicketTimeSummariesQueryKey }),
+      queryClient.refetchQueries({ queryKey: queryKeys.clockify.ticketTimeSummaries() }),
     ])
   }, [queryClient, ticketsQuery])
   const ticketsRefreshing = ticketsQuery.isFetching || ticketTimeSummariesQuery.isFetching

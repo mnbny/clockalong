@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 
-import { clockifyProjectOptionsQueryKey, getClockifyProjectOptions } from '../services/clockify/projects'
+import { queryKeys } from '../lib/query-client'
+import { getClockifyProjectOptions } from '../services/clockify/projects'
 import { useStorage } from '../services/storage/useStorage'
 import { useAppAuth } from './useAppAuth'
 import { useAppInit } from './useAppInit'
@@ -18,7 +19,7 @@ export function useClockifyDefaults() {
 
   const projectsQuery = useQuery({
     enabled,
-    queryKey: clockifyProjectOptionsQueryKey,
+    queryKey: queryKeys.clockify.projectOptions,
     queryFn: getClockifyProjectOptions,
     retry: 1,
     staleTime: 5 * 60_000,

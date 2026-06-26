@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { appToast } from '../components/AppToaster'
 import { PageHeader } from '../components/PageHeader'
 import { useAppLogs } from '../hooks/useAppLogs'
+import { queryKeys } from '../lib/query-client'
 import {
   type ClockifyDescriptionTemplateToken,
   clockifyDescriptionTemplateTokenGroups,
@@ -27,11 +28,7 @@ import {
   getUnknownClockifyDescriptionTemplateTokens,
   sampleClockifyDescriptionTemplateValues,
 } from '../services/clockify/description-template'
-import {
-  clockifyProjectOptionsQueryKey,
-  getClockifyProjectOptions,
-  getClockifyProjectOptionValue,
-} from '../services/clockify/projects'
+import { getClockifyProjectOptions, getClockifyProjectOptionValue } from '../services/clockify/projects'
 import {
   type LinearTicketRefetchIntervalOption,
   linearTicketRefetchIntervalOptions,
@@ -70,7 +67,7 @@ function SettingsScreen() {
   const [appLogsDrawerOpen, setAppLogsDrawerOpen] = useState(false)
   const appLogs = useAppLogs({ enabled: appLogsDrawerOpen })
   const clockifyProjectsQuery = useQuery({
-    queryKey: clockifyProjectOptionsQueryKey,
+    queryKey: queryKeys.clockify.projectOptions,
     queryFn: getClockifyProjectOptions,
     retry: 1,
     staleTime: 5 * 60_000,

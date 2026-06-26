@@ -10,8 +10,6 @@ export type ClockifyTicketTimeSummary = {
 
 export type ClockifyTicketTimeSummaries = Record<string, ClockifyTicketTimeSummary>
 
-export const clockifyTicketTimeSummariesQueryKey = ['clockify', 'ticket-time-summaries'] as const
-
 const clockifyTimeEntriesPageSize = 100
 
 export async function getClockifyTicketTimeSummaries({

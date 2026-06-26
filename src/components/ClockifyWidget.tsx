@@ -8,6 +8,7 @@ import humanizeDuration from 'humanize-duration'
 import { useMemo } from 'react'
 import { useStopwatch } from 'react-timer-hook'
 
+import { queryKeys } from '../lib/query-client'
 import { clockify, clockifyReports } from '../services/clockify/client'
 import { ClockifyIcon } from './icons/ClockifyIcon'
 
@@ -22,8 +23,6 @@ export type ClockifyWidgetData = {
   runningEntry: TimeEntryWithRatesDtoV1 | null
 }
 
-export const clockifyDashboardWidgetQueryKey = ['clockify', 'dashboard-widget'] as const
-
 function ClockifyRefreshButton({ fetching }: { fetching: boolean }) {
   const queryClient = useQueryClient()
 
@@ -33,7 +32,7 @@ function ClockifyRefreshButton({ fetching }: { fetching: boolean }) {
       type="button"
       aria-label="Refresh Clockify"
       disabled={fetching}
-      onClick={() => void queryClient.refetchQueries({ queryKey: clockifyDashboardWidgetQueryKey })}>
+      onClick={() => void queryClient.refetchQueries({ queryKey: queryKeys.clockify.dashboardWidget })}>
       <IconRefresh className="size-4" />
     </button>
   )
@@ -57,7 +56,7 @@ const formatShortDuration = humanizeDuration.humanizer({
 
 export function ClockifyWidget() {
   const widgetQuery = useQuery({
-    queryKey: clockifyDashboardWidgetQueryKey,
+    queryKey: queryKeys.clockify.dashboardWidget,
     queryFn: getClockifyWidgetData,
     refetchInterval: 15 * 60_000,
     staleTime: 60_000,
