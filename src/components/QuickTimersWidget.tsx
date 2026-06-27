@@ -452,9 +452,9 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
         description: getErrorMessage(error),
       })
     },
-    onSuccess: (entry, values) => {
+    onSuccess: async (entry, values) => {
       if (entry.id) {
-        void setClockifyQuickTimerEntryLinks(current => ({
+        await setClockifyQuickTimerEntryLinks(current => ({
           ...current,
           [entry.id as string]: {
             quickTimerId,

@@ -322,25 +322,6 @@ function DashboardScreen() {
         projectId: clockifyDefaultProject.projectId,
       })
 
-      if (entry.id) {
-        clockifyTimerLog('start mutation saving linear entry link', {
-          clockifyEntryId: entry.id,
-          ticketIdentifier: ticket.identifier,
-        })
-
-        await setClockifyLinearEntryLinks(current => ({
-          ...current,
-          [entry.id as string]: {
-            linearIssueId: ticket.id,
-            linkedAt: new Date().toISOString(),
-          },
-        }))
-      } else {
-        clockifyTimerLog('start mutation returned entry without id', {
-          ticketIdentifier: ticket.identifier,
-        })
-      }
-
       return { entry, ticket }
     },
     onError: error => {
@@ -361,7 +342,26 @@ function DashboardScreen() {
         description: getErrorMessage(error),
       })
     },
-    onSuccess: ({ ticket }) => {
+    onSuccess: async ({ entry, ticket }) => {
+      if (entry.id) {
+        clockifyTimerLog('start mutation saving linear entry link', {
+          clockifyEntryId: entry.id,
+          ticketIdentifier: ticket.identifier,
+        })
+
+        await setClockifyLinearEntryLinks(current => ({
+          ...current,
+          [entry.id as string]: {
+            linearIssueId: ticket.id,
+            linkedAt: new Date().toISOString(),
+          },
+        }))
+      } else {
+        clockifyTimerLog('start mutation returned entry without id', {
+          ticketIdentifier: ticket.identifier,
+        })
+      }
+
       clockifyTimerLog('start mutation succeeded', {
         ticketIdentifier: ticket.identifier,
       })
@@ -443,8 +443,12 @@ function DashboardScreen() {
     [activeLinearIssueId, handleStartTracking, handleStopTracking, pendingTicketId, stoppingTicketId],
   )
   const refreshTickets = useCallback(() => {
-    void ticketsQuery.refetch()
-  }, [ticketsQuery])
+    void Promise.all([
+      ticketsQuery.refetch(),
+      queryClient.refetchQueries({ queryKey: queryKeys.clockify.runningEntry() }),
+      queryClient.refetchQueries({ queryKey: queryKeys.clockify.timeEntries() }),
+    ])
+  }, [queryClient, ticketsQuery])
   const ticketsRefreshing = ticketsQuery.isFetching
 
   const table = useReactTable({

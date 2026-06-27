@@ -6,11 +6,11 @@ Quick Timers are reusable ad hoc Clockify timer presets that live on the dashboa
 
 `src/components/QuickTimersWidget.tsx` owns the Quick Timers dashboard surface.
 
-The widget header stays visible when the feature is enabled. The body grid renders only when saved presets exist. Presets render as compact rectangular controls with an icon and label. The grid column count comes from `quickTimersColumns`.
+The widget header stays visible when the feature is enabled. The body grid renders only when saved presets exist. Presets render as compact rectangular controls with an icon and label. `quickTimersColumns` controls the grid column count.
 
-The pencil button enters edit mode and is shown only when at least one preset exists. In edit mode, preset cells pulse and use warning colors. Clicking a preset while editing immediately exits edit mode and opens the preset form hydrated from storage.
+The pencil button enters edit mode and only appears when at least one preset exists. In edit mode, preset cells pulse and use warning colors. Clicking a preset while editing exits edit mode and opens the preset form with the saved values.
 
-Clicking a preset outside edit mode opens the start form. The start form parses the preset description template and creates one input per template variable.
+Clicking a preset outside edit mode opens the start form. That form parses the preset description template and creates one input per template variable.
 
 ## Preset storage
 
@@ -23,7 +23,7 @@ Each preset stores:
 - `descriptionTemplate`: Clockify description template used when starting the timer.
 - `icon`: optional SVG string rendered in the preset control, with the Bolt icon as fallback.
 
-Do not store Clockify workspace/project data on the preset. Quick Timers use the global `clockifyDefaultProject` and `clockifyBillable` settings when starting timers.
+Do not store Clockify workspace or project data on the preset. Quick Timers use the global `clockifyDefaultProject` and `clockifyBillable` settings when starting timers.
 
 ## Template variables
 
@@ -31,7 +31,7 @@ Quick Timer description templates use the shared template utility in `src/utils/
 
 Variables use single braces, such as `{name}` or `{clientName}`. The start form parses variables with `parseTemplateTokens` and formats the final Clockify description with `formatTemplate`.
 
-Field labels should use `capitalCase` from `change-case` directly at the render site.
+Use `capitalCase` from `change-case` for field labels at the render site.
 
 ## Start value cache
 
@@ -49,7 +49,7 @@ The cache is not an active-timer registry. It only remembers form values.
 
 `clockifyQuickTimerEntryLinks` maps Clockify time entry ids to Quick Timer ownership.
 
-The registry value intentionally stays minimal:
+The registry value stays small:
 
 ```ts
 {
@@ -60,7 +60,7 @@ The registry value intentionally stays minimal:
 
 Do not duplicate the Clockify description, project, task, duration, or timestamps in this registry. Clockify owns the actual time entry data. The registry only answers which preset created a Clockify entry and which template values were submitted.
 
-The dashboard derives the active Quick Timer from the current running Clockify entry id. Active preset cells should use the same accent pulse treatment as active Linear rows.
+The dashboard derives the active Quick Timer from the current running Clockify entry id. Active preset cells use the same accent pulse treatment as active Linear rows.
 
 ## Clockify start and stop
 
