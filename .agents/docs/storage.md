@@ -12,6 +12,7 @@ The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults 
 - `clockifyDescriptionTemplate`: Clockify time-entry description format for Linear issue variables.
 - `clockifyDescriptionTemplateFallback`: replacement text for missing values in the Clockify description template.
 - `clockifyLinearEntryLinks`: local mapping from Clockify time entry IDs to canonical Linear issue IDs.
+- `clockifyQuickTimerEntryLinks`: local mapping from Clockify time entry IDs to Quick Timer preset IDs and submitted template values.
 - `defaultView`: temporary landing view preference for the app shell.
 - `density`: temporary numeric UI density value.
 - `desktopAlerts`: temporary preference for desktop notifications.
@@ -20,6 +21,10 @@ The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults 
 - `linearTicketRefetchInterval`: how often assigned Linear tickets refetch on the dashboard. Default is `30m`.
 - `linearTicketSortBy`: Linear pagination ordering field for ticket fetches. Values mirror Linear `PaginationOrderBy` support currently exposed by the app: `createdAt`, `updatedAt`.
 - `linearTicketSortOrder`: client-side ticket ordering mode. Values are `custom`, `status`, `created`, `updated`, and `alphabetical`.
+- `quickTimersColumns`: number of Quick Timer columns to show in the dashboard grid. Default is `6`.
+- `quickTimersEnabled`: whether the Quick Timers dashboard feature is enabled. Default is `true`.
+- `quickTimers`: saved ad hoc Quick Timer presets.
+- `quickTimersCache`: last submitted template variable values per Quick Timer preset.
 - `theme`: active daisyUI theme and native window appearance.
 - `refreshInterval`: temporary background refresh preference.
 

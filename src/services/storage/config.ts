@@ -22,6 +22,11 @@ export type ClockifyLinearEntryLink = {
   linkedAt: string
 }
 export type ClockifyLinearEntryLinkRegistry = Record<string, ClockifyLinearEntryLink>
+export type ClockifyQuickTimerEntryLink = {
+  quickTimerId: string
+  values: Record<string, string>
+}
+export type ClockifyQuickTimerEntryLinkRegistry = Record<string, ClockifyQuickTimerEntryLink>
 export type ClockifyDefaultProject = {
   projectId: string
   projectName: string
@@ -33,6 +38,15 @@ export type DefaultViewOption = (typeof defaultViewOptions)[number]
 export type LinearTicketRefetchIntervalOption = (typeof linearTicketRefetchIntervalOptions)[number]
 export type LinearTicketSortByOption = (typeof linearTicketSortByOptions)[number]
 export type LinearTicketSortOrderOption = (typeof linearTicketSortOrderOptions)[number]
+export type QuickTimerPreset = {
+  descriptionTemplate: string
+  icon: string
+  id: string
+  name: string
+}
+export type QuickTimersCacheEntry = {
+  id: string
+} & Record<string, string>
 export type RefreshIntervalOption = (typeof refreshIntervalOptions)[number]
 
 const storageConfig = {
@@ -79,6 +93,31 @@ const storageConfig = {
   clockifyLinearEntryLinks: {
     type: 'object',
     default: {} as ClockifyLinearEntryLinkRegistry,
+    version: 1,
+  },
+  clockifyQuickTimerEntryLinks: {
+    type: 'object',
+    default: {} as ClockifyQuickTimerEntryLinkRegistry,
+    version: 1,
+  },
+  quickTimersEnabled: {
+    type: 'boolean',
+    default: true,
+    version: 1,
+  },
+  quickTimersColumns: {
+    type: 'number',
+    default: 6,
+    version: 1,
+  },
+  quickTimers: {
+    type: 'object',
+    default: [] as QuickTimerPreset[],
+    version: 1,
+  },
+  quickTimersCache: {
+    type: 'object',
+    default: [] as QuickTimersCacheEntry[],
     version: 1,
   },
   displayName: {

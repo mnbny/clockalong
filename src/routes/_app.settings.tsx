@@ -53,6 +53,8 @@ function SettingsScreen() {
   const [theme, setTheme] = useStorage('theme')
   const [clockifyBillable, setClockifyBillable] = useStorage('clockifyBillable')
   const [clockifyDefaultProject, setClockifyDefaultProject] = useStorage('clockifyDefaultProject')
+  const [quickTimersEnabled, setQuickTimersEnabled] = useStorage('quickTimersEnabled')
+  const [quickTimersColumns, setQuickTimersColumns] = useStorage('quickTimersColumns')
   const [linearTicketFetchLimit, setLinearTicketFetchLimit] = useStorage('linearTicketFetchLimit')
   const [linearTicketRefetchInterval, setLinearTicketRefetchInterval] = useStorage('linearTicketRefetchInterval')
   const [linearTicketSortBy, setLinearTicketSortBy] = useStorage('linearTicketSortBy')
@@ -203,6 +205,35 @@ function SettingsScreen() {
           />
 
           <div className="flex w-full flex-col gap-10">
+            <SettingsSection title="Quick Timers">
+              <SettingsRow label="Enabled" description="Show Quick Timers for starting reusable Clockify timers.">
+                <input
+                  aria-label="Enable Quick Timers"
+                  checked={quickTimersEnabled}
+                  className="toggle toggle-primary"
+                  type="checkbox"
+                  onChange={event => void setQuickTimersEnabled(event.currentTarget.checked)}
+                />
+              </SettingsRow>
+
+              <SettingsRow label="Columns" description="Number of Quick Timer columns shown on the dashboard.">
+                <label className="input input-primary w-full max-w-32">
+                  <input
+                    aria-label="Quick Timer columns"
+                    className="min-w-0 grow text-sm"
+                    max={12}
+                    min={1}
+                    step={1}
+                    type="number"
+                    value={quickTimersColumns}
+                    onChange={event =>
+                      void setQuickTimersColumns(normalizeBoundedInteger(event.currentTarget.value, 6, 1, 12))
+                    }
+                  />
+                </label>
+              </SettingsRow>
+            </SettingsSection>
+
             <SettingsSection title="Linear">
               <SettingsRow label="Ticket fetch limit" description="Maximum Linear tickets to load for ticket lists.">
                 <label className="input input-primary w-full max-w-56">
@@ -818,6 +849,16 @@ function normalizePositiveInteger(value: string, fallback: number) {
   return Math.max(1, Math.floor(parsedValue))
 }
 
+function normalizeBoundedInteger(value: string, fallback: number, min: number, max: number) {
+  const parsedValue = Number(value)
+
+  if (!Number.isFinite(parsedValue)) {
+    return fallback
+  }
+
+  return Math.min(max, Math.max(min, Math.floor(parsedValue)))
+}
+
 function getThemeLabel(theme: ThemeOption) {
   switch (theme.theme) {
     case 'abyss':
@@ -882,6 +923,7 @@ const customFrontendLogPrefixes = [
   '[dev tools]',
   '[linear auth]',
   '[linear tickets]',
+  '[quick timers]',
   '[sign in]',
   '[storage]',
   '[storage hook]',

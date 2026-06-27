@@ -2,14 +2,23 @@ import type { TimeEntryWithRatesDtoV1 } from '../services/clockify/generated/clo
 import type { TimeEntrySummaryReportDto } from '../services/clockify/generated/reports'
 
 import { formatCurrency } from '@automattic/format-currency'
-import { IconCalendarDue, IconCalendarMonth, IconCalendarWeek, IconClockPlay, IconRefresh } from '@tabler/icons-react'
-import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  IconCalendarDue,
+  IconCalendarMonth,
+  IconCalendarWeek,
+  IconClockPlay,
+  IconPlayerStop,
+  IconRefresh,
+} from '@tabler/icons-react'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import humanizeDuration from 'humanize-duration'
 import { useMemo } from 'react'
 import { useStopwatch } from 'react-timer-hook'
 
 import { queryKeys } from '../lib/query-client'
 import { clockify, clockifyReports } from '../services/clockify/client'
+import { getErrorMessage } from '../utils/errors'
+import { appToast } from './AppToaster'
 import { ClockifyIcon } from './icons/ClockifyIcon'
 
 type ClockifyPeriodStat = {
@@ -61,6 +70,7 @@ const formatShortDuration = humanizeDuration.humanizer({
 })
 
 export function ClockifyWidget() {
+  const queryClient = useQueryClient()
   const userQuery = useQuery({
     queryKey: queryKeys.clockify.loggedUser,
     queryFn: () => clockify.getLoggedUser(),
@@ -158,6 +168,24 @@ export function ClockifyWidget() {
     workspacesQuery.isFetching ||
     runningEntryQuery.isFetching ||
     reportQueries.some(query => query.isFetching)
+  const stopRunningEntryMutation = useMutation({
+    mutationFn: (entry: TimeEntryWithRatesDtoV1) =>
+      clockify.stopRunningTimeEntry(
+        { end: new Date().toISOString() },
+        { params: { userId: entry.userId ?? '', workspaceId: entry.workspaceId ?? '' } },
+      ),
+    onError: error => {
+      appToast.error('Could not stop Clockify timer', {
+        description: getErrorMessage(error),
+      })
+    },
+    onSuccess: () => {
+      appToast.success('Stopped Clockify timer')
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.timeEntries() })
+    },
+  })
 
   return (
     <section className="border-base-content/5 bg-base-100 rounded-box overflow-hidden border">
@@ -187,6 +215,8 @@ export function ClockifyWidget() {
             <RunningTimerView
               key={runningEntry.id ?? runningEntry.timeInterval?.start ?? 'running-entry'}
               entry={runningEntry}
+              stopping={stopRunningEntryMutation.isPending}
+              onStop={entry => stopRunningEntryMutation.mutate(entry)}
             />
           ) : (
             <>
@@ -238,16 +268,40 @@ function PeriodStatIcon({ label }: { label: string }) {
   }
 }
 
-function RunningTimerView({ entry }: { entry: TimeEntryWithRatesDtoV1 }) {
+function RunningTimerView({
+  entry,
+  onStop,
+  stopping,
+}: {
+  entry: TimeEntryWithRatesDtoV1
+  onStop: (entry: TimeEntryWithRatesDtoV1) => void
+  stopping: boolean
+}) {
   return (
-    <>
-      <div className="text-base-content/60 flex items-center gap-2 text-xs font-medium tracking-wide uppercase">
-        <IconClockPlay className="size-4" />
-        Timer
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+      <div className="grid min-w-0 gap-2">
+        <div className="text-base-content/60 flex items-center gap-2 text-xs font-medium tracking-wide uppercase">
+          <IconClockPlay className="size-4" />
+          Timer
+        </div>
+        <RunningTimerElapsed start={entry.timeInterval?.start} />
+        <div className="text-base-content/60 truncate text-sm">{getEntryTitle(entry)}</div>
       </div>
-      <RunningTimerElapsed start={entry.timeInterval?.start} />
-      <div className="text-base-content/60 truncate text-sm">{getEntryTitle(entry)}</div>
-    </>
+
+      <button
+        aria-label="Stop Clockify timer"
+        className="time-tracking-action-button btn btn-square btn-ghost text-error hover:bg-error/10 size-10 min-h-10"
+        title="Stop Clockify timer"
+        type="button"
+        disabled={stopping}
+        onClick={() => onStop(entry)}>
+        {stopping ? (
+          <span className="loading loading-spinner loading-xs" />
+        ) : (
+          <IconPlayerStop className="pointer-events-none size-5" />
+        )}
+      </button>
+    </div>
   )
 }
 

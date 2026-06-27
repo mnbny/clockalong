@@ -88,6 +88,10 @@
   .tracking-active-row > :is(td, th) {
     animation: tracking-active-row-background 1.6s ease-in-out infinite;
   }
+
+  .tracking-active-surface {
+    animation: tracking-active-row-background 1.6s ease-in-out infinite;
+  }
 }
 
 @keyframes tracking-active-row-background {

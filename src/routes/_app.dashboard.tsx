@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo } from 'react'
 import { appToast } from '../components/AppToaster'
 import { ClockifyWidget } from '../components/ClockifyWidget'
 import { LinearIcon } from '../components/icons/LinearIcon'
+import { QuickTimersWidget } from '../components/QuickTimersWidget'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
 import { formatClockifyDescriptionTemplate } from '../services/clockify/description-template'
@@ -119,6 +120,8 @@ function getTicketTableMeta(meta: unknown): TicketTableMeta {
   return meta as TicketTableMeta
 }
 
+const ticketTableCoreRowModel = getCoreRowModel<LinearTicket>()
+
 function DashboardScreen() {
   const queryClient = useQueryClient()
   const [clockifyBillable] = useStorage('clockifyBillable')
@@ -130,6 +133,8 @@ function DashboardScreen() {
   const [linearTicketSortBy] = useStorage('linearTicketSortBy')
   const [linearTicketSortOrder, setLinearTicketSortOrder] = useStorage('linearTicketSortOrder')
   const [clockifyLinearEntryLinks, setClockifyLinearEntryLinks] = useStorage('clockifyLinearEntryLinks')
+  const [clockifyQuickTimerEntryLinks] = useStorage('clockifyQuickTimerEntryLinks')
+  const [quickTimersEnabled] = useStorage('quickTimersEnabled')
   const normalizedLinearTicketFetchLimit = normalizeLinearTicketFetchLimit(linearTicketFetchLimit)
   const initialAssignedIssuesPageParam: AssignedIssuesPageParam = { after: null, fetchedCount: 0 }
   const ticketsQuery = useInfiniteQuery({
@@ -283,12 +288,17 @@ function DashboardScreen() {
     () => mergeTicketTimeSummaries(linearTickets, ticketTimeSummaries),
     [linearTickets, ticketTimeSummaries],
   )
-  const tickets = sortLinearTickets(ticketsWithTracking, {
-    clockifyLinearEntryLinks,
-    sortOrder: linearTicketSortOrder,
-  })
+  const tickets = useMemo(
+    () =>
+      sortLinearTickets(ticketsWithTracking, {
+        clockifyLinearEntryLinks,
+        sortOrder: linearTicketSortOrder,
+      }),
+    [clockifyLinearEntryLinks, linearTicketSortOrder, ticketsWithTracking],
+  )
   const runningEntryId = runningEntry?.id ?? null
   const activeLinearIssueId = runningEntryId ? clockifyLinearEntryLinks[runningEntryId]?.linearIssueId : undefined
+  const activeQuickTimerId = runningEntryId ? clockifyQuickTimerEntryLinks[runningEntryId]?.quickTimerId : undefined
   const startTrackingMutation = useMutation({
     mutationFn: async (ticket: LinearTicket) => {
       clockifyTimerLog('start mutation requested', {
@@ -421,6 +431,17 @@ function DashboardScreen() {
     },
     [runningEntryId, stopTrackingMutation],
   )
+  const tableMeta = useMemo(
+    () =>
+      ({
+        activeLinearIssueId,
+        onStartTracking: handleStartTracking,
+        onStopTracking: handleStopTracking,
+        pendingTicketId,
+        stoppingTicketId,
+      }) satisfies TicketTableMeta,
+    [activeLinearIssueId, handleStartTracking, handleStopTracking, pendingTicketId, stoppingTicketId],
+  )
   const refreshTickets = useCallback(() => {
     void ticketsQuery.refetch()
   }, [ticketsQuery])
@@ -429,19 +450,14 @@ function DashboardScreen() {
   const table = useReactTable({
     columns: ticketColumns,
     data: tickets,
-    getCoreRowModel: getCoreRowModel(),
-    meta: {
-      activeLinearIssueId,
-      onStartTracking: handleStartTracking,
-      onStopTracking: handleStopTracking,
-      pendingTicketId,
-      stoppingTicketId,
-    } satisfies TicketTableMeta,
+    getCoreRowModel: ticketTableCoreRowModel,
+    meta: tableMeta,
   })
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-4">
       <ClockifyWidget />
+      {quickTimersEnabled ? <QuickTimersWidget activeQuickTimerId={activeQuickTimerId} /> : null}
 
       <div className="border-base-content/5 bg-base-100 rounded-box overflow-hidden border">
         <header className="border-base-content/5 flex min-w-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
