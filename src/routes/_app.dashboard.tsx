@@ -1,29 +1,31 @@
-import type { LinearTicket, LinearTicketStatus } from '../services/linear/tickets'
+import type { AssignedIssueNode, LinearTicket, LinearTicketStatus } from '../services/linear/tickets'
 import type { LinearTicketRefetchIntervalOption, LinearTicketSortOrderOption } from '../services/storage/config'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
 
 import { IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import humanizeDuration from 'humanize-duration'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 
 import { appToast } from '../components/AppToaster'
-import { clockifyDashboardWidgetQueryKey, ClockifyWidget, getClockifyWidgetData } from '../components/ClockifyWidget'
+import { ClockifyWidget } from '../components/ClockifyWidget'
 import { LinearIcon } from '../components/icons/LinearIcon'
+import { QuickTimersWidget } from '../components/QuickTimersWidget'
+import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
 import { formatClockifyDescriptionTemplate } from '../services/clockify/description-template'
 import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../services/clockify/generated/clockify'
 import {
   type ClockifyTicketTimeSummaries,
-  clockifyTicketTimeSummariesQueryKey,
-  getClockifyTicketTimeSummaries,
+  getClockifyTicketSummaryStart,
+  summarizeClockifyTicketTimeEntries,
 } from '../services/clockify/ticket-summaries'
-import { getAssignedLinearTickets } from '../services/linear/tickets'
+import { linearTicketsPageSize, requestAssignedIssuesPage } from '../services/linear/tickets'
 import { sortLinearTickets } from '../services/linear/tickets-sorting'
 import { linearTicketSortOrderOptions } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
@@ -51,6 +53,13 @@ const formatTrackedDuration = humanizeDuration.humanizer({
   spacer: '',
   units: ['h', 'm', 's'],
 })
+
+const clockifyTimeEntriesPageSize = 100
+
+type AssignedIssuesPageParam = {
+  after: string | null
+  fetchedCount: number
+}
 
 type TicketTableMeta = {
   activeLinearIssueId: string | undefined
@@ -111,6 +120,8 @@ function getTicketTableMeta(meta: unknown): TicketTableMeta {
   return meta as TicketTableMeta
 }
 
+const ticketTableCoreRowModel = getCoreRowModel<LinearTicket>()
+
 function DashboardScreen() {
   const queryClient = useQueryClient()
   const [clockifyBillable] = useStorage('clockifyBillable')
@@ -122,37 +133,172 @@ function DashboardScreen() {
   const [linearTicketSortBy] = useStorage('linearTicketSortBy')
   const [linearTicketSortOrder, setLinearTicketSortOrder] = useStorage('linearTicketSortOrder')
   const [clockifyLinearEntryLinks, setClockifyLinearEntryLinks] = useStorage('clockifyLinearEntryLinks')
-  const ticketsQuery = useQuery({
-    queryKey: ['linear', 'assigned-tickets', linearTicketFetchLimit, linearTicketSortBy],
-    queryFn: () =>
-      getAssignedLinearTickets({
-        fetchLimit: linearTicketFetchLimit,
-        sortBy: linearTicketSortBy,
+  const [clockifyQuickTimerEntryLinks] = useStorage('clockifyQuickTimerEntryLinks')
+  const [quickTimersEnabled] = useStorage('quickTimersEnabled')
+  const normalizedLinearTicketFetchLimit = normalizeLinearTicketFetchLimit(linearTicketFetchLimit)
+  const initialAssignedIssuesPageParam: AssignedIssuesPageParam = { after: null, fetchedCount: 0 }
+  const ticketsQuery = useInfiniteQuery({
+    queryKey: queryKeys.linear.assignedTickets({
+      params: { fetchLimit: normalizedLinearTicketFetchLimit, sortBy: linearTicketSortBy },
+    }),
+    queryFn: ({ pageParam }) =>
+      requestAssignedIssuesPage({
+        after: pageParam.after,
+        first: Math.min(linearTicketsPageSize, normalizedLinearTicketFetchLimit - pageParam.fetchedCount),
+        orderBy: linearTicketSortBy,
       }),
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+      const page = lastPage.data?.viewer.assignedIssues
+
+      if (!page?.pageInfo.hasNextPage || !page.pageInfo.endCursor || page.nodes.length === 0) {
+        return undefined
+      }
+
+      const fetchedCount = lastPageParam.fetchedCount + page.nodes.length
+
+      if (fetchedCount >= normalizedLinearTicketFetchLimit) {
+        return undefined
+      }
+
+      return {
+        after: page.pageInfo.endCursor,
+        fetchedCount,
+      } satisfies AssignedIssuesPageParam
+    },
+    initialPageParam: initialAssignedIssuesPageParam,
     refetchInterval: getLinearTicketRefetchIntervalMilliseconds(linearTicketRefetchInterval),
   })
-  const ticketTimeSummariesQuery = useQuery({
-    queryKey: [...clockifyTicketTimeSummariesQueryKey, clockifyLinearEntryLinks],
-    queryFn: () => getClockifyTicketTimeSummaries({ clockifyLinearEntryLinks }),
+  const clockifyUserQuery = useQuery({
+    queryKey: queryKeys.clockify.loggedUser,
+    queryFn: () => clockify.getLoggedUser(),
+    staleTime: 5 * 60_000,
+  })
+  const clockifyWorkspacesQuery = useQuery({
+    queryKey: queryKeys.clockify.workspaces,
+    queryFn: () => clockify.getWorkspacesOfUser(),
+    staleTime: 5 * 60_000,
+  })
+  const selectedClockifyWorkspace = useMemo(() => {
+    const user = clockifyUserQuery.data
+    const workspaces = clockifyWorkspacesQuery.data
+
+    if (!user || !workspaces?.length) {
+      return null
+    }
+
+    return (
+      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
+      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
+      workspaces[0]
+    )
+  }, [clockifyUserQuery.data, clockifyWorkspacesQuery.data])
+  const runningEntryQuery = useQuery({
+    enabled: Boolean(clockifyUserQuery.data?.id && selectedClockifyWorkspace?.id),
+    queryKey: queryKeys.clockify.runningEntry({
+      params: { userId: clockifyUserQuery.data?.id, workspaceId: selectedClockifyWorkspace?.id },
+    }),
+    queryFn: () =>
+      clockify.getTimeEntries({
+        params: { workspaceId: selectedClockifyWorkspace!.id!, userId: clockifyUserQuery.data!.id! },
+        queries: {
+          hydrated: true,
+          'in-progress': 'true',
+          page: 1,
+          'page-size': 1,
+        },
+      }),
+    refetchInterval: 15 * 60_000,
     staleTime: 60_000,
   })
-  const ticketsWithTracking = useMemo(
-    () => mergeTicketTimeSummaries(ticketsQuery.data ?? [], ticketTimeSummariesQuery.data ?? {}),
-    [ticketTimeSummariesQuery.data, ticketsQuery.data],
+  const runningEntry = useMemo(() => {
+    const runningEntries = runningEntryQuery.data ?? []
+    return runningEntries.find(entry => entry.userId === clockifyUserQuery.data?.id) ?? runningEntries[0] ?? null
+  }, [clockifyUserQuery.data?.id, runningEntryQuery.data])
+  const summaryStart = useMemo(
+    () => getClockifyTicketSummaryStart(clockifyLinearEntryLinks),
+    [clockifyLinearEntryLinks],
   )
-  const tickets = sortLinearTickets(ticketsWithTracking, {
-    clockifyLinearEntryLinks,
-    sortOrder: linearTicketSortOrder,
-  })
-  const clockifyWidgetQuery = useQuery({
-    queryKey: clockifyDashboardWidgetQueryKey,
-    queryFn: getClockifyWidgetData,
-    notifyOnChangeProps: ['data'],
+  const timeEntriesQuery = useInfiniteQuery({
+    enabled: Boolean(clockifyUserQuery.data?.id && selectedClockifyWorkspace?.id && summaryStart),
+    queryKey: queryKeys.clockify.timeEntries({
+      params: {
+        start: summaryStart?.toISOString(),
+        userId: clockifyUserQuery.data?.id,
+        workspaceId: selectedClockifyWorkspace?.id,
+      },
+    }),
+    queryFn: ({ pageParam }) =>
+      clockify.getTimeEntries({
+        params: { workspaceId: selectedClockifyWorkspace!.id!, userId: clockifyUserQuery.data!.id! },
+        queries: {
+          end: new Date().toISOString(),
+          hydrated: true,
+          page: pageParam,
+          'page-size': clockifyTimeEntriesPageSize,
+          start: summaryStart!.toISOString(),
+        },
+      }),
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.length === clockifyTimeEntriesPageSize ? lastPageParam + 1 : undefined,
+    initialPageParam: 1,
     staleTime: 60_000,
   })
-  const runningEntry = clockifyWidgetQuery.data?.runningEntry ?? null
+  const {
+    fetchNextPage: fetchNextTimeEntriesPage,
+    hasNextPage: hasNextTimeEntriesPage,
+    isError: timeEntriesError,
+    isFetchingNextPage: fetchingNextTimeEntriesPage,
+  } = timeEntriesQuery
+
+  useEffect(() => {
+    if (!hasNextTimeEntriesPage || fetchingNextTimeEntriesPage || timeEntriesError) {
+      return
+    }
+
+    void fetchNextTimeEntriesPage()
+  }, [fetchNextTimeEntriesPage, fetchingNextTimeEntriesPage, hasNextTimeEntriesPage, timeEntriesError])
+  const {
+    fetchNextPage: fetchNextTicketsPage,
+    hasNextPage: hasNextTicketsPage,
+    isError: ticketsError,
+    isFetchingNextPage: fetchingNextTicketsPage,
+  } = ticketsQuery
+
+  useEffect(() => {
+    if (!hasNextTicketsPage || fetchingNextTicketsPage || ticketsError) {
+      return
+    }
+
+    void fetchNextTicketsPage()
+  }, [fetchNextTicketsPage, fetchingNextTicketsPage, hasNextTicketsPage, ticketsError])
+  const linearTickets = useMemo(
+    () =>
+      (ticketsQuery.data?.pages.flatMap(page => page.data?.viewer.assignedIssues.nodes ?? []) ?? [])
+        .slice(0, normalizedLinearTicketFetchLimit)
+        .map(toLinearTicket),
+    [normalizedLinearTicketFetchLimit, ticketsQuery.data],
+  )
+  const ticketTimeSummaries = useMemo(() => {
+    return summarizeClockifyTicketTimeEntries({
+      clockifyLinearEntryLinks,
+      entries: [...(timeEntriesQuery.data?.pages.flat() ?? []), ...(runningEntryQuery.data ?? [])],
+    })
+  }, [clockifyLinearEntryLinks, runningEntryQuery.data, timeEntriesQuery.data])
+  const ticketsWithTracking = useMemo(
+    () => mergeTicketTimeSummaries(linearTickets, ticketTimeSummaries),
+    [linearTickets, ticketTimeSummaries],
+  )
+  const tickets = useMemo(
+    () =>
+      sortLinearTickets(ticketsWithTracking, {
+        clockifyLinearEntryLinks,
+        sortOrder: linearTicketSortOrder,
+      }),
+    [clockifyLinearEntryLinks, linearTicketSortOrder, ticketsWithTracking],
+  )
   const runningEntryId = runningEntry?.id ?? null
   const activeLinearIssueId = runningEntryId ? clockifyLinearEntryLinks[runningEntryId]?.linearIssueId : undefined
+  const activeQuickTimerId = runningEntryId ? clockifyQuickTimerEntryLinks[runningEntryId]?.quickTimerId : undefined
   const startTrackingMutation = useMutation({
     mutationFn: async (ticket: LinearTicket) => {
       clockifyTimerLog('start mutation requested', {
@@ -176,25 +322,6 @@ function DashboardScreen() {
         projectId: clockifyDefaultProject.projectId,
       })
 
-      if (entry.id) {
-        clockifyTimerLog('start mutation saving linear entry link', {
-          clockifyEntryId: entry.id,
-          ticketIdentifier: ticket.identifier,
-        })
-
-        await setClockifyLinearEntryLinks(current => ({
-          ...current,
-          [entry.id as string]: {
-            linearIssueId: ticket.id,
-            linkedAt: new Date().toISOString(),
-          },
-        }))
-      } else {
-        clockifyTimerLog('start mutation returned entry without id', {
-          ticketIdentifier: ticket.identifier,
-        })
-      }
-
       return { entry, ticket }
     },
     onError: error => {
@@ -215,13 +342,33 @@ function DashboardScreen() {
         description: getErrorMessage(error),
       })
     },
-    onSuccess: ({ ticket }) => {
+    onSuccess: async ({ entry, ticket }) => {
+      if (entry.id) {
+        clockifyTimerLog('start mutation saving linear entry link', {
+          clockifyEntryId: entry.id,
+          ticketIdentifier: ticket.identifier,
+        })
+
+        await setClockifyLinearEntryLinks(current => ({
+          ...current,
+          [entry.id as string]: {
+            linearIssueId: ticket.id,
+            linkedAt: new Date().toISOString(),
+          },
+        }))
+      } else {
+        clockifyTimerLog('start mutation returned entry without id', {
+          ticketIdentifier: ticket.identifier,
+        })
+      }
+
       clockifyTimerLog('start mutation succeeded', {
         ticketIdentifier: ticket.identifier,
       })
       appToast.success(`Started timer for ${ticket.identifier}`)
-      void queryClient.invalidateQueries({ queryKey: clockifyDashboardWidgetQueryKey })
-      void queryClient.invalidateQueries({ queryKey: clockifyTicketTimeSummariesQueryKey })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.timeEntries() })
     },
   })
   const stopTrackingMutation = useMutation({
@@ -258,8 +405,9 @@ function DashboardScreen() {
         ticketIdentifier: ticket.identifier,
       })
       appToast.success(`Stopped timer for ${ticket.identifier}`)
-      void queryClient.invalidateQueries({ queryKey: clockifyDashboardWidgetQueryKey })
-      void queryClient.invalidateQueries({ queryKey: clockifyTicketTimeSummariesQueryKey })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.timeEntries() })
     },
   })
   const pendingTicketId = startTrackingMutation.isPending ? startTrackingMutation.variables?.id : null
@@ -283,30 +431,37 @@ function DashboardScreen() {
     },
     [runningEntryId, stopTrackingMutation],
   )
+  const tableMeta = useMemo(
+    () =>
+      ({
+        activeLinearIssueId,
+        onStartTracking: handleStartTracking,
+        onStopTracking: handleStopTracking,
+        pendingTicketId,
+        stoppingTicketId,
+      }) satisfies TicketTableMeta,
+    [activeLinearIssueId, handleStartTracking, handleStopTracking, pendingTicketId, stoppingTicketId],
+  )
   const refreshTickets = useCallback(() => {
     void Promise.all([
       ticketsQuery.refetch(),
-      queryClient.refetchQueries({ queryKey: clockifyTicketTimeSummariesQueryKey }),
+      queryClient.refetchQueries({ queryKey: queryKeys.clockify.runningEntry() }),
+      queryClient.refetchQueries({ queryKey: queryKeys.clockify.timeEntries() }),
     ])
   }, [queryClient, ticketsQuery])
-  const ticketsRefreshing = ticketsQuery.isFetching || ticketTimeSummariesQuery.isFetching
+  const ticketsRefreshing = ticketsQuery.isFetching
 
   const table = useReactTable({
     columns: ticketColumns,
     data: tickets,
-    getCoreRowModel: getCoreRowModel(),
-    meta: {
-      activeLinearIssueId,
-      onStartTracking: handleStartTracking,
-      onStopTracking: handleStopTracking,
-      pendingTicketId,
-      stoppingTicketId,
-    } satisfies TicketTableMeta,
+    getCoreRowModel: ticketTableCoreRowModel,
+    meta: tableMeta,
   })
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-4">
       <ClockifyWidget />
+      {quickTimersEnabled ? <QuickTimersWidget activeQuickTimerId={activeQuickTimerId} /> : null}
 
       <div className="border-base-content/5 bg-base-100 rounded-box overflow-hidden border">
         <header className="border-base-content/5 flex min-w-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
@@ -396,7 +551,7 @@ function DashboardScreen() {
           </div>
         ) : null}
 
-        {ticketsQuery.isSuccess && ticketsQuery.data.length === 0 ? (
+        {ticketsQuery.isSuccess && linearTickets.length === 0 ? (
           <div className="text-base-content/60 grid min-h-48 place-items-center px-4 text-center text-sm">
             No assigned tickets found.
           </div>
@@ -533,6 +688,28 @@ function mergeTicketTimeSummaries(
       totalTrackedSeconds: summary.totalTrackedSeconds,
     }
   })
+}
+
+function toLinearTicket(issue: AssignedIssueNode): LinearTicket {
+  return {
+    assignee: issue.assignee,
+    createdAt: issue.createdAt,
+    id: issue.id,
+    identifier: issue.identifier,
+    lastTrackedAt: null,
+    status: issue.state,
+    title: issue.title,
+    totalTrackedSeconds: null,
+    updatedAt: issue.updatedAt,
+  }
+}
+
+function normalizeLinearTicketFetchLimit(fetchLimit: number) {
+  if (!Number.isFinite(fetchLimit)) {
+    return linearTicketsPageSize
+  }
+
+  return Math.max(1, Math.floor(fetchLimit))
 }
 
 function getTicketTableCellClassName(columnId: string) {

@@ -18,6 +18,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { appToast } from '../components/AppToaster'
 import { PageHeader } from '../components/PageHeader'
 import { useAppLogs } from '../hooks/useAppLogs'
+import { queryKeys } from '../lib/query-client'
+import { clockify } from '../services/clockify/client'
 import {
   type ClockifyDescriptionTemplateToken,
   clockifyDescriptionTemplateTokenGroups,
@@ -27,11 +29,6 @@ import {
   getUnknownClockifyDescriptionTemplateTokens,
   sampleClockifyDescriptionTemplateValues,
 } from '../services/clockify/description-template'
-import {
-  clockifyProjectOptionsQueryKey,
-  getClockifyProjectOptions,
-  getClockifyProjectOptionValue,
-} from '../services/clockify/projects'
 import {
   type LinearTicketRefetchIntervalOption,
   linearTicketRefetchIntervalOptions,
@@ -56,6 +53,8 @@ function SettingsScreen() {
   const [theme, setTheme] = useStorage('theme')
   const [clockifyBillable, setClockifyBillable] = useStorage('clockifyBillable')
   const [clockifyDefaultProject, setClockifyDefaultProject] = useStorage('clockifyDefaultProject')
+  const [quickTimersEnabled, setQuickTimersEnabled] = useStorage('quickTimersEnabled')
+  const [quickTimersColumns, setQuickTimersColumns] = useStorage('quickTimersColumns')
   const [linearTicketFetchLimit, setLinearTicketFetchLimit] = useStorage('linearTicketFetchLimit')
   const [linearTicketRefetchInterval, setLinearTicketRefetchInterval] = useStorage('linearTicketRefetchInterval')
   const [linearTicketSortBy, setLinearTicketSortBy] = useStorage('linearTicketSortBy')
@@ -69,18 +68,76 @@ function SettingsScreen() {
   ] = useStorage('clockifyDescriptionTemplateFallback')
   const [appLogsDrawerOpen, setAppLogsDrawerOpen] = useState(false)
   const appLogs = useAppLogs({ enabled: appLogsDrawerOpen })
-  const clockifyProjectsQuery = useQuery({
-    queryKey: clockifyProjectOptionsQueryKey,
-    queryFn: getClockifyProjectOptions,
+  const clockifyUserQuery = useQuery({
+    queryKey: queryKeys.clockify.loggedUser,
+    queryFn: () => clockify.getLoggedUser(),
     retry: 1,
     staleTime: 5 * 60_000,
   })
-  const clockifyProjectOptions = clockifyProjectsQuery.data ?? []
+  const clockifyWorkspacesQuery = useQuery({
+    queryKey: queryKeys.clockify.workspaces,
+    queryFn: () => clockify.getWorkspacesOfUser(),
+    retry: 1,
+    staleTime: 5 * 60_000,
+  })
+  const selectedClockifyWorkspace = useMemo(() => {
+    const user = clockifyUserQuery.data
+    const workspaces = clockifyWorkspacesQuery.data
+
+    if (!user || !workspaces?.length) {
+      return null
+    }
+
+    return (
+      workspaces.find(candidate => candidate.id === user?.activeWorkspace) ??
+      workspaces.find(candidate => candidate.id === user?.defaultWorkspace) ??
+      workspaces[0]
+    )
+  }, [clockifyUserQuery.data, clockifyWorkspacesQuery.data])
+  const clockifyProjectsQuery = useQuery({
+    queryKey: queryKeys.clockify.projects({
+      params: { workspaceId: selectedClockifyWorkspace?.id },
+    }),
+    queryFn: () =>
+      clockify.getProjects({
+        params: { workspaceId: selectedClockifyWorkspace!.id! },
+        queries: {
+          archived: false,
+          page: 1,
+          'page-size': 100,
+          'sort-column': 'NAME',
+          'sort-order': 'ASCENDING',
+        },
+      }),
+    enabled: Boolean(selectedClockifyWorkspace?.id),
+    retry: 1,
+    staleTime: 5 * 60_000,
+  })
+  const clockifyProjectOptions = useMemo(() => {
+    if (!selectedClockifyWorkspace?.id) {
+      return []
+    }
+
+    const workspaceId = selectedClockifyWorkspace.id
+
+    return (clockifyProjectsQuery.data ?? []).flatMap(project => {
+      if (!project.id || !project.name) {
+        return []
+      }
+
+      return {
+        projectId: project.id,
+        projectName: project.name,
+        workspaceId,
+        workspaceName: selectedClockifyWorkspace.name ?? 'Clockify workspace',
+      }
+    })
+  }, [clockifyProjectsQuery.data, selectedClockifyWorkspace])
   const selectedClockifyProjectValue = clockifyDefaultProject
-    ? getClockifyProjectOptionValue(clockifyDefaultProject)
+    ? `${clockifyDefaultProject.workspaceId}:${clockifyDefaultProject.projectId}`
     : ''
   const selectedClockifyProjectLoaded = clockifyProjectOptions.some(
-    project => getClockifyProjectOptionValue(project) === selectedClockifyProjectValue,
+    project => `${project.workspaceId}:${project.projectId}` === selectedClockifyProjectValue,
   )
   const displayedAppLogs = useMemo(() => filterDisplayedAppLogs(appLogs.value.contents), [appLogs.value.contents])
   const clearAppLogsMutation = useMutation({
@@ -148,6 +205,35 @@ function SettingsScreen() {
           />
 
           <div className="flex w-full flex-col gap-10">
+            <SettingsSection title="Quick Timers">
+              <SettingsRow label="Enabled" description="Show Quick Timers for starting reusable Clockify timers.">
+                <input
+                  aria-label="Enable Quick Timers"
+                  checked={quickTimersEnabled}
+                  className="toggle toggle-primary"
+                  type="checkbox"
+                  onChange={event => void setQuickTimersEnabled(event.currentTarget.checked)}
+                />
+              </SettingsRow>
+
+              <SettingsRow label="Columns" description="Number of Quick Timer columns shown on the dashboard.">
+                <label className="input input-primary w-full max-w-32">
+                  <input
+                    aria-label="Quick Timer columns"
+                    className="min-w-0 grow text-sm"
+                    max={12}
+                    min={1}
+                    step={1}
+                    type="number"
+                    value={quickTimersColumns}
+                    onChange={event =>
+                      void setQuickTimersColumns(normalizeBoundedInteger(event.currentTarget.value, 6, 1, 12))
+                    }
+                  />
+                </label>
+              </SettingsRow>
+            </SettingsSection>
+
             <SettingsSection title="Linear">
               <SettingsRow label="Ticket fetch limit" description="Maximum Linear tickets to load for ticket lists.">
                 <label className="input input-primary w-full max-w-56">
@@ -221,12 +307,18 @@ function SettingsScreen() {
                     aria-label="Default Clockify project"
                     className="select select-primary min-w-0 flex-1"
                     disabled={
-                      clockifyProjectsQuery.isLoading || clockifyProjectsQuery.isError || !clockifyProjectOptions.length
+                      clockifyUserQuery.isLoading ||
+                      clockifyWorkspacesQuery.isLoading ||
+                      clockifyProjectsQuery.isLoading ||
+                      clockifyUserQuery.isError ||
+                      clockifyWorkspacesQuery.isError ||
+                      clockifyProjectsQuery.isError ||
+                      !clockifyProjectOptions.length
                     }
                     value={selectedClockifyProjectValue}
                     onChange={event => {
                       const selectedProject = clockifyProjectOptions.find(
-                        project => getClockifyProjectOptionValue(project) === event.currentTarget.value,
+                        project => `${project.workspaceId}:${project.projectId}` === event.currentTarget.value,
                       )
 
                       if (selectedProject) {
@@ -236,18 +328,22 @@ function SettingsScreen() {
                     {!selectedClockifyProjectValue ? <option value="">No projects loaded</option> : null}
                     {selectedClockifyProjectValue && !selectedClockifyProjectLoaded && clockifyDefaultProject ? (
                       <option value={selectedClockifyProjectValue}>
-                        {formatClockifyProjectLabel(clockifyDefaultProject)}
+                        {`${clockifyDefaultProject.workspaceName} / ${clockifyDefaultProject.projectName}`}
                       </option>
                     ) : null}
                     {clockifyProjectOptions.map(project => (
                       <option
-                        key={getClockifyProjectOptionValue(project)}
-                        value={getClockifyProjectOptionValue(project)}>
-                        {formatClockifyProjectLabel(project)}
+                        key={`${project.workspaceId}:${project.projectId}`}
+                        value={`${project.workspaceId}:${project.projectId}`}>
+                        {`${project.workspaceName} / ${project.projectName}`}
                       </option>
                     ))}
                   </select>
-                  {clockifyProjectsQuery.isFetching ? <span className="loading loading-spinner loading-xs" /> : null}
+                  {clockifyUserQuery.isFetching ||
+                  clockifyWorkspacesQuery.isFetching ||
+                  clockifyProjectsQuery.isFetching ? (
+                    <span className="loading loading-spinner loading-xs" />
+                  ) : null}
                 </div>
               </SettingsRow>
 
@@ -743,10 +839,6 @@ function getLinearTicketSortOrderLabel(option: LinearTicketSortOrderOption) {
   }
 }
 
-function formatClockifyProjectLabel(project: { projectName: string; workspaceName: string }) {
-  return `${project.workspaceName} / ${project.projectName}`
-}
-
 function normalizePositiveInteger(value: string, fallback: number) {
   const parsedValue = Number(value)
 
@@ -755,6 +847,16 @@ function normalizePositiveInteger(value: string, fallback: number) {
   }
 
   return Math.max(1, Math.floor(parsedValue))
+}
+
+function normalizeBoundedInteger(value: string, fallback: number, min: number, max: number) {
+  const parsedValue = Number(value)
+
+  if (!Number.isFinite(parsedValue)) {
+    return fallback
+  }
+
+  return Math.min(max, Math.max(min, Math.floor(parsedValue)))
 }
 
 function getThemeLabel(theme: ThemeOption) {
@@ -821,6 +923,7 @@ const customFrontendLogPrefixes = [
   '[dev tools]',
   '[linear auth]',
   '[linear tickets]',
+  '[quick timers]',
   '[sign in]',
   '[storage]',
   '[storage hook]',

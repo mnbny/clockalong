@@ -1,3 +1,5 @@
+import { formatTemplate, getUnknownTemplateTokens } from '../../utils/templates'
+
 export const defaultClockifyDescriptionTemplate = '{identifier}: {title}'
 export const defaultClockifyDescriptionTemplateFallback = 'n/a'
 
@@ -78,55 +80,14 @@ export const sampleClockifyDescriptionTemplateValues = {
   url: 'https://linear.app/example/issue/ENG-123/fix-settings-drawer-log-refresh',
 } satisfies ClockifyDescriptionTemplateValues
 
-const templateTokenPattern = /\{([A-Za-z][A-Za-z0-9]*)\}/g
-const knownTemplateTokens = new Set<string>(clockifyDescriptionTemplateTokens)
-
 export function formatClockifyDescriptionTemplate(
   template: string,
   values: ClockifyDescriptionTemplateValues,
   { fallback = defaultClockifyDescriptionTemplateFallback }: FormatClockifyDescriptionTemplateOptions = {},
 ) {
-  return cleanupFormattedDescription(
-    template.replace(templateTokenPattern, (match, token: string) => {
-      if (!knownTemplateTokens.has(token)) {
-        return match
-      }
-
-      return formatTemplateValue(values[token as ClockifyDescriptionTemplateToken], fallback)
-    }),
-  )
+  return formatTemplate(template, values, { fallback, knownTokens: clockifyDescriptionTemplateTokens })
 }
 
 export function getUnknownClockifyDescriptionTemplateTokens(template: string) {
-  const unknownTokens = new Set<string>()
-
-  for (const match of template.matchAll(templateTokenPattern)) {
-    const token = match[1]
-
-    if (token && !knownTemplateTokens.has(token)) {
-      unknownTokens.add(token)
-    }
-  }
-
-  return [...unknownTokens]
-}
-
-function formatTemplateValue(value: string | number | null | undefined, fallback: string) {
-  if (value === null || value === undefined) {
-    return fallback
-  }
-
-  if (typeof value === 'string' && !value.trim()) {
-    return fallback
-  }
-
-  return String(value)
-}
-
-function cleanupFormattedDescription(description: string) {
-  return description
-    .replace(/\s+/g, ' ')
-    .replace(/\s+([:,\]])/g, '$1')
-    .replace(/([[(])\s+/g, '$1')
-    .trim()
+  return getUnknownTemplateTokens(template, clockifyDescriptionTemplateTokens)
 }

@@ -3,58 +3,61 @@ packages:
 
 catalog:
   '@automattic/format-currency': 2.1.0
-  '@eslint/js': 9.39.4
+  '@eslint/js': 10.0.1
   '@fontsource-variable/intel-one-mono': 5.2.2
   '@fontsource-variable/oxanium': 5.2.8
+  '@hookform/resolvers': 5.4.0
   '@linear/sdk': 87.0.0
-  '@mantine/hooks': 9.2.1
+  '@mantine/hooks': 9.4.0
   '@tabler/icons-react': 3.44.0
-  '@tailwindcss/vite': 4.3.0
-  '@tanstack/react-query': 5.100.10
-  '@tanstack/react-router': 1.170.1
+  '@tailwindcss/vite': 4.3.1
+  '@tanstack/react-query': 5.101.1
+  '@tanstack/react-router': 1.170.16
   '@tanstack/react-table': 8.21.3
-  '@tanstack/router-cli': 1.167.2
-  '@tanstack/router-plugin': 1.168.2
-  '@tauri-apps/api': 2.11.0
-  '@tauri-apps/cli': 2.11.1
+  '@tanstack/router-cli': 1.167.17
+  '@tanstack/router-plugin': 1.168.18
+  '@tauri-apps/api': 2.11.1
+  '@tauri-apps/cli': 2.11.3
   '@tauri-apps/plugin-log': 2.8.0
   '@tauri-apps/plugin-opener': 2.5.4
   '@tauri-apps/plugin-process': 2.3.1
   '@tauri-apps/plugin-store': 2.4.3
   '@tauri-apps/plugin-updater': 2.10.1
   '@types/humanize-duration': 3.27.4
-  '@types/node': 25.8.0
-  '@types/react': 19.2.14
+  '@types/node': 26.0.1
+  '@types/react': 19.2.17
   '@types/react-dom': 19.2.3
-  '@vitejs/plugin-react': 6.0.2
+  '@vitejs/plugin-react': 6.0.3
   '@zodios/core': 10.9.6
-  axios: 1.15.0
+  axios: 1.18.1
+  change-case: 5.4.4
   clsx: 2.1.1
-  daisyui: 5.5.19
+  daisyui: 5.6.3
   dayjs: 1.11.21
-  eslint: 9.39.4
+  eslint: 10.6.0
   eslint-config-prettier: 10.1.8
   eslint-formatter-pretty: 7.1.0
   eslint-plugin-import: 2.32.0
-  eslint-plugin-prettier: 5.5.5
+  eslint-plugin-prettier: 5.5.6
   eslint-plugin-react: 7.37.5
   eslint-plugin-react-hooks: 7.1.1
   eslint-plugin-simple-import-sort: 13.0.0
-  globals: 17.6.0
+  globals: 17.7.0
   humanize-duration: 3.33.2
   openapi-zod-client: 1.18.3
-  prettier: 3.8.3
+  prettier: 3.8.5
   prettier-plugin-packagejson: 3.0.2
   prettier-plugin-sh: 0.18.1
   prettier-plugin-tailwindcss: 0.8.0
-  react: 19.2.6
-  react-dom: 19.2.6
+  react: 19.2.7
+  react-dom: 19.2.7
+  react-hook-form: 7.80.0
   react-timer-hook: 4.0.6
   sonner: 2.0.7
   tailwind-merge: 3.6.0
   tailwind-variants: 3.2.2
-  tailwindcss: 4.3.0
+  tailwindcss: 4.3.1
   typescript: 6.0.3
-  typescript-eslint: 8.59.3
-  vite: 8.0.13
+  typescript-eslint: 8.62.0
+  vite: 8.1.0
   zod: 3.25.76

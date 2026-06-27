@@ -1,7 +1,7 @@
 export function getContrastingColor(color: string, fallback = '#ffffff') {
-  let red = 0
-  let green = 0
-  let blue = 0
+  let red: number
+  let green: number
+  let blue: number
 
   if (color.startsWith('#')) {
     const hex = color.replace('#', '')
