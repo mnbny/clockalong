@@ -28,6 +28,7 @@ type ClockifySummaryReportQueryParams = {
 }
 
 type ClockifyTimeEntriesQueryParams = {
+  end?: string
   start?: string
   userId?: string
   workspaceId?: string

@@ -79,6 +79,10 @@ Use rate-derived amount language such as value or earned amount. Do not frame th
 
 Fetch the running timer from Clockify time entries with a tiny page size. Fetch today, week, and month totals from Clockify summary reports, not by loading broad time-entry pages and aggregating in the webview.
 
+Daily overlap detection is the exception to summary-report usage. The widget fetches today's completed user time entries with pagination so it can inspect entry intervals. Running entries are ignored. Once all pages are loaded, overlapping completed entries show an `Overlap detected` error badge under the Today amount.
+
+Clicking the overlap badge opens a confirmation dialog with before/after ranges for each entry that would move. The repair preserves each entry's duration, keeps non-overlapping entries in place, and shifts overlapping entries forward until the day has no completed-entry overlap. The app updates only changed Clockify entries, then refreshes time entries and summary reports.
+
 The status badge has only two states:
 
 - `Running`: DaisyUI `badge-success`, pulsing.

@@ -35,6 +35,7 @@ The API is broad and documented through Redoc plus an OpenAPI 3 spec. The endpoi
 - `GET /v1/workspaces/{workspaceId}/projects`: list projects for mapping or selection.
 - `GET /v1/workspaces/{workspaceId}/projects/{projectId}/tasks`: list tasks if Clinear maps Linear issues to tasks.
 - `POST /v1/workspaces/{workspaceId}/time-entries`: create or start a time entry.
+- `PUT /v1/workspaces/{workspaceId}/time-entries/{id}`: update a completed time entry, including overlap-repair start/end shifts.
 - `GET /v1/workspaces/{workspaceId}/time-entries/status/in-progress`: inspect running timers in a workspace.
 - `GET /v1/workspaces/{workspaceId}/user/{userId}/time-entries`: read a user's time entries when entry-level data is needed, including dashboard per-ticket `Tracked` and `Total` summaries.
 - `PATCH /v1/workspaces/{workspaceId}/user/{userId}/time-entries`: stop the currently running timer for a user.
