@@ -79,9 +79,13 @@ Use rate-derived amount language such as value or earned amount. Do not frame th
 
 Fetch the running timer from Clockify time entries with a tiny page size. Fetch today, week, and month totals from Clockify summary reports, not by loading broad time-entry pages and aggregating in the webview.
 
-Daily overlap detection is the exception to summary-report usage. The widget fetches today's completed user time entries with pagination so it can inspect entry intervals. Running entries are ignored. Once all pages are loaded, overlapping completed entries show an `Overlap detected` error badge under the Today amount.
+Broad Clockify entry reads should come from the local synced entry collection in `src/services/clockify/sync.ts`, not from component-level Clockify pagination. The background sync stores recent entries according to the `clockifyEntrySyncDays` setting, and UI code should subscribe with TanStack DB live queries when it needs entry-level data.
 
-Clicking the overlap badge opens a confirmation dialog with before/after ranges for each entry that would move. The repair preserves each entry's duration, keeps non-overlapping entries in place, and shifts overlapping entries forward until the day has no completed-entry overlap. The app updates only changed Clockify entries, then refreshes time entries and summary reports.
+Overlap detection reads completed synced entries and ignores running entries. The current periods are intentionally non-overlapping: today, the previous six days, and days seven through twenty-seven ago. Overlapping completed entries show an `Overlap detected` error badge under only the affected period.
+
+Clicking the overlap badge opens a confirmation dialog with dated before/after ranges for each entry that would move. The repair preserves each entry's duration, keeps non-overlapping entries in place, and shifts overlapping entries forward until that period has no completed-entry overlap. The app updates only changed Clockify entries, then refreshes the entry sync and summary reports.
+
+The widget may expose a compact review table for today's synced entries. Keep it visually aligned with the app's existing data-table patterns and use it as a read-only view of the local collection.
 
 The status badge has only two states:
 
@@ -113,14 +117,14 @@ Clockify descriptions should still include the Linear identifier for human reada
 Current behavior:
 
 - Reads `clockifyLinearEntryLinks` to know which Clockify entry IDs belong to which Linear issue IDs.
-- Fetches user Clockify time entries from the earliest linked timestamp forward, plus the current running entry.
+- Reads synced local Clockify entries from the earliest linked timestamp forward, plus the current running entry.
 - Matches only entries whose IDs exist in the local link registry.
 - Produces summaries keyed by Linear issue ID: `{ lastTrackedAt, totalTrackedSeconds }`.
 - The dashboard merges those summaries into the compact Linear ticket DTO before sorting and rendering.
 
 Do not parse Clockify descriptions to infer links in this path. Description parsing can be a future migration/import tool, but it should not become the normal source of truth for the table.
 
-The Linear table refresh button should refresh both assigned Linear tickets and Clockify ticket summaries. Refreshing only Linear leaves `Tracked` and `Total` stale.
+The Linear table refresh button should refresh assigned Linear tickets, the Clockify entry sync, running timer state, and relevant summary reports. Refreshing only Linear leaves `Tracked` and `Total` stale.
 
 ## Controls
 

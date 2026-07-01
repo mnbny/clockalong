@@ -11,6 +11,7 @@ The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults 
 - `clockifyDefaultProject`: default Clockify project for new time entries created from Linear issues. Stores the selected workspace/project IDs plus display names.
 - `clockifyDescriptionTemplate`: Clockify time-entry description format for Linear issue variables.
 - `clockifyDescriptionTemplateFallback`: replacement text for missing values in the Clockify description template.
+- `clockifyEntrySyncDays`: number of recent Clockify entry days to sync into the local Clockify entry cache. Values are `5`, `15`, and `30`. Default is `30`.
 - `clockifyLinearEntryLinks`: local mapping from Clockify time entry IDs to canonical Linear issue IDs.
 - `clockifyQuickTimerEntryLinks`: local mapping from Clockify time entry IDs to Quick Timer preset IDs and submitted template values.
 - `defaultView`: temporary landing view preference for the app shell.
@@ -31,3 +32,7 @@ The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults 
 ## Native secrets
 
 Clockify stores the user API key in native Stronghold storage, not in the Tauri JSON store. Linear stores OAuth token data in Stronghold as well. On startup, Rust reads those saved credentials and validates or refreshes them before setting provider auth state.
+
+## Local Clockify entry cache
+
+Recent Clockify time entries are persisted by TanStack DB through browser localStorage under `clinear.clockify.timeEntries.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for recent entry-level UI, rebuilt by `ClockifySyncProvider` from Clockify's API.

@@ -37,7 +37,7 @@ The API is broad and documented through Redoc plus an OpenAPI 3 spec. The endpoi
 - `POST /v1/workspaces/{workspaceId}/time-entries`: create or start a time entry.
 - `PUT /v1/workspaces/{workspaceId}/time-entries/{id}`: update a completed time entry, including overlap-repair start/end shifts.
 - `GET /v1/workspaces/{workspaceId}/time-entries/status/in-progress`: inspect running timers in a workspace.
-- `GET /v1/workspaces/{workspaceId}/user/{userId}/time-entries`: read a user's time entries when entry-level data is needed, including dashboard per-ticket `Tracked` and `Total` summaries.
+- `GET /v1/workspaces/{workspaceId}/user/{userId}/time-entries`: read a user's time entries for the background entry sync and small direct reads such as the running timer.
 - `PATCH /v1/workspaces/{workspaceId}/user/{userId}/time-entries`: stop the currently running timer for a user.
 - `POST /v1/workspaces/{workspaceId}/reports/detailed`: generate detailed reports for reconciliation.
 - `POST /v1/workspaces/{workspaceId}/reports/summary`: generate grouped summaries.
@@ -78,6 +78,7 @@ Clinear implementation:
 - Keep the Clockify API client in the frontend.
 - Generate a Zodios client from Clockify's OpenAPI spec with `openapi-zod-client`.
 - Use `@zodios/core`, `axios`, and the generated Zod schemas/types for request and response typing.
+- Use `@tanstack/react-db` for the local Clockify time-entry collection when UI needs recent entry-level data.
 - Keep Rust limited to authentication/token responsibilities: secure key storage, auth-state initialization, validation, clearing credentials, and token/key retrieval according to the app's chosen bridge contract.
 - Do not build a Rust Clockify API client.
 
@@ -93,6 +94,7 @@ The Clinear setup lives under `src/services/clockify/`:
 - `generated/reports.ts`: generated Zodios client for Clockify's reports host.
 - `client.ts`: app-facing client factories and default client instances.
 - `projects.ts`: project-list helpers for selecting the default Clockify project.
+- `sync.ts`: TanStack DB localStorage-backed entry collection plus the `ClockifySyncProvider` that periodically reconciles recent Clockify entries.
 - `ticket-summaries.ts`: dashboard aggregation of linked Clockify time entries by Linear issue.
 
 Polybot reference points:
@@ -112,6 +114,18 @@ For Clinear, adapt that pattern to Clockify:
 - Export `createClockifyClient(baseUrl, options)`, `createClockifyReportsClient(baseUrl, options)`, `clockify`, and `clockifyReports` from `src/services/clockify/client.ts`.
 - Configure auth by attaching `X-Api-Key` from the native auth bridge before Clockify requests.
 - Keep regional and subdomain base URL selection outside the generated client so it can be changed per workspace.
+
+## Entry sync
+
+`src/services/clockify/sync.ts` owns broad Clockify time-entry pagination. It syncs recent entries into a TanStack DB collection persisted through browser localStorage under `clinear.clockify.timeEntries.v1`.
+
+The synced row shape keeps the original Clockify entry plus local query fields: entry ID, workspace ID, user ID, started-at timestamp, and synced-at timestamp. UI code should query those indexed fields with TanStack DB live queries instead of repeatedly paging Clockify from routes or widgets.
+
+`ClockifySyncProvider` mounts inside the frontend provider stack after `QueryClientProvider`. It resolves the authenticated Clockify user and active/default workspace, then runs the entry sync on an interval and whenever callers invalidate or refetch `queryKeys.clockify.entrySync()`.
+
+The `clockifyEntrySyncDays` setting controls the lookback window. Current supported values are `5`, `15`, and `30`, with `30` as the default. Keep this setting as a UX/performance knob, not as a correctness boundary for the Clockify API client.
+
+Direct `getTimeEntries` reads are still appropriate for tiny single-purpose reads, especially the active running timer with page size `1`. Any feature that needs broad recent completed entries should use the synced collection.
 
 The reports generator uses a media-type expression that accepts Clockify's `*/*` report responses as JSON. Keep that logic in `scripts/generate-clockify-client.mjs`; do not put long generator pipelines directly in `package.json`.
 
