@@ -79,7 +79,7 @@ Use rate-derived amount language such as value or earned amount. Do not frame th
 
 Fetch the running timer from Clockify time entries with a tiny page size. Fetch today, week, and month totals from Clockify summary reports, not by loading broad time-entry pages and aggregating in the webview.
 
-Broad Clockify entry reads should come from the local synced entry collection in `src/services/clockify/sync.ts`, not from component-level Clockify pagination. The background sync stores recent entries according to the `clockifyEntrySyncDays` setting, and UI code should subscribe with TanStack DB live queries when it needs entry-level data.
+Broad Clockify entry reads should come from the local synced entry collection in `src/services/clockify/sync.ts`, not from component-level Clockify pagination. The background sync stores recent entries according to the `clockifyEntrySyncDays` and `clockifyEntrySyncInterval` settings, and UI code should subscribe with TanStack DB live queries when it needs entry-level data.
 
 Overlap detection reads completed synced entries and ignores running entries. The current periods are intentionally non-overlapping: today, the previous six days, and days seven through twenty-seven ago. Overlapping completed entries show an `Overlap detected` error badge under only the affected period.
 

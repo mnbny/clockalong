@@ -12,6 +12,7 @@ The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults 
 - `clockifyDescriptionTemplate`: Clockify time-entry description format for Linear issue variables.
 - `clockifyDescriptionTemplateFallback`: replacement text for missing values in the Clockify description template.
 - `clockifyEntrySyncDays`: number of recent Clockify entry days to sync into the local Clockify entry cache. Values are `5`, `15`, and `30`. Default is `30`.
+- `clockifyEntrySyncInterval`: how often recent Clockify entries sync in the background. Values are `manual`, `5m`, `15m`, `30m`, and `1h`. Default is `30m`.
 - `clockifyLinearEntryLinks`: local mapping from Clockify time entry IDs to canonical Linear issue IDs.
 - `clockifyQuickTimerEntryLinks`: local mapping from Clockify time entry IDs to Quick Timer preset IDs and submitted template values.
 - `defaultView`: temporary landing view preference for the app shell.
