@@ -248,16 +248,16 @@ function DashboardScreen() {
     () => mergeTicketTimeSummaries(linearTickets, ticketTimeSummaries),
     [linearTickets, ticketTimeSummaries],
   )
+  const runningEntryId = runningEntry?.id ?? null
+  const activeLinearIssueId = runningEntryId ? clockifyLinearEntryLinks[runningEntryId]?.linearIssueId : undefined
   const tickets = useMemo(
     () =>
       sortLinearTickets(ticketsWithTracking, {
-        clockifyLinearEntryLinks,
+        activeLinearIssueId,
         sortOrder: linearTicketSortOrder,
       }),
-    [clockifyLinearEntryLinks, linearTicketSortOrder, ticketsWithTracking],
+    [activeLinearIssueId, linearTicketSortOrder, ticketsWithTracking],
   )
-  const runningEntryId = runningEntry?.id ?? null
-  const activeLinearIssueId = runningEntryId ? clockifyLinearEntryLinks[runningEntryId]?.linearIssueId : undefined
   const activeQuickTimerId = runningEntryId ? clockifyQuickTimerEntryLinks[runningEntryId]?.quickTimerId : undefined
   const startTrackingMutation = useMutation({
     mutationFn: async (ticket: LinearTicket) => {

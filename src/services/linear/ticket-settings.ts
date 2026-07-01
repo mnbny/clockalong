@@ -60,7 +60,7 @@ export function getLinearTicketSortOrderLabel(option: LinearTicketSortOrderOptio
     case 'created':
       return 'Created date'
     case 'custom':
-      return 'Clinear relevance'
+      return 'Relevance'
     case 'status':
       return 'Status'
     case 'updated':

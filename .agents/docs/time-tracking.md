@@ -26,7 +26,7 @@ Linear status should influence ordering, but it should not determine whether an 
 
 The current client-side order modes are:
 
-- `custom`: Clinear relevance. Linked/recently tracked tickets first, then linked-entry count, Linear status order, updated date, and ticket identifier.
+- `custom`: relevance. The running ticket appears first, then recently tracked workable tickets, started tickets, unstarted tickets, backlog/triage tickets, recently tracked terminal tickets, and terminal/unknown tickets. Recent tracking uses the merged Clockify `lastTrackedAt`, not the local link timestamp. Linear status type drives the portable bucket, with workflow-state position, last-tracked time, updated date, and ticket identifier used as tie-breakers.
 - `status`: Linear workflow type and workflow-state position, then updated date.
 - `created`: created date descending.
 - `updated`: updated date descending.
