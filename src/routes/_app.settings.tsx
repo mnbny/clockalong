@@ -37,12 +37,12 @@ import {
   getClockifyEntrySyncIntervalLabel,
 } from '../services/clockify/sync-settings'
 import {
-  type LinearTicketRefetchIntervalOption,
-  defaultLinearTicketFetchLimit,
-  getLinearTicketRefetchIntervalLabel,
+  type LinearTicketSyncIntervalOption,
+  defaultLinearTicketSyncLimit,
+  getLinearTicketSyncIntervalLabel,
   getLinearTicketSortByLabel,
   getLinearTicketSortOrderLabel,
-  linearTicketRefetchIntervalOptions,
+  linearTicketSyncIntervalOptions,
   type LinearTicketSortByOption,
   linearTicketSortByOptions,
   type LinearTicketSortOrderOption,
@@ -67,8 +67,8 @@ function SettingsScreen() {
   const [clockifyEntrySyncInterval, setClockifyEntrySyncInterval] = useStorage('clockifyEntrySyncInterval')
   const [quickTimersEnabled, setQuickTimersEnabled] = useStorage('quickTimersEnabled')
   const [quickTimersColumns, setQuickTimersColumns] = useStorage('quickTimersColumns')
-  const [linearTicketFetchLimit, setLinearTicketFetchLimit] = useStorage('linearTicketFetchLimit')
-  const [linearTicketRefetchInterval, setLinearTicketRefetchInterval] = useStorage('linearTicketRefetchInterval')
+  const [linearTicketSyncLimit, setLinearTicketSyncLimit] = useStorage('linearTicketSyncLimit')
+  const [linearTicketSyncInterval, setLinearTicketSyncInterval] = useStorage('linearTicketSyncInterval')
   const [linearTicketSortBy, setLinearTicketSortBy] = useStorage('linearTicketSortBy')
   const [linearTicketSortOrder, setLinearTicketSortOrder] = useStorage('linearTicketSortOrder')
   const [clockifyDescriptionTemplate, setClockifyDescriptionTemplate, resetClockifyDescriptionTemplate] =
@@ -247,35 +247,35 @@ function SettingsScreen() {
             </SettingsSection>
 
             <SettingsSection title="Linear">
-              <SettingsRow label="Ticket fetch limit" description="Maximum Linear tickets to load for ticket lists.">
+              <SettingsRow label="Ticket sync limit" description="Maximum assigned Linear tickets to sync.">
                 <label className="input input-primary w-full max-w-56">
                   <input
-                    aria-label="Ticket fetch limit"
+                    aria-label="Ticket sync limit"
                     className="min-w-0 grow text-sm"
                     min={1}
                     step={1}
                     type="number"
-                    value={linearTicketFetchLimit}
+                    value={linearTicketSyncLimit}
                     onChange={event =>
-                      void setLinearTicketFetchLimit(
-                        normalizePositiveInteger(event.currentTarget.value, defaultLinearTicketFetchLimit),
+                      void setLinearTicketSyncLimit(
+                        normalizePositiveInteger(event.currentTarget.value, defaultLinearTicketSyncLimit),
                       )
                     }
                   />
                 </label>
               </SettingsRow>
 
-              <SettingsRow label="Ticket refetch interval" description="How often assigned Linear tickets refresh.">
+              <SettingsRow label="Ticket sync interval" description="How often assigned Linear tickets sync.">
                 <select
-                  aria-label="Ticket refetch interval"
+                  aria-label="Ticket sync interval"
                   className="select select-primary w-full max-w-56"
-                  value={linearTicketRefetchInterval}
+                  value={linearTicketSyncInterval}
                   onChange={event =>
-                    void setLinearTicketRefetchInterval(event.currentTarget.value as LinearTicketRefetchIntervalOption)
+                    void setLinearTicketSyncInterval(event.currentTarget.value as LinearTicketSyncIntervalOption)
                   }>
-                  {linearTicketRefetchIntervalOptions.map(option => (
+                  {linearTicketSyncIntervalOptions.map(option => (
                     <option key={option} value={option}>
-                      {getLinearTicketRefetchIntervalLabel(option)}
+                      {getLinearTicketSyncIntervalLabel(option)}
                     </option>
                   ))}
                 </select>

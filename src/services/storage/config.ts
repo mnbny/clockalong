@@ -4,8 +4,8 @@ import {
 } from '../clockify/description-template'
 import { defaultClockifyEntrySyncDays, defaultClockifyEntrySyncInterval } from '../clockify/sync-settings'
 import {
-  defaultLinearTicketFetchLimit,
-  defaultLinearTicketRefetchInterval,
+  defaultLinearTicketSyncLimit,
+  defaultLinearTicketSyncInterval,
   defaultLinearTicketSortBy,
   defaultLinearTicketSortOrder,
 } from '../linear/ticket-settings'
@@ -135,14 +135,14 @@ const storageConfig = {
     default: 'Moon Bunny Clinear',
     version: 1,
   },
-  linearTicketFetchLimit: {
+  linearTicketSyncLimit: {
     type: 'number',
-    default: defaultLinearTicketFetchLimit,
+    default: defaultLinearTicketSyncLimit,
     version: 1,
   },
-  linearTicketRefetchInterval: {
+  linearTicketSyncInterval: {
     type: 'string',
-    default: defaultLinearTicketRefetchInterval,
+    default: defaultLinearTicketSyncInterval,
     version: 1,
   },
   linearTicketSortBy: {

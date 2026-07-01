@@ -4,13 +4,13 @@ import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
 
 import { IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react'
 import { and, eq, gte, useLiveQuery } from '@tanstack/react-db'
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import humanizeDuration from 'humanize-duration'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 
 import { appToast } from '../components/AppToaster'
 import { ClockifyWidget } from '../components/ClockifyWidget'
@@ -26,14 +26,12 @@ import {
   getClockifyTicketSummaryStart,
   summarizeClockifyTicketTimeEntries,
 } from '../services/clockify/ticket-summaries'
-import { requestAssignedIssuesPage } from '../services/linear/tickets'
+import { linearTicketsCollection, useLinearSync } from '../services/linear/sync'
 import {
   type LinearTicketSortOrderOption,
-  getLinearTicketRefetchIntervalMilliseconds,
   getLinearTicketSortOrderLabel,
-  linearTicketsPageSize,
   linearTicketSortOrderOptions,
-  normalizeLinearTicketFetchLimit,
+  normalizeLinearTicketSyncLimit,
 } from '../services/linear/ticket-settings'
 import { sortLinearTickets } from '../services/linear/tickets-sorting'
 import { useStorage } from '../services/storage/useStorage'
@@ -61,11 +59,6 @@ const formatTrackedDuration = humanizeDuration.humanizer({
   spacer: '',
   units: ['h', 'm', 's'],
 })
-
-type AssignedIssuesPageParam = {
-  after: string | null
-  fetchedCount: number
-}
 
 type TicketTableMeta = {
   activeLinearIssueId: string | undefined
@@ -134,46 +127,33 @@ function DashboardScreen() {
   const [clockifyDefaultProject] = useStorage('clockifyDefaultProject')
   const [clockifyDescriptionTemplate] = useStorage('clockifyDescriptionTemplate')
   const [clockifyDescriptionTemplateFallback] = useStorage('clockifyDescriptionTemplateFallback')
-  const [linearTicketFetchLimit] = useStorage('linearTicketFetchLimit')
-  const [linearTicketRefetchInterval] = useStorage('linearTicketRefetchInterval')
-  const [linearTicketSortBy] = useStorage('linearTicketSortBy')
+  const [linearTicketSyncLimit] = useStorage('linearTicketSyncLimit')
   const [linearTicketSortOrder, setLinearTicketSortOrder] = useStorage('linearTicketSortOrder')
   const [clockifyLinearEntryLinks, setClockifyLinearEntryLinks] = useStorage('clockifyLinearEntryLinks')
   const [clockifyQuickTimerEntryLinks] = useStorage('clockifyQuickTimerEntryLinks')
   const [quickTimersEnabled] = useStorage('quickTimersEnabled')
-  const normalizedLinearTicketFetchLimit = normalizeLinearTicketFetchLimit(linearTicketFetchLimit)
-  const initialAssignedIssuesPageParam: AssignedIssuesPageParam = { after: null, fetchedCount: 0 }
-  const ticketsQuery = useInfiniteQuery({
-    queryKey: queryKeys.linear.assignedTickets({
-      params: { fetchLimit: normalizedLinearTicketFetchLimit, sortBy: linearTicketSortBy },
-    }),
-    queryFn: ({ pageParam }) =>
-      requestAssignedIssuesPage({
-        after: pageParam.after,
-        first: Math.min(linearTicketsPageSize, normalizedLinearTicketFetchLimit - pageParam.fetchedCount),
-        orderBy: linearTicketSortBy,
-      }),
-    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
-      const page = lastPage.data?.viewer.assignedIssues
-
-      if (!page?.pageInfo.hasNextPage || !page.pageInfo.endCursor || page.nodes.length === 0) {
-        return undefined
+  const linearSync = useLinearSync()
+  const {
+    lastSyncResult: linearLastSyncResult,
+    queries: { syncQuery: linearSyncQuery },
+    syncing: linearSyncing,
+    syncNow: syncLinearTickets,
+  } = linearSync
+  const normalizedLinearTicketSyncLimit = normalizeLinearTicketSyncLimit(linearTicketSyncLimit)
+  const linearViewerId = linearLastSyncResult?.viewerId
+  const syncedLinearTicketsQuery = useLiveQuery(
+    q => {
+      if (!linearViewerId) {
+        return null
       }
 
-      const fetchedCount = lastPageParam.fetchedCount + page.nodes.length
-
-      if (fetchedCount >= normalizedLinearTicketFetchLimit) {
-        return undefined
-      }
-
-      return {
-        after: page.pageInfo.endCursor,
-        fetchedCount,
-      } satisfies AssignedIssuesPageParam
+      return q
+        .from({ syncedTicket: linearTicketsCollection })
+        .where(({ syncedTicket }) => eq(syncedTicket.viewerId, linearViewerId))
+        .orderBy(({ syncedTicket }) => syncedTicket.updatedAt)
     },
-    initialPageParam: initialAssignedIssuesPageParam,
-    refetchInterval: getLinearTicketRefetchIntervalMilliseconds(linearTicketRefetchInterval),
-  })
+    [linearViewerId],
+  )
   const clockifyUserQuery = useQuery({
     queryKey: queryKeys.clockify.loggedUser,
     queryFn: () => clockify.getLoggedUser(),
@@ -244,26 +224,12 @@ function DashboardScreen() {
     },
     [clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id, summaryStartIso],
   )
-  const {
-    fetchNextPage: fetchNextTicketsPage,
-    hasNextPage: hasNextTicketsPage,
-    isError: ticketsError,
-    isFetchingNextPage: fetchingNextTicketsPage,
-  } = ticketsQuery
-
-  useEffect(() => {
-    if (!hasNextTicketsPage || fetchingNextTicketsPage || ticketsError) {
-      return
-    }
-
-    void fetchNextTicketsPage()
-  }, [fetchNextTicketsPage, fetchingNextTicketsPage, hasNextTicketsPage, ticketsError])
   const linearTickets = useMemo(
     () =>
-      (ticketsQuery.data?.pages.flatMap(page => page.data?.viewer.assignedIssues.nodes ?? []) ?? [])
-        .slice(0, normalizedLinearTicketFetchLimit)
+      (syncedLinearTicketsQuery.data?.map(syncedTicket => syncedTicket.ticket) ?? [])
+        .slice(0, normalizedLinearTicketSyncLimit)
         .map(toLinearTicket),
-    [normalizedLinearTicketFetchLimit, ticketsQuery.data],
+    [normalizedLinearTicketSyncLimit, syncedLinearTicketsQuery.data],
   )
   const ticketTimeSummaries = useMemo(() => {
     return summarizeClockifyTicketTimeEntries({
@@ -434,12 +400,12 @@ function DashboardScreen() {
   )
   const refreshTickets = useCallback(() => {
     void Promise.all([
-      ticketsQuery.refetch(),
+      syncLinearTickets(),
       queryClient.refetchQueries({ queryKey: queryKeys.clockify.runningEntry() }),
       queryClient.refetchQueries({ queryKey: queryKeys.clockify.entrySync() }),
     ])
-  }, [queryClient, ticketsQuery])
-  const ticketsRefreshing = ticketsQuery.isFetching
+  }, [queryClient, syncLinearTickets])
+  const ticketsRefreshing = linearSyncing
 
   const table = useReactTable({
     columns: ticketColumns,
@@ -456,7 +422,7 @@ function DashboardScreen() {
       <div className="border-base-content/5 bg-base-100 rounded-box overflow-hidden border">
         <header className="border-base-content/5 flex min-w-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
-            {ticketsQuery.isFetching ? (
+            {linearSyncing ? (
               <span className="text-primary grid size-6 place-items-center">
                 <span className="loading loading-spinner size-6" />
               </span>
@@ -529,19 +495,19 @@ function DashboardScreen() {
           </table>
         </div>
 
-        {ticketsQuery.isLoading ? (
+        {linearSyncQuery.isLoading ? (
           <div className="grid min-h-48 place-items-center">
             <span className="loading loading-spinner loading-md" />
           </div>
         ) : null}
 
-        {ticketsQuery.isError ? (
+        {linearSyncQuery.isError ? (
           <div className="text-error grid min-h-48 place-items-center px-4 text-center text-sm">
             Could not load Linear tickets.
           </div>
         ) : null}
 
-        {ticketsQuery.isSuccess && linearTickets.length === 0 ? (
+        {linearSyncQuery.isSuccess && linearTickets.length === 0 ? (
           <div className="text-base-content/60 grid min-h-48 place-items-center px-4 text-center text-sm">
             No assigned tickets found.
           </div>

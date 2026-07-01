@@ -7,8 +7,8 @@ export type QueryKeySegments<T> = {
   other?: unknown[]
 }
 
-type AssignedLinearTicketsQueryParams = {
-  fetchLimit: number
+type LinearTicketSyncQueryParams = {
+  syncLimit: number
   sortBy: LinearTicketSortByOption
 }
 
@@ -50,8 +50,8 @@ export const queryKeys = {
     workspaces: ['clockify', 'workspaces'] as const,
   },
   linear: {
-    assignedTickets: (keys?: QueryKeySegments<AssignedLinearTicketsQueryParams>) =>
-      ['linear', 'assigned-tickets', ...spreadQueryKeySegments(keys)] as const,
+    ticketSync: (keys?: QueryKeySegments<LinearTicketSyncQueryParams>) =>
+      ['linear', 'ticket-sync', ...spreadQueryKeySegments(keys)] as const,
   },
 }
 

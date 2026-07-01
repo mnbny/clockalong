@@ -1,20 +1,20 @@
 import { PaginationOrderBy } from '@linear/sdk'
 
 export const linearTicketsPageSize = 50
-export const defaultLinearTicketFetchLimit = linearTicketsPageSize
-export const linearTicketRefetchIntervalOptions = ['manual', '5m', '15m', '30m', '1h'] as const
+export const defaultLinearTicketSyncLimit = linearTicketsPageSize
+export const linearTicketSyncIntervalOptions = ['manual', '5m', '15m', '30m', '1h'] as const
 export const linearTicketSortByOptions = [PaginationOrderBy.CreatedAt, PaginationOrderBy.UpdatedAt] as const
 export const linearTicketSortOrderOptions = ['custom', 'status', 'created', 'updated', 'alphabetical'] as const
 
-export type LinearTicketRefetchIntervalOption = (typeof linearTicketRefetchIntervalOptions)[number]
+export type LinearTicketSyncIntervalOption = (typeof linearTicketSyncIntervalOptions)[number]
 export type LinearTicketSortByOption = (typeof linearTicketSortByOptions)[number]
 export type LinearTicketSortOrderOption = (typeof linearTicketSortOrderOptions)[number]
 
-export const defaultLinearTicketRefetchInterval: LinearTicketRefetchIntervalOption = '30m'
+export const defaultLinearTicketSyncInterval: LinearTicketSyncIntervalOption = '30m'
 export const defaultLinearTicketSortBy: LinearTicketSortByOption = linearTicketSortByOptions[0]
 export const defaultLinearTicketSortOrder: LinearTicketSortOrderOption = linearTicketSortOrderOptions[0]
 
-export function getLinearTicketRefetchIntervalLabel(option: LinearTicketRefetchIntervalOption) {
+export function getLinearTicketSyncIntervalLabel(option: LinearTicketSyncIntervalOption) {
   switch (option) {
     case 'manual':
       return 'Manual'
@@ -29,7 +29,7 @@ export function getLinearTicketRefetchIntervalLabel(option: LinearTicketRefetchI
   }
 }
 
-export function getLinearTicketRefetchIntervalMilliseconds(option: LinearTicketRefetchIntervalOption) {
+export function getLinearTicketSyncIntervalMilliseconds(option: LinearTicketSyncIntervalOption) {
   switch (option) {
     case 'manual':
       return false
@@ -68,10 +68,10 @@ export function getLinearTicketSortOrderLabel(option: LinearTicketSortOrderOptio
   }
 }
 
-export function normalizeLinearTicketFetchLimit(fetchLimit: number) {
-  if (!Number.isFinite(fetchLimit)) {
-    return defaultLinearTicketFetchLimit
+export function normalizeLinearTicketSyncLimit(syncLimit: number) {
+  if (!Number.isFinite(syncLimit)) {
+    return defaultLinearTicketSyncLimit
   }
 
-  return Math.max(1, Math.floor(fetchLimit))
+  return Math.max(1, Math.floor(syncLimit))
 }

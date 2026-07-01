@@ -38,6 +38,7 @@ export type AssignedIssueNode = SerializedIssueFields & {
 
 type AssignedIssuesResponse = {
   viewer: {
+    id: string
     assignedIssues: {
       nodes: AssignedIssueNode[]
       pageInfo: {
@@ -57,6 +58,7 @@ export type AssignedIssuesVariables = {
 const assignedTicketsQuery = `
   query DashboardAssignedTickets($first: Int!, $after: String, $orderBy: PaginationOrderBy) {
     viewer {
+      id
       assignedIssues(first: $first, after: $after, orderBy: $orderBy) {
         nodes {
           id
