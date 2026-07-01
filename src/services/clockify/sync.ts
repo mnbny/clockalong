@@ -6,9 +6,11 @@ import { createContext, createElement, useCallback, useContext, useMemo } from '
 
 import { useAppAuth } from '../../hooks/useAppAuth'
 import { queryKeys } from '../../lib/query-client'
-import { storage, type ClockifyEntrySyncDaysOption } from '../storage/config'
+import { storage } from '../storage/config'
+import { useStorage } from '../storage/useStorage'
 import { clockify } from './client'
 import type { TimeEntryWithRatesDtoV1 } from './generated/clockify'
+import { type ClockifyEntrySyncDaysOption, getClockifyEntrySyncIntervalMilliseconds } from './sync-settings'
 
 const clockifyEntrySyncPageSize = 100
 const clockifyEntrySyncStorageKey = 'clinear.clockify.timeEntries.v1'
@@ -46,6 +48,7 @@ export const clockifyTimeEntriesCollection = createCollection(
 
 function useClockifySyncData() {
   const authState = useAppAuth()
+  const [clockifyEntrySyncInterval] = useStorage('clockifyEntrySyncInterval')
   const clockifyAuthenticated = authState.value.clockifyAuthenticated && !authState.loading
   const userQuery = useQuery({
     queryKey: queryKeys.clockify.loggedUser,
@@ -84,7 +87,7 @@ function useClockifySyncData() {
     }),
     queryFn: () => syncClockifyEntries({ userId: userId!, workspaceId: workspaceId! }),
     enabled: syncEnabled,
-    refetchInterval: 5 * 60_000,
+    refetchInterval: getClockifyEntrySyncIntervalMilliseconds(clockifyEntrySyncInterval),
     staleTime: 60_000,
   })
   const syncNow = useCallback(() => syncQuery.refetch(), [syncQuery])

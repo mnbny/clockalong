@@ -1,4 +1,4 @@
-import type { LinearTicketSortByOption } from '../services/storage/config'
+import type { LinearTicketSortByOption } from '../services/linear/ticket-settings'
 
 import { QueryClient } from '@tanstack/react-query'
 

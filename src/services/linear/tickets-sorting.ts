@@ -1,5 +1,6 @@
-import type { ClockifyLinearEntryLinkRegistry, LinearTicketSortOrderOption } from '../storage/config'
+import type { ClockifyLinearEntryLinkRegistry } from '../storage/config'
 import type { LinearTicket } from './tickets'
+import type { LinearTicketSortOrderOption } from './ticket-settings'
 
 type TicketLinkSummary = {
   entryCount: number

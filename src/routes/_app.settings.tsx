@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 
-import { PaginationOrderBy } from '@linear/sdk'
 import {
   IconCheck,
   IconCopy,
@@ -31,16 +30,25 @@ import {
 } from '../services/clockify/description-template'
 import {
   type ClockifyEntrySyncDaysOption,
+  type ClockifyEntrySyncIntervalOption,
   clockifyEntrySyncDaysOptions,
+  clockifyEntrySyncIntervalOptions,
+  getClockifyEntrySyncDaysLabel,
+  getClockifyEntrySyncIntervalLabel,
+} from '../services/clockify/sync-settings'
+import {
   type LinearTicketRefetchIntervalOption,
+  defaultLinearTicketFetchLimit,
+  getLinearTicketRefetchIntervalLabel,
+  getLinearTicketSortByLabel,
+  getLinearTicketSortOrderLabel,
   linearTicketRefetchIntervalOptions,
   type LinearTicketSortByOption,
   linearTicketSortByOptions,
   type LinearTicketSortOrderOption,
   linearTicketSortOrderOptions,
-  type ThemeOption,
-  themeOptions,
-} from '../services/storage/config'
+} from '../services/linear/ticket-settings'
+import { type ThemeOption, themeOptions } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
 import { app } from '../services/tauri/app-client'
 import { type AppUpdate, type AppUpdateDownloadProgress, appUpdates } from '../services/tauri/app-updates'
@@ -56,6 +64,7 @@ function SettingsScreen() {
   const [clockifyBillable, setClockifyBillable] = useStorage('clockifyBillable')
   const [clockifyDefaultProject, setClockifyDefaultProject] = useStorage('clockifyDefaultProject')
   const [clockifyEntrySyncDays, setClockifyEntrySyncDays] = useStorage('clockifyEntrySyncDays')
+  const [clockifyEntrySyncInterval, setClockifyEntrySyncInterval] = useStorage('clockifyEntrySyncInterval')
   const [quickTimersEnabled, setQuickTimersEnabled] = useStorage('quickTimersEnabled')
   const [quickTimersColumns, setQuickTimersColumns] = useStorage('quickTimersColumns')
   const [linearTicketFetchLimit, setLinearTicketFetchLimit] = useStorage('linearTicketFetchLimit')
@@ -248,7 +257,9 @@ function SettingsScreen() {
                     type="number"
                     value={linearTicketFetchLimit}
                     onChange={event =>
-                      void setLinearTicketFetchLimit(normalizePositiveInteger(event.currentTarget.value, 50))
+                      void setLinearTicketFetchLimit(
+                        normalizePositiveInteger(event.currentTarget.value, defaultLinearTicketFetchLimit),
+                      )
                     }
                   />
                 </label>
@@ -362,9 +373,7 @@ function SettingsScreen() {
                 />
               </SettingsRow>
 
-              <SettingsRow
-                label="Entry sync range"
-                description="Number of recent Clockify entry days to sync.">
+              <SettingsRow label="Entry sync range" description="Number of recent Clockify entry days to sync.">
                 <select
                   aria-label="Clockify entry sync range"
                   className="select select-primary w-full max-w-56"
@@ -375,6 +384,22 @@ function SettingsScreen() {
                   {clockifyEntrySyncDaysOptions.map(option => (
                     <option key={option} value={option}>
                       {getClockifyEntrySyncDaysLabel(option)}
+                    </option>
+                  ))}
+                </select>
+              </SettingsRow>
+
+              <SettingsRow label="Entry sync interval" description="How often recent Clockify entries refresh.">
+                <select
+                  aria-label="Clockify entry sync interval"
+                  className="select select-primary w-full max-w-56"
+                  value={clockifyEntrySyncInterval}
+                  onChange={event =>
+                    void setClockifyEntrySyncInterval(event.currentTarget.value as ClockifyEntrySyncIntervalOption)
+                  }>
+                  {clockifyEntrySyncIntervalOptions.map(option => (
+                    <option key={option} value={option}>
+                      {getClockifyEntrySyncIntervalLabel(option)}
                     </option>
                   ))}
                 </select>
@@ -819,49 +844,6 @@ function SettingsRow({ label, description, children }: SettingsRowProps) {
       <div className="flex min-w-0 items-center">{children}</div>
     </div>
   )
-}
-
-function getClockifyEntrySyncDaysLabel(option: ClockifyEntrySyncDaysOption) {
-  return `${option} days`
-}
-
-function getLinearTicketSortByLabel(option: LinearTicketSortByOption) {
-  switch (option) {
-    case PaginationOrderBy.CreatedAt:
-      return 'Created date'
-    case PaginationOrderBy.UpdatedAt:
-      return 'Updated date'
-  }
-}
-
-function getLinearTicketRefetchIntervalLabel(option: LinearTicketRefetchIntervalOption) {
-  switch (option) {
-    case 'manual':
-      return 'Manual'
-    case '5m':
-      return 'Every 5 minutes'
-    case '15m':
-      return 'Every 15 minutes'
-    case '30m':
-      return 'Every 30 minutes'
-    case '1h':
-      return 'Every hour'
-  }
-}
-
-function getLinearTicketSortOrderLabel(option: LinearTicketSortOrderOption) {
-  switch (option) {
-    case 'alphabetical':
-      return 'Alphabetical'
-    case 'created':
-      return 'Created date'
-    case 'custom':
-      return 'Clinear relevance'
-    case 'status':
-      return 'Status'
-    case 'updated':
-      return 'Updated date'
-  }
 }
 
 function normalizePositiveInteger(value: string, fallback: number) {

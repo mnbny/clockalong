@@ -1,10 +1,8 @@
-import type { LinearTicketSortByOption } from '../storage/config'
 import type { Issue, LinearClient, User, WorkflowState } from '@linear/sdk'
 
 import { auth } from '../tauri/auth-client'
 import { createLinearClient } from './client'
-
-export const linearTicketsPageSize = 50
+import type { LinearTicketSortByOption } from './ticket-settings'
 
 export type LinearTicketAssignee = Pick<
   User,

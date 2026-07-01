@@ -1,9 +1,14 @@
-import { PaginationOrderBy } from '@linear/sdk'
-
 import {
   defaultClockifyDescriptionTemplate,
   defaultClockifyDescriptionTemplateFallback,
 } from '../clockify/description-template'
+import { defaultClockifyEntrySyncDays, defaultClockifyEntrySyncInterval } from '../clockify/sync-settings'
+import {
+  defaultLinearTicketFetchLimit,
+  defaultLinearTicketRefetchInterval,
+  defaultLinearTicketSortBy,
+  defaultLinearTicketSortOrder,
+} from '../linear/ticket-settings'
 import { type StorageConfig, StorageService } from './storage'
 
 export const storagePath = 'settings.json'
@@ -12,10 +17,6 @@ export const themeOptions = [
   { theme: 'emerald', appearance: 'light' },
 ] as const
 export const defaultViewOptions = ['dashboard', 'recent', 'active'] as const
-export const clockifyEntrySyncDaysOptions = [5, 15, 30] as const
-export const linearTicketRefetchIntervalOptions = ['manual', '5m', '15m', '30m', '1h'] as const
-export const linearTicketSortByOptions = [PaginationOrderBy.CreatedAt, PaginationOrderBy.UpdatedAt] as const
-export const linearTicketSortOrderOptions = ['custom', 'status', 'created', 'updated', 'alphabetical'] as const
 export const refreshIntervalOptions = ['manual', '5m', '15m', '30m'] as const
 
 export type ClockifyLinearEntryLink = {
@@ -34,12 +35,8 @@ export type ClockifyDefaultProject = {
   workspaceId: string
   workspaceName: string
 } | null
-export type ClockifyEntrySyncDaysOption = (typeof clockifyEntrySyncDaysOptions)[number]
 export type ThemeOption = (typeof themeOptions)[number]
 export type DefaultViewOption = (typeof defaultViewOptions)[number]
-export type LinearTicketRefetchIntervalOption = (typeof linearTicketRefetchIntervalOptions)[number]
-export type LinearTicketSortByOption = (typeof linearTicketSortByOptions)[number]
-export type LinearTicketSortOrderOption = (typeof linearTicketSortOrderOptions)[number]
 export type QuickTimerPreset = {
   descriptionTemplate: string
   icon: string
@@ -95,7 +92,12 @@ const storageConfig = {
   },
   clockifyEntrySyncDays: {
     type: 'number',
-    default: 30 as ClockifyEntrySyncDaysOption,
+    default: defaultClockifyEntrySyncDays,
+    version: 1,
+  },
+  clockifyEntrySyncInterval: {
+    type: 'string',
+    default: defaultClockifyEntrySyncInterval,
     version: 1,
   },
   clockifyLinearEntryLinks: {
@@ -135,22 +137,22 @@ const storageConfig = {
   },
   linearTicketFetchLimit: {
     type: 'number',
-    default: 50,
+    default: defaultLinearTicketFetchLimit,
     version: 1,
   },
   linearTicketRefetchInterval: {
     type: 'string',
-    default: '30m' as LinearTicketRefetchIntervalOption,
+    default: defaultLinearTicketRefetchInterval,
     version: 1,
   },
   linearTicketSortBy: {
     type: 'string',
-    default: linearTicketSortByOptions[0] as LinearTicketSortByOption,
+    default: defaultLinearTicketSortBy,
     version: 1,
   },
   linearTicketSortOrder: {
     type: 'string',
-    default: linearTicketSortOrderOptions[0] as LinearTicketSortOrderOption,
+    default: defaultLinearTicketSortOrder,
     version: 2,
   },
   refreshInterval: {

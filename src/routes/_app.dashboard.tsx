@@ -1,5 +1,4 @@
 import type { AssignedIssueNode, LinearTicket, LinearTicketStatus } from '../services/linear/tickets'
-import type { LinearTicketRefetchIntervalOption, LinearTicketSortOrderOption } from '../services/storage/config'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
 
@@ -27,9 +26,16 @@ import {
   getClockifyTicketSummaryStart,
   summarizeClockifyTicketTimeEntries,
 } from '../services/clockify/ticket-summaries'
-import { linearTicketsPageSize, requestAssignedIssuesPage } from '../services/linear/tickets'
+import { requestAssignedIssuesPage } from '../services/linear/tickets'
+import {
+  type LinearTicketSortOrderOption,
+  getLinearTicketRefetchIntervalMilliseconds,
+  getLinearTicketSortOrderLabel,
+  linearTicketsPageSize,
+  linearTicketSortOrderOptions,
+  normalizeLinearTicketFetchLimit,
+} from '../services/linear/ticket-settings'
 import { sortLinearTickets } from '../services/linear/tickets-sorting'
-import { linearTicketSortOrderOptions } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
 import { getContrastingColor } from '../utils/colors'
 import { getErrorMessage } from '../utils/errors'
@@ -688,14 +694,6 @@ function toLinearTicket(issue: AssignedIssueNode): LinearTicket {
   }
 }
 
-function normalizeLinearTicketFetchLimit(fetchLimit: number) {
-  if (!Number.isFinite(fetchLimit)) {
-    return linearTicketsPageSize
-  }
-
-  return Math.max(1, Math.floor(fetchLimit))
-}
-
 function getTicketTableCellClassName(columnId: string) {
   return columnId === 'trackingAction' ? 'w-14 min-w-14 text-center' : undefined
 }
@@ -803,34 +801,4 @@ function clockifyTimerLog(message: string, details?: unknown) {
   }
 
   console.info(`[clockify api] timer ${message}`, details)
-}
-
-function getLinearTicketSortOrderLabel(option: LinearTicketSortOrderOption) {
-  switch (option) {
-    case 'alphabetical':
-      return 'Alphabetical'
-    case 'created':
-      return 'Created'
-    case 'custom':
-      return 'Clinear'
-    case 'status':
-      return 'Status'
-    case 'updated':
-      return 'Updated'
-  }
-}
-
-function getLinearTicketRefetchIntervalMilliseconds(option: LinearTicketRefetchIntervalOption) {
-  switch (option) {
-    case 'manual':
-      return false
-    case '5m':
-      return 5 * 60_000
-    case '15m':
-      return 15 * 60_000
-    case '30m':
-      return 30 * 60_000
-    case '1h':
-      return 60 * 60_000
-  }
 }
