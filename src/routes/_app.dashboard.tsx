@@ -4,6 +4,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
 
 import { IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react'
+import { and, eq, gte, useLiveQuery } from '@tanstack/react-db'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
@@ -20,6 +21,7 @@ import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
 import { formatClockifyDescriptionTemplate } from '../services/clockify/description-template'
 import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../services/clockify/generated/clockify'
+import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
 import {
   type ClockifyTicketTimeSummaries,
   getClockifyTicketSummaryStart,
@@ -53,8 +55,6 @@ const formatTrackedDuration = humanizeDuration.humanizer({
   spacer: '',
   units: ['h', 'm', 's'],
 })
-
-const clockifyTimeEntriesPageSize = 100
 
 type AssignedIssuesPageParam = {
   after: string | null
@@ -218,45 +218,26 @@ function DashboardScreen() {
     () => getClockifyTicketSummaryStart(clockifyLinearEntryLinks),
     [clockifyLinearEntryLinks],
   )
-  const timeEntriesQuery = useInfiniteQuery({
-    enabled: Boolean(clockifyUserQuery.data?.id && selectedClockifyWorkspace?.id && summaryStart),
-    queryKey: queryKeys.clockify.timeEntries({
-      params: {
-        start: summaryStart?.toISOString(),
-        userId: clockifyUserQuery.data?.id,
-        workspaceId: selectedClockifyWorkspace?.id,
-      },
-    }),
-    queryFn: ({ pageParam }) =>
-      clockify.getTimeEntries({
-        params: { workspaceId: selectedClockifyWorkspace!.id!, userId: clockifyUserQuery.data!.id! },
-        queries: {
-          end: new Date().toISOString(),
-          hydrated: true,
-          page: pageParam,
-          'page-size': clockifyTimeEntriesPageSize,
-          start: summaryStart!.toISOString(),
-        },
-      }),
-    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
-      lastPage.length === clockifyTimeEntriesPageSize ? lastPageParam + 1 : undefined,
-    initialPageParam: 1,
-    staleTime: 60_000,
-  })
-  const {
-    fetchNextPage: fetchNextTimeEntriesPage,
-    hasNextPage: hasNextTimeEntriesPage,
-    isError: timeEntriesError,
-    isFetchingNextPage: fetchingNextTimeEntriesPage,
-  } = timeEntriesQuery
+  const summaryStartIso = summaryStart?.toISOString()
+  const syncedTimeEntriesQuery = useLiveQuery(
+    q => {
+      if (!summaryStartIso || !clockifyUserQuery.data?.id || !selectedClockifyWorkspace?.id) {
+        return null
+      }
 
-  useEffect(() => {
-    if (!hasNextTimeEntriesPage || fetchingNextTimeEntriesPage || timeEntriesError) {
-      return
-    }
-
-    void fetchNextTimeEntriesPage()
-  }, [fetchNextTimeEntriesPage, fetchingNextTimeEntriesPage, hasNextTimeEntriesPage, timeEntriesError])
+      return q
+        .from({ syncedEntry: clockifyTimeEntriesCollection })
+        .where(({ syncedEntry }) =>
+          and(
+            eq(syncedEntry.userId, clockifyUserQuery.data.id!),
+            eq(syncedEntry.workspaceId, selectedClockifyWorkspace.id!),
+            gte(syncedEntry.startedAt, summaryStartIso),
+          ),
+        )
+        .orderBy(({ syncedEntry }) => syncedEntry.startedAt)
+    },
+    [clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id, summaryStartIso],
+  )
   const {
     fetchNextPage: fetchNextTicketsPage,
     hasNextPage: hasNextTicketsPage,
@@ -281,9 +262,12 @@ function DashboardScreen() {
   const ticketTimeSummaries = useMemo(() => {
     return summarizeClockifyTicketTimeEntries({
       clockifyLinearEntryLinks,
-      entries: [...(timeEntriesQuery.data?.pages.flat() ?? []), ...(runningEntryQuery.data ?? [])],
+      entries: [
+        ...(syncedTimeEntriesQuery.data?.map(syncedEntry => syncedEntry.entry) ?? []),
+        ...(runningEntryQuery.data ?? []),
+      ],
     })
-  }, [clockifyLinearEntryLinks, runningEntryQuery.data, timeEntriesQuery.data])
+  }, [clockifyLinearEntryLinks, runningEntryQuery.data, syncedTimeEntriesQuery.data])
   const ticketsWithTracking = useMemo(
     () => mergeTicketTimeSummaries(linearTickets, ticketTimeSummaries),
     [linearTickets, ticketTimeSummaries],
@@ -368,7 +352,7 @@ function DashboardScreen() {
       appToast.success(`Started timer for ${ticket.identifier}`)
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.timeEntries() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.entrySync() })
     },
   })
   const stopTrackingMutation = useMutation({
@@ -407,7 +391,7 @@ function DashboardScreen() {
       appToast.success(`Stopped timer for ${ticket.identifier}`)
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.timeEntries() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.entrySync() })
     },
   })
   const pendingTicketId = startTrackingMutation.isPending ? startTrackingMutation.variables?.id : null
@@ -446,7 +430,7 @@ function DashboardScreen() {
     void Promise.all([
       ticketsQuery.refetch(),
       queryClient.refetchQueries({ queryKey: queryKeys.clockify.runningEntry() }),
-      queryClient.refetchQueries({ queryKey: queryKeys.clockify.timeEntries() }),
+      queryClient.refetchQueries({ queryKey: queryKeys.clockify.entrySync() }),
     ])
   }, [queryClient, ticketsQuery])
   const ticketsRefreshing = ticketsQuery.isFetching

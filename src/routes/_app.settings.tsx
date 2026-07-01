@@ -30,6 +30,8 @@ import {
   sampleClockifyDescriptionTemplateValues,
 } from '../services/clockify/description-template'
 import {
+  type ClockifyEntrySyncDaysOption,
+  clockifyEntrySyncDaysOptions,
   type LinearTicketRefetchIntervalOption,
   linearTicketRefetchIntervalOptions,
   type LinearTicketSortByOption,
@@ -53,6 +55,7 @@ function SettingsScreen() {
   const [theme, setTheme] = useStorage('theme')
   const [clockifyBillable, setClockifyBillable] = useStorage('clockifyBillable')
   const [clockifyDefaultProject, setClockifyDefaultProject] = useStorage('clockifyDefaultProject')
+  const [clockifyEntrySyncDays, setClockifyEntrySyncDays] = useStorage('clockifyEntrySyncDays')
   const [quickTimersEnabled, setQuickTimersEnabled] = useStorage('quickTimersEnabled')
   const [quickTimersColumns, setQuickTimersColumns] = useStorage('quickTimersColumns')
   const [linearTicketFetchLimit, setLinearTicketFetchLimit] = useStorage('linearTicketFetchLimit')
@@ -357,6 +360,24 @@ function SettingsScreen() {
                   type="checkbox"
                   onChange={event => void setClockifyBillable(event.currentTarget.checked)}
                 />
+              </SettingsRow>
+
+              <SettingsRow
+                label="Entry sync range"
+                description="Number of recent Clockify entry days to sync.">
+                <select
+                  aria-label="Clockify entry sync range"
+                  className="select select-primary w-full max-w-56"
+                  value={clockifyEntrySyncDays}
+                  onChange={event =>
+                    void setClockifyEntrySyncDays(Number(event.currentTarget.value) as ClockifyEntrySyncDaysOption)
+                  }>
+                  {clockifyEntrySyncDaysOptions.map(option => (
+                    <option key={option} value={option}>
+                      {getClockifyEntrySyncDaysLabel(option)}
+                    </option>
+                  ))}
+                </select>
               </SettingsRow>
 
               <SettingsRow
@@ -798,6 +819,10 @@ function SettingsRow({ label, description, children }: SettingsRowProps) {
       <div className="flex min-w-0 items-center">{children}</div>
     </div>
   )
+}
+
+function getClockifyEntrySyncDaysLabel(option: ClockifyEntrySyncDaysOption) {
+  return `${option} days`
 }
 
 function getLinearTicketSortByLabel(option: LinearTicketSortByOption) {

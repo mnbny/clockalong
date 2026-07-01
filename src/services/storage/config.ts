@@ -12,6 +12,7 @@ export const themeOptions = [
   { theme: 'emerald', appearance: 'light' },
 ] as const
 export const defaultViewOptions = ['dashboard', 'recent', 'active'] as const
+export const clockifyEntrySyncDaysOptions = [5, 15, 30] as const
 export const linearTicketRefetchIntervalOptions = ['manual', '5m', '15m', '30m', '1h'] as const
 export const linearTicketSortByOptions = [PaginationOrderBy.CreatedAt, PaginationOrderBy.UpdatedAt] as const
 export const linearTicketSortOrderOptions = ['custom', 'status', 'created', 'updated', 'alphabetical'] as const
@@ -33,6 +34,7 @@ export type ClockifyDefaultProject = {
   workspaceId: string
   workspaceName: string
 } | null
+export type ClockifyEntrySyncDaysOption = (typeof clockifyEntrySyncDaysOptions)[number]
 export type ThemeOption = (typeof themeOptions)[number]
 export type DefaultViewOption = (typeof defaultViewOptions)[number]
 export type LinearTicketRefetchIntervalOption = (typeof linearTicketRefetchIntervalOptions)[number]
@@ -89,6 +91,11 @@ const storageConfig = {
   clockifyDescriptionTemplateFallback: {
     type: 'string',
     default: defaultClockifyDescriptionTemplateFallback,
+    version: 1,
+  },
+  clockifyEntrySyncDays: {
+    type: 'number',
+    default: 30 as ClockifyEntrySyncDaysOption,
     version: 1,
   },
   clockifyLinearEntryLinks: {

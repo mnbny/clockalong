@@ -469,7 +469,7 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
       appToast.success(`Started timer for ${quickTimer?.name ?? 'Quick Timer'}`)
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.timeEntries() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.entrySync() })
       onCancel()
     },
   })
