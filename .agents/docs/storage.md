@@ -19,9 +19,9 @@ The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults 
 - `density`: temporary numeric UI density value.
 - `desktopAlerts`: temporary preference for desktop notifications.
 - `displayName`: temporary local display name used by settings UI previews.
-- `linearTicketFetchLimit`: maximum number of Linear tickets to fetch for ticket lists. Default is `50`.
-- `linearTicketRefetchInterval`: how often assigned Linear tickets refetch on the dashboard. Default is `30m`.
-- `linearTicketSortBy`: Linear pagination ordering field for ticket fetches. Values mirror Linear `PaginationOrderBy` support currently exposed by the app: `createdAt`, `updatedAt`.
+- `linearTicketSyncLimit`: maximum number of assigned Linear tickets to sync for ticket lists. Default is `50`.
+- `linearTicketSyncInterval`: how often assigned Linear tickets sync in the background. Default is `30m`.
+- `linearTicketSortBy`: Linear pagination ordering field for ticket sync. Values mirror Linear `PaginationOrderBy` support currently exposed by the app: `createdAt`, `updatedAt`.
 - `linearTicketSortOrder`: client-side ticket ordering mode. Values are `custom`, `status`, `created`, `updated`, and `alphabetical`.
 - `quickTimersColumns`: number of Quick Timer columns to show in the dashboard grid. Default is `6`.
 - `quickTimersEnabled`: whether the Quick Timers dashboard feature is enabled. Default is `true`.
@@ -37,3 +37,7 @@ Clockify stores the user API key in native Stronghold storage, not in the Tauri 
 ## Local Clockify entry cache
 
 Recent Clockify time entries are persisted by TanStack DB through browser localStorage under `clinear.clockify.timeEntries.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for recent entry-level UI, rebuilt by `ClockifySyncProvider` from Clockify's API.
+
+## Local Linear ticket cache
+
+Assigned Linear ticket rows are persisted by TanStack DB through browser localStorage under `clinear.linear.tickets.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for compact ticket-list UI, rebuilt by `LinearSyncProvider` from Linear's API.

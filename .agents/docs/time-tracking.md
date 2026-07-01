@@ -32,7 +32,7 @@ The current client-side order modes are:
 - `updated`: updated date descending.
 - `alphabetical`: ticket title.
 
-Linear fetch ordering is separate from dashboard ordering. The fetch can choose Linear's `orderBy` field, but Linear's assigned-issues query does not expose a sort direction. Dashboard ordering is applied only after the configured fetch limit has been loaded.
+Linear sync ordering is separate from dashboard ordering. The sync can choose Linear's `orderBy` field, but Linear's assigned-issues query does not expose a sort direction. Dashboard ordering is applied after the configured sync limit has been synced into the local collection.
 
 `src/services/linear/tickets-sorting.ts` owns the client-side sorting rules. Keep the route focused on rendering and storage/query wiring.
 
@@ -52,6 +52,8 @@ Use Day.js relative time for the ticket row's last-tracked value and `humanize-d
 ## Dashboard ticket table
 
 The dashboard Linear section is a data table, not a kanban or full Linear browser. Keep row density high enough for scanning.
+
+Assigned Linear tickets should come from the local synced ticket collection in `src/services/linear/sync.ts`, not from component-level Linear pagination. The background sync stores the current viewer's compact assigned-ticket rows according to the `linearTicketSyncLimit`, `linearTicketSortBy`, and `linearTicketSyncInterval` settings, and UI code should subscribe with TanStack DB live queries when it needs ticket-list data.
 
 Current columns:
 
