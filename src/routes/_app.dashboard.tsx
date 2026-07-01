@@ -18,7 +18,10 @@ import { LinearIcon } from '../components/icons/LinearIcon'
 import { QuickTimersWidget } from '../components/QuickTimersWidget'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
-import { formatClockifyDescriptionTemplate } from '../services/clockify/description-template'
+import {
+  type ClockifyDescriptionTemplateValues,
+  formatClockifyDescriptionTemplate,
+} from '../services/clockify/description-template'
 import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../services/clockify/generated/clockify'
 import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
 import {
@@ -37,6 +40,7 @@ import { sortLinearTickets } from '../services/linear/tickets-sorting'
 import { useStorage } from '../services/storage/useStorage'
 import { getContrastingColor } from '../utils/colors'
 import { getErrorMessage } from '../utils/errors'
+import { parseTemplateTokens } from '../utils/templates'
 
 export const Route = createFileRoute('/_app/dashboard')({
   component: DashboardScreen,
@@ -657,6 +661,7 @@ function toLinearTicket(issue: AssignedIssueNode): LinearTicket {
     title: issue.title,
     totalTrackedSeconds: null,
     updatedAt: issue.updatedAt,
+    url: issue.url,
   }
 }
 
@@ -683,30 +688,38 @@ async function startClockifyTimerForTicket({
   ticket: LinearTicket
   workspaceId: string
 }): Promise<TimeEntryDtoImplV1> {
+  const descriptionValues = {
+    assigneeName: ticket.assignee?.displayName ?? ticket.assignee?.name,
+    identifier: ticket.identifier,
+    number: getLinearTicketNumber(ticket.identifier),
+    stateName: ticket.status.name,
+    teamKey: getLinearTicketTeamKey(ticket.identifier),
+    title: ticket.title,
+    url: ticket.url,
+  } satisfies ClockifyDescriptionTemplateValues
   const body = {
     billable,
-    description: formatClockifyDescriptionTemplate(
-      descriptionTemplate,
-      {
-        assigneeName: ticket.assignee?.displayName ?? ticket.assignee?.name,
-        identifier: ticket.identifier,
-        number: getLinearTicketNumber(ticket.identifier),
-        stateName: ticket.status.name,
-        teamKey: getLinearTicketTeamKey(ticket.identifier),
-        title: ticket.title,
-      },
-      { fallback: descriptionTemplateFallback },
-    ),
+    description: formatClockifyDescriptionTemplate(descriptionTemplate, descriptionValues, {
+      fallback: descriptionTemplateFallback,
+    }),
     projectId,
     start: new Date().toISOString(),
     type: 'REGULAR',
   } satisfies CreateTimeEntryRequest
+  const templateTokens = parseTemplateTokens(descriptionTemplate)
+  const missingTemplateTokens = templateTokens.filter(token => {
+    const value = descriptionValues[token as keyof typeof descriptionValues]
+    return value === null || value === undefined || (typeof value === 'string' && !value.trim())
+  })
 
   clockifyTimerLog('create time entry request', {
     billable,
     descriptionLength: body.description.length,
+    missingTemplateTokens,
     projectId,
     ticketIdentifier: ticket.identifier,
+    templateTokens,
+    urlPresent: Boolean(descriptionValues.url),
     workspaceId,
   })
 

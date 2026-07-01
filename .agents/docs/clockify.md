@@ -57,7 +57,7 @@ Clinear builds Clockify time-entry descriptions from the user-configured Linear 
 
 - Default template: `{identifier}: {title}`.
 - Template variables use single braces and must be explicitly listed by `ClockifyDescriptionTemplateToken`.
-- The settings UI exposes the v1 token set that belongs in Clockify descriptions.
+- The settings UI should expose only values available from the synced assigned-ticket row: `{identifier}`, `{title}`, `{number}`, `{url}`, `{teamKey}`, `{stateName}`, and `{assigneeName}`.
 - Missing, `null`, `undefined`, and empty string values use the configured fallback.
 - The default fallback is `n/a`; numeric `0` remains a real value.
 - Template and fallback preferences are stored through `useStorage` as `clockifyDescriptionTemplate` and `clockifyDescriptionTemplateFallback`.

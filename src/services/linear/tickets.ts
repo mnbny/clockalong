@@ -12,7 +12,7 @@ export type LinearTicketAssignee = Pick<
 export type LinearTicketStatus = Pick<WorkflowState, 'color' | 'id' | 'name' | 'position' | 'type'>
 
 type SerializedIssueFields = Omit<
-  Pick<Issue, 'createdAt' | 'id' | 'identifier' | 'title' | 'updatedAt'>,
+  Pick<Issue, 'createdAt' | 'id' | 'identifier' | 'title' | 'updatedAt' | 'url'>,
   'createdAt' | 'updatedAt'
 > & {
   createdAt: string
@@ -29,6 +29,7 @@ export type LinearTicket = {
   title: string
   totalTrackedSeconds: number | null
   updatedAt: string
+  url: string
 }
 
 export type AssignedIssueNode = SerializedIssueFields & {
@@ -64,6 +65,7 @@ const assignedTicketsQuery = `
           id
           identifier
           title
+          url
           createdAt
           updatedAt
           state {

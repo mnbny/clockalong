@@ -14,7 +14,7 @@ import {
   IconWand,
 } from '@tabler/icons-react'
 import { and, eq, gte, lt, useLiveQuery } from '@tanstack/react-db'
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useIsFetching, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import humanizeDuration from 'humanize-duration'
 import { useMemo, useRef, useState } from 'react'
 import { useStopwatch } from 'react-timer-hook'
@@ -140,13 +140,14 @@ export function ClockifyWidget() {
       }),
       queryFn: () => {
         const now = new Date()
+        const range = getClockifyReportPeriodRange(period.id, now)
 
         return clockifyReports.generateSummaryReport(
           {
             amountShown: 'EARNED',
             amounts: ['EARNED'],
-            dateRangeEnd: toClockifyReportDate(now),
-            dateRangeStart: toClockifyReportDate(getReportPeriodStart(period.id, now)),
+            dateRangeEnd: toClockifyReportDate(range.end),
+            dateRangeStart: toClockifyReportDate(range.start),
             dateRangeType: 'ABSOLUTE',
             exportType: 'JSON',
             rounding: false,
@@ -168,6 +169,7 @@ export function ClockifyWidget() {
       staleTime: 60_000,
     })),
   })
+  const entrySyncFetching = useIsFetching({ queryKey: queryKeys.clockify.entrySync() }) > 0
   const todaySyncedEntries = useSyncedClockifyEntriesForPeriod('today', {
     userId: userQuery.data?.id,
     workspaceId: selectedWorkspace?.id,
@@ -206,6 +208,7 @@ export function ClockifyWidget() {
     userQuery.isFetching ||
     workspacesQuery.isFetching ||
     runningEntryQuery.isFetching ||
+    entrySyncFetching ||
     reportQueries.some(query => query.isFetching)
   const overlapFixes = overlapDialogState?.fixes ?? []
   const fixOverlapMutation = useMutation({
@@ -687,15 +690,22 @@ function getClockifyTimeEntryOverlapFixBody(fix: ClockifyTimeEntryOverlapFix): U
   return body
 }
 
-function getReportPeriodStart(period: ClockifyReportPeriodId, now: Date) {
+function getClockifyReportPeriodRange(period: ClockifyReportPeriodId, now: Date) {
+  const todayStart = getDayStart(now)
+  const start = new Date(todayStart)
+
   switch (period) {
     case 'today':
-      return getDayStart(now)
+      break
     case 'week':
-      return getWeekStart(now)
+      start.setDate(start.getDate() - 6)
+      break
     case 'month':
-      return getMonthStart(now)
+      start.setDate(start.getDate() - 27)
+      break
   }
+
+  return { end: now, start }
 }
 
 function getClockifyPeriodRange(period: ClockifyReportPeriodId, now: Date) {
@@ -721,16 +731,4 @@ function getClockifyPeriodRange(period: ClockifyReportPeriodId, now: Date) {
 
 function getDayStart(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
-}
-
-function getWeekStart(date: Date) {
-  const dayStart = getDayStart(date)
-  const day = dayStart.getDay()
-  const mondayOffset = day === 0 ? -6 : 1 - day
-  dayStart.setDate(dayStart.getDate() + mondayOffset)
-  return dayStart
-}
-
-function getMonthStart(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
 }
