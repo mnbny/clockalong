@@ -47,7 +47,7 @@ Recency should stay functional and restrained. The important data is:
 - total tracked duration for the issue
 - ticket status
 
-Use Day.js relative time for the ticket row's last-tracked value and `humanize-duration` for total tracked duration. Clockify entry aggregation is wired through Clinear's local entry-link registry. Rows without linked Clockify entries show a restrained placeholder rather than guessing from Clockify descriptions.
+Use Day.js relative time for the ticket row's last-tracked value, `humanize-duration` for total tracked duration, and formatted currency for tracked value. Clockify entry aggregation is derived from synced Clockify descriptions that contain a local Linear ticket identifier. Rows without matching Clockify entries show a restrained placeholder.
 
 ## Dashboard ticket table
 
@@ -63,6 +63,7 @@ Current columns:
 - `Ticket`: Linear title.
 - `Tracked`: relative last tracked time.
 - `Total`: total tracked duration.
+- `Value`: rate-derived tracked value when Clockify returns a usable hourly rate and currency.
 
 Make the active tracked row visible without changing table density. Use a subtle accent background animation on the row and switch that row's action button to stop. Keep the stop control visually consistent with the start control; use DaisyUI's error color for the icon/hover treatment rather than a filled destructive button.
 
@@ -96,35 +97,26 @@ The status badge has only two states:
 
 Do not add separate loading or unavailable labels to this badge. The fallback visual state is `Not Running`; use logs, spinners, or toasts for errors and loading when they help.
 
-## Clockify entry links
+## Clockify ticket matching
 
-Clockify does not provide a first-class Linear issue link. Treat Clinear's local link registry as the canonical mapping from Clockify time entries to Linear tickets.
+Clockify does not provide a first-class Linear issue link. Clinear derives ticket ownership from Clockify time-entry descriptions by comparing each description against the identifiers in the local synced Linear ticket collection.
 
-For the first pass, keep the registry intentionally small:
+Matching is intentionally based on Linear-provided identifiers rather than an invented parser. Build the local candidate list from synced Linear tickets, normalize identifiers and descriptions case-insensitively, and match by exact containment. Check longer identifiers first so a longer ticket ID wins before a shorter overlapping one.
 
-- use the Clockify time entry ID as the map key
-- store the canonical Linear issue ID
-- store a `linkedAt` timestamp for debugging and future migration
-
-This registry is stored as `clockifyLinearEntryLinks`, where each value has `{ linearIssueId, linkedAt }`.
-
-Do not duplicate Clockify project, task, duration, description, or title in this registry. Fetch Clockify fields from Clockify and Linear fields from Linear. The registry only answers which Linear ticket a Clockify time entry belongs to.
-
-Clockify descriptions should still include the Linear identifier for human readability and search, but descriptions are not the source of truth for links.
+Clockify entries without a matching synced Linear identifier are treated as unlinked. This is deliberate: manually created Clockify web entries become visible to Clinear once the user includes the Linear issue ID in the description, and app resets can recover links from Clockify data without a local map.
 
 ## Per-ticket Clockify summaries
 
-`src/services/clockify/ticket-summaries.ts` owns the Clockify aggregation used by the dashboard's `Tracked` and `Total` columns.
+`src/services/clockify/ticket-summaries.ts` owns the Clockify aggregation used by the dashboard's `Tracked`, `Total`, and `Value` columns.
 
 Current behavior:
 
-- Reads `clockifyLinearEntryLinks` to know which Clockify entry IDs belong to which Linear issue IDs.
-- Reads synced local Clockify entries from the earliest linked timestamp forward, plus the current running entry.
-- Matches only entries whose IDs exist in the local link registry.
-- Produces summaries keyed by Linear issue ID: `{ lastTrackedAt, totalTrackedSeconds }`.
+- Reads synced local Clockify entries for the selected Clockify user/workspace, plus the current running entry.
+- Matches entries whose descriptions contain a synced Linear ticket identifier.
+- Produces summaries keyed by Linear issue ID: `{ lastTrackedAt, totalTrackedSeconds, totalTrackedAmount, totalTrackedAmountCurrency }`.
 - The dashboard merges those summaries into the compact Linear ticket DTO before sorting and rendering.
 
-Do not parse Clockify descriptions to infer links in this path. Description parsing can be a future migration/import tool, but it should not become the normal source of truth for the table.
+Do not reintroduce a local Clockify-entry-to-Linear-ticket registry as the normal source of truth. If Clockify custom-field metadata is added later, it can become a stronger match source, but description identifiers remain the portable fallback.
 
 The Linear table refresh button should refresh assigned Linear tickets, the Clockify entry sync, running timer state, and relevant summary reports. Refreshing only Linear leaves `Tracked` and `Total` stale.
 

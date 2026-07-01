@@ -1,47 +1,29 @@
-import type { ClockifyLinearEntryLinkRegistry } from '../storage/config'
+import type { LinearTicket } from '../linear/tickets'
 import type { TimeEntryWithRatesDtoV1 } from './generated/clockify'
 
 export type ClockifyTicketTimeSummary = {
   lastTrackedAt: string | null
+  totalTrackedAmount: number | null
+  totalTrackedAmountCurrency: string | null
   totalTrackedSeconds: number
 }
 
 export type ClockifyTicketTimeSummaries = Record<string, ClockifyTicketTimeSummary>
 
-export function getClockifyTicketSummaryStart(clockifyLinearEntryLinks: ClockifyLinearEntryLinkRegistry) {
-  const earliestLinkedAt = Object.values(clockifyLinearEntryLinks).reduce<number | null>((earliest, link) => {
-    const linkedAt = Date.parse(link.linkedAt)
-
-    if (!Number.isFinite(linkedAt)) {
-      return earliest
-    }
-
-    return earliest === null ? linkedAt : Math.min(earliest, linkedAt)
-  }, null)
-
-  if (earliestLinkedAt === null) {
-    return null
-  }
-
-  const start = new Date(earliestLinkedAt)
-  start.setDate(start.getDate() - 1)
-  return start
-}
-
 export function summarizeClockifyTicketTimeEntries({
-  clockifyLinearEntryLinks,
   entries,
   now = new Date(),
+  tickets,
 }: {
-  clockifyLinearEntryLinks: ClockifyLinearEntryLinkRegistry
   entries: TimeEntryWithRatesDtoV1[]
   now?: Date
+  tickets: LinearTicket[]
 }) {
-  const linkedEntryIds = new Set(Object.keys(clockifyLinearEntryLinks))
+  const ticketIdentifiers = getTicketIdentifiers(tickets)
   const uniqueEntries = new Map<string, TimeEntryWithRatesDtoV1>()
 
   for (const entry of entries) {
-    if (entry.id && linkedEntryIds.has(entry.id)) {
+    if (entry.id) {
       uniqueEntries.set(entry.id, entry)
     }
   }
@@ -49,24 +31,25 @@ export function summarizeClockifyTicketTimeEntries({
   const summaries: ClockifyTicketTimeSummaries = {}
 
   for (const entry of uniqueEntries.values()) {
-    if (!entry.id) {
+    const ticket = getEntryTicket(entry, ticketIdentifiers)
+
+    if (!ticket) {
       continue
     }
 
-    const link = clockifyLinearEntryLinks[entry.id]
-
-    if (!link) {
-      continue
-    }
-
-    const currentSummary = summaries[link.linearIssueId] ?? {
+    const currentSummary = summaries[ticket.id] ?? {
       lastTrackedAt: null,
+      totalTrackedAmount: null,
+      totalTrackedAmountCurrency: null,
       totalTrackedSeconds: 0,
     }
-    const lastTrackedAt = getEntryLastTrackedAt(entry, link.linkedAt)
+    const lastTrackedAt = getEntryLastTrackedAt(entry)
+    const entryAmount = getEntryTrackedAmount(entry, now)
 
-    summaries[link.linearIssueId] = {
+    summaries[ticket.id] = {
       lastTrackedAt: getLatestDateString(currentSummary.lastTrackedAt, lastTrackedAt),
+      totalTrackedAmount: getNextTrackedAmount(currentSummary, entryAmount),
+      totalTrackedAmountCurrency: currentSummary.totalTrackedAmountCurrency ?? entryAmount?.currency ?? null,
       totalTrackedSeconds: currentSummary.totalTrackedSeconds + getEntryDurationSeconds(entry, now),
     }
   }
@@ -74,11 +57,45 @@ export function summarizeClockifyTicketTimeEntries({
   return summaries
 }
 
-function getEntryLastTrackedAt(entry: TimeEntryWithRatesDtoV1, fallback: string) {
-  return entry.timeInterval?.end ?? entry.timeInterval?.start ?? fallback
+export function getClockifyEntryLinearTicket(entry: TimeEntryWithRatesDtoV1 | null, tickets: LinearTicket[]) {
+  if (!entry) {
+    return null
+  }
+
+  return getEntryTicket(entry, getTicketIdentifiers(tickets))
 }
 
-function getLatestDateString(current: string | null, next: string) {
+function getTicketIdentifiers(tickets: LinearTicket[]) {
+  return tickets
+    .map(ticket => ({
+      normalizedIdentifier: ticket.identifier.toLocaleLowerCase(),
+      ticket,
+    }))
+    .sort((first, second) => second.normalizedIdentifier.length - first.normalizedIdentifier.length)
+}
+
+function getEntryTicket(entry: TimeEntryWithRatesDtoV1, ticketIdentifiers: ReturnType<typeof getTicketIdentifiers>) {
+  const normalizedDescription = entry.description?.toLocaleLowerCase()
+
+  if (!normalizedDescription) {
+    return null
+  }
+
+  return (
+    ticketIdentifiers.find(({ normalizedIdentifier }) => normalizedDescription.includes(normalizedIdentifier))
+      ?.ticket ?? null
+  )
+}
+
+function getEntryLastTrackedAt(entry: TimeEntryWithRatesDtoV1) {
+  return entry.timeInterval?.end ?? entry.timeInterval?.start ?? null
+}
+
+function getLatestDateString(current: string | null, next: string | null) {
+  if (!next) {
+    return current
+  }
+
   if (!current) {
     return next
   }
@@ -95,6 +112,36 @@ function getEntryDurationSeconds(entry: TimeEntryWithRatesDtoV1, now: Date) {
   }
 
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000))
+}
+
+function getEntryTrackedAmount(entry: TimeEntryWithRatesDtoV1, now: Date) {
+  const durationSeconds = getEntryDurationSeconds(entry, now)
+  const hourlyAmount = entry.hourlyRate?.amount
+  const currency = entry.hourlyRate?.currency
+
+  if (!durationSeconds || typeof hourlyAmount !== 'number' || !currency) {
+    return null
+  }
+
+  return {
+    amount: (hourlyAmount * durationSeconds) / 3600 / 100,
+    currency,
+  }
+}
+
+function getNextTrackedAmount(
+  currentSummary: ClockifyTicketTimeSummary,
+  entryAmount: { amount: number; currency: string } | null,
+) {
+  if (!entryAmount) {
+    return currentSummary.totalTrackedAmount
+  }
+
+  if (currentSummary.totalTrackedAmountCurrency && currentSummary.totalTrackedAmountCurrency !== entryAmount.currency) {
+    return currentSummary.totalTrackedAmount
+  }
+
+  return (currentSummary.totalTrackedAmount ?? 0) + entryAmount.amount
 }
 
 function parseDate(value: string | undefined) {

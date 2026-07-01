@@ -95,7 +95,7 @@ The Clinear setup lives under `src/services/clockify/`:
 - `client.ts`: app-facing client factories and default client instances.
 - `projects.ts`: project-list helpers for selecting the default Clockify project.
 - `sync.ts`: TanStack DB localStorage-backed entry collection plus the `ClockifySyncProvider` that periodically reconciles recent Clockify entries.
-- `ticket-summaries.ts`: dashboard aggregation of linked Clockify time entries by Linear issue.
+- `ticket-summaries.ts`: dashboard aggregation of Clockify time entries whose descriptions contain synced Linear ticket identifiers.
 
 Polybot reference points:
 

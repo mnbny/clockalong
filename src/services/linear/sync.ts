@@ -7,13 +7,13 @@ import { createContext, createElement, useCallback, useContext } from 'react'
 import { useAppAuth } from '../../hooks/useAppAuth'
 import { queryKeys } from '../../lib/query-client'
 import { useStorage } from '../storage/useStorage'
-import { requestAssignedIssuesPage, type AssignedIssueNode } from './tickets'
 import {
-  type LinearTicketSortByOption,
   getLinearTicketSyncIntervalMilliseconds,
+  type LinearTicketSortByOption,
   linearTicketsPageSize,
   normalizeLinearTicketSyncLimit,
 } from './ticket-settings'
+import { type AssignedIssueNode, requestAssignedIssuesPage } from './tickets'
 
 const linearTicketSyncStorageKey = 'clinear.linear.tickets.v1'
 

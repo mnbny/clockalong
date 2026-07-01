@@ -2,8 +2,9 @@ import type { AssignedIssueNode, LinearTicket, LinearTicketStatus } from '../ser
 import type { ColumnDef } from '@tanstack/react-table'
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
 
+import { formatCurrency } from '@automattic/format-currency'
 import { IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react'
-import { and, eq, gte, useLiveQuery } from '@tanstack/react-db'
+import { and, eq, useLiveQuery } from '@tanstack/react-db'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
@@ -26,13 +27,13 @@ import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../service
 import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
 import {
   type ClockifyTicketTimeSummaries,
-  getClockifyTicketSummaryStart,
+  getClockifyEntryLinearTicket,
   summarizeClockifyTicketTimeEntries,
 } from '../services/clockify/ticket-summaries'
 import { linearTicketsCollection, useLinearSync } from '../services/linear/sync'
 import {
-  type LinearTicketSortOrderOption,
   getLinearTicketSortOrderLabel,
+  type LinearTicketSortOrderOption,
   linearTicketSortOrderOptions,
   normalizeLinearTicketSyncLimit,
 } from '../services/linear/ticket-settings'
@@ -117,6 +118,19 @@ const ticketColumns: Array<ColumnDef<LinearTicket>> = [
     header: 'Total',
     cell: info => <TotalTrackedCell totalTrackedSeconds={info.getValue<number | null>()} />,
   },
+  {
+    accessorKey: 'totalTrackedAmount',
+    header: 'Value',
+    cell: info => {
+      const ticket = info.row.original
+      return (
+        <TotalTrackedAmountCell
+          totalTrackedAmount={info.getValue<number | null>()}
+          totalTrackedAmountCurrency={ticket.totalTrackedAmountCurrency}
+        />
+      )
+    },
+  },
 ]
 
 function getTicketTableMeta(meta: unknown): TicketTableMeta {
@@ -133,7 +147,6 @@ function DashboardScreen() {
   const [clockifyDescriptionTemplateFallback] = useStorage('clockifyDescriptionTemplateFallback')
   const [linearTicketSyncLimit] = useStorage('linearTicketSyncLimit')
   const [linearTicketSortOrder, setLinearTicketSortOrder] = useStorage('linearTicketSortOrder')
-  const [clockifyLinearEntryLinks, setClockifyLinearEntryLinks] = useStorage('clockifyLinearEntryLinks')
   const [clockifyQuickTimerEntryLinks] = useStorage('clockifyQuickTimerEntryLinks')
   const [quickTimersEnabled] = useStorage('quickTimersEnabled')
   const linearSync = useLinearSync()
@@ -204,14 +217,9 @@ function DashboardScreen() {
     const runningEntries = runningEntryQuery.data ?? []
     return runningEntries.find(entry => entry.userId === clockifyUserQuery.data?.id) ?? runningEntries[0] ?? null
   }, [clockifyUserQuery.data?.id, runningEntryQuery.data])
-  const summaryStart = useMemo(
-    () => getClockifyTicketSummaryStart(clockifyLinearEntryLinks),
-    [clockifyLinearEntryLinks],
-  )
-  const summaryStartIso = summaryStart?.toISOString()
   const syncedTimeEntriesQuery = useLiveQuery(
     q => {
-      if (!summaryStartIso || !clockifyUserQuery.data?.id || !selectedClockifyWorkspace?.id) {
+      if (!clockifyUserQuery.data?.id || !selectedClockifyWorkspace?.id) {
         return null
       }
 
@@ -221,12 +229,11 @@ function DashboardScreen() {
           and(
             eq(syncedEntry.userId, clockifyUserQuery.data.id!),
             eq(syncedEntry.workspaceId, selectedClockifyWorkspace.id!),
-            gte(syncedEntry.startedAt, summaryStartIso),
           ),
         )
         .orderBy(({ syncedEntry }) => syncedEntry.startedAt)
     },
-    [clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id, summaryStartIso],
+    [clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id],
   )
   const linearTickets = useMemo(
     () =>
@@ -237,19 +244,19 @@ function DashboardScreen() {
   )
   const ticketTimeSummaries = useMemo(() => {
     return summarizeClockifyTicketTimeEntries({
-      clockifyLinearEntryLinks,
       entries: [
         ...(syncedTimeEntriesQuery.data?.map(syncedEntry => syncedEntry.entry) ?? []),
         ...(runningEntryQuery.data ?? []),
       ],
+      tickets: linearTickets,
     })
-  }, [clockifyLinearEntryLinks, runningEntryQuery.data, syncedTimeEntriesQuery.data])
+  }, [linearTickets, runningEntryQuery.data, syncedTimeEntriesQuery.data])
   const ticketsWithTracking = useMemo(
     () => mergeTicketTimeSummaries(linearTickets, ticketTimeSummaries),
     [linearTickets, ticketTimeSummaries],
   )
   const runningEntryId = runningEntry?.id ?? null
-  const activeLinearIssueId = runningEntryId ? clockifyLinearEntryLinks[runningEntryId]?.linearIssueId : undefined
+  const activeLinearIssueId = getClockifyEntryLinearTicket(runningEntry, linearTickets)?.id
   const tickets = useMemo(
     () =>
       sortLinearTickets(ticketsWithTracking, {
@@ -302,21 +309,8 @@ function DashboardScreen() {
         description: getErrorMessage(error),
       })
     },
-    onSuccess: async ({ entry, ticket }) => {
-      if (entry.id) {
-        clockifyTimerLog('start mutation saving linear entry link', {
-          clockifyEntryId: entry.id,
-          ticketIdentifier: ticket.identifier,
-        })
-
-        await setClockifyLinearEntryLinks(current => ({
-          ...current,
-          [entry.id as string]: {
-            linearIssueId: ticket.id,
-            linkedAt: new Date().toISOString(),
-          },
-        }))
-      } else {
+    onSuccess: ({ entry, ticket }) => {
+      if (!entry.id) {
         clockifyTimerLog('start mutation returned entry without id', {
           ticketIdentifier: ticket.identifier,
         })
@@ -627,6 +621,24 @@ function TotalTrackedCell({ totalTrackedSeconds }: { totalTrackedSeconds: number
   return <span className="font-medium whitespace-nowrap">{formatTrackedDuration(totalTrackedSeconds * 1000)}</span>
 }
 
+function TotalTrackedAmountCell({
+  totalTrackedAmount,
+  totalTrackedAmountCurrency,
+}: {
+  totalTrackedAmount: number | null
+  totalTrackedAmountCurrency: string | null
+}) {
+  if (totalTrackedAmount === null || !totalTrackedAmountCurrency) {
+    return <TrackingPlaceholder />
+  }
+
+  return (
+    <span className="font-medium whitespace-nowrap">
+      {formatCurrency(totalTrackedAmount, totalTrackedAmountCurrency)}
+    </span>
+  )
+}
+
 function TrackingPlaceholder() {
   return <span className="text-base-content/40 font-medium">Not tracked</span>
 }
@@ -645,6 +657,8 @@ function mergeTicketTimeSummaries(
     return {
       ...ticket,
       lastTrackedAt: summary.lastTrackedAt,
+      totalTrackedAmount: summary.totalTrackedAmount,
+      totalTrackedAmountCurrency: summary.totalTrackedAmountCurrency,
       totalTrackedSeconds: summary.totalTrackedSeconds,
     }
   })
@@ -659,6 +673,8 @@ function toLinearTicket(issue: AssignedIssueNode): LinearTicket {
     lastTrackedAt: null,
     status: issue.state,
     title: issue.title,
+    totalTrackedAmount: null,
+    totalTrackedAmountCurrency: null,
     totalTrackedSeconds: null,
     updatedAt: issue.updatedAt,
     url: issue.url,

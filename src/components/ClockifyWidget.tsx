@@ -21,11 +21,11 @@ import { useStopwatch } from 'react-timer-hook'
 
 import { queryKeys } from '../lib/query-client'
 import { clockify, clockifyReports } from '../services/clockify/client'
-import { clockifyTimeEntriesCollection, type SyncedClockifyTimeEntry } from '../services/clockify/sync'
 import {
   type ClockifyTimeEntryOverlapFix,
   getCompletedClockifyTimeEntryOverlapFixes,
 } from '../services/clockify/overlaps'
+import { clockifyTimeEntriesCollection, type SyncedClockifyTimeEntry } from '../services/clockify/sync'
 import { getErrorMessage } from '../utils/errors'
 import { appToast } from './AppToaster'
 import { ClockifyIcon } from './icons/ClockifyIcon'

@@ -30,23 +30,23 @@ import {
 } from '../services/clockify/description-template'
 import {
   type ClockifyEntrySyncDaysOption,
-  type ClockifyEntrySyncIntervalOption,
   clockifyEntrySyncDaysOptions,
+  type ClockifyEntrySyncIntervalOption,
   clockifyEntrySyncIntervalOptions,
   getClockifyEntrySyncDaysLabel,
   getClockifyEntrySyncIntervalLabel,
 } from '../services/clockify/sync-settings'
 import {
-  type LinearTicketSyncIntervalOption,
   defaultLinearTicketSyncLimit,
-  getLinearTicketSyncIntervalLabel,
   getLinearTicketSortByLabel,
   getLinearTicketSortOrderLabel,
-  linearTicketSyncIntervalOptions,
+  getLinearTicketSyncIntervalLabel,
   type LinearTicketSortByOption,
   linearTicketSortByOptions,
   type LinearTicketSortOrderOption,
   linearTicketSortOrderOptions,
+  type LinearTicketSyncIntervalOption,
+  linearTicketSyncIntervalOptions,
 } from '../services/linear/ticket-settings'
 import { type ThemeOption, themeOptions } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'

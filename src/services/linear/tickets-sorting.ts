@@ -1,5 +1,5 @@
-import type { LinearTicket } from './tickets'
 import type { LinearTicketSortOrderOption } from './ticket-settings'
+import type { LinearTicket } from './tickets'
 
 export type SortLinearTicketsOptions = {
   activeLinearIssueId?: string | null

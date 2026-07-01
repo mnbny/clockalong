@@ -1,3 +1,4 @@
+import type { TimeEntryWithRatesDtoV1 } from './generated/clockify'
 import type { PropsWithChildren } from 'react'
 
 import { createCollection, localStorageCollectionOptions } from '@tanstack/react-db'
@@ -9,7 +10,6 @@ import { queryKeys } from '../../lib/query-client'
 import { storage } from '../storage/config'
 import { useStorage } from '../storage/useStorage'
 import { clockify } from './client'
-import type { TimeEntryWithRatesDtoV1 } from './generated/clockify'
 import { type ClockifyEntrySyncDaysOption, getClockifyEntrySyncIntervalMilliseconds } from './sync-settings'
 
 const clockifyEntrySyncPageSize = 100

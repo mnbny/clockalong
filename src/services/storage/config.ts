@@ -4,10 +4,10 @@ import {
 } from '../clockify/description-template'
 import { defaultClockifyEntrySyncDays, defaultClockifyEntrySyncInterval } from '../clockify/sync-settings'
 import {
-  defaultLinearTicketSyncLimit,
-  defaultLinearTicketSyncInterval,
   defaultLinearTicketSortBy,
   defaultLinearTicketSortOrder,
+  defaultLinearTicketSyncInterval,
+  defaultLinearTicketSyncLimit,
 } from '../linear/ticket-settings'
 import { type StorageConfig, StorageService } from './storage'
 
@@ -19,11 +19,6 @@ export const themeOptions = [
 export const defaultViewOptions = ['dashboard', 'recent', 'active'] as const
 export const refreshIntervalOptions = ['manual', '5m', '15m', '30m'] as const
 
-export type ClockifyLinearEntryLink = {
-  linearIssueId: string
-  linkedAt: string
-}
-export type ClockifyLinearEntryLinkRegistry = Record<string, ClockifyLinearEntryLink>
 export type ClockifyQuickTimerEntryLink = {
   quickTimerId: string
   values: Record<string, string>
@@ -98,11 +93,6 @@ const storageConfig = {
   clockifyEntrySyncInterval: {
     type: 'string',
     default: defaultClockifyEntrySyncInterval,
-    version: 1,
-  },
-  clockifyLinearEntryLinks: {
-    type: 'object',
-    default: {} as ClockifyLinearEntryLinkRegistry,
     version: 1,
   },
   clockifyQuickTimerEntryLinks: {

@@ -1,8 +1,8 @@
+import type { LinearTicketSortByOption } from './ticket-settings'
 import type { Issue, LinearClient, User, WorkflowState } from '@linear/sdk'
 
 import { auth } from '../tauri/auth-client'
 import { createLinearClient } from './client'
-import type { LinearTicketSortByOption } from './ticket-settings'
 
 export type LinearTicketAssignee = Pick<
   User,
@@ -27,6 +27,8 @@ export type LinearTicket = {
   lastTrackedAt: string | null
   status: LinearTicketStatus
   title: string
+  totalTrackedAmount: number | null
+  totalTrackedAmountCurrency: string | null
   totalTrackedSeconds: number | null
   updatedAt: string
   url: string
