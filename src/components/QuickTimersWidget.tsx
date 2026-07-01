@@ -411,7 +411,10 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
   )
   const defaultValues = useMemo(
     () =>
-      Object.fromEntries(templateTokens.map(token => [token, cachedValues?.[token] ?? ''])) as Record<string, string>,
+      Object.fromEntries(templateTokens.map(token => [token, getQuickTimerCachedValue(cachedValues, token)])) as Record<
+        string,
+        string
+      >,
     [cachedValues, templateTokens],
   )
   const { handleSubmit, register, reset } = useForm<Record<string, string>>({
@@ -443,7 +446,7 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
         ...current.filter(entry => entry.id !== quickTimerId),
         {
           id: quickTimerId,
-          ...Object.fromEntries(templateTokens.map(token => [token, values[token] ?? ''])),
+          values: Object.fromEntries(templateTokens.map(token => [token, values[token] ?? ''])),
         },
       ])
     },
@@ -542,6 +545,14 @@ function normalizeQuickTimerColumns(columns: number) {
   }
 
   return Math.min(12, Math.max(1, Math.floor(columns)))
+}
+
+function getQuickTimerCachedValue(
+  cachedValues: ({ values?: Record<string, string> } & Record<string, unknown>) | undefined,
+  token: string,
+) {
+  const value = cachedValues?.values?.[token] ?? cachedValues?.[token]
+  return typeof value === 'string' ? value : ''
 }
 
 function getSafeSvgIcon(icon: string | undefined) {

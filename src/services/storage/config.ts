@@ -46,7 +46,8 @@ export type QuickTimerPreset = {
 }
 export type QuickTimersCacheEntry = {
   id: string
-} & Record<string, string>
+  values: Record<string, string>
+}
 export type RefreshIntervalOption = (typeof refreshIntervalOptions)[number]
 
 const storageConfig = {
