@@ -46,7 +46,7 @@ The current Linear client-side order modes are:
 
 Linear sync ordering is separate from dashboard ordering. The sync can choose Linear's `orderBy` field, but Linear's assigned-issues query does not expose a sort direction. Dashboard ordering is applied after the configured sync limit has been synced into the local collection.
 
-`src/services/linear/tickets-sorting.ts` owns the client-side sorting rules. Keep the route focused on rendering and storage/query wiring.
+`src/services/linear/tickets-sorting.ts` owns the client-side sorting rules. `src/components/LinearWidget.tsx` owns the dashboard Linear table wiring and renders nothing when Linear is unauthenticated. Keep the dashboard route focused on widget composition.
 
 ## Recency treatment
 
@@ -65,7 +65,7 @@ Use Day.js relative time for last-tracked values, `humanize-duration` for total 
 
 The dashboard Linear section is a data table, not a kanban or full Linear browser. Keep row density high enough for scanning.
 
-Assigned Linear tickets should come from the local synced ticket collection in `src/services/linear/sync.ts`, not from component-level Linear pagination. The background sync stores the current viewer's compact assigned-ticket rows according to the `linearTicketSyncLimit`, `linearTicketSortBy`, and `linearTicketSyncInterval` settings, and UI code should subscribe with TanStack DB live queries when it needs ticket-list data.
+Assigned Linear tickets should come from the local synced ticket collection in `src/services/linear/sync.ts`, not from component-level Linear pagination. The background sync stores the current viewer's compact assigned-ticket rows according to the `linearTicketSyncLimit`, `linearTicketSyncOrderBy`, and `linearTicketSyncInterval` settings, and `LinearWidget` subscribes with TanStack DB live queries for ticket-list data.
 
 Current columns:
 
@@ -130,7 +130,7 @@ Current behavior:
 - Reads synced local Clockify entries for the selected Clockify user/workspace, plus the current running entry.
 - Matches entries whose descriptions contain a synced Linear ticket identifier.
 - Produces summaries keyed by Linear issue ID: `{ lastTrackedAt, totalTrackedSeconds, totalTrackedAmount, totalTrackedAmountCurrency }`.
-- The dashboard merges those summaries into the compact Linear ticket DTO before sorting and rendering.
+- `LinearWidget` merges those summaries into the compact Linear ticket DTO before sorting and rendering.
 
 Do not reintroduce a local Clockify-entry-to-Linear-ticket registry as the normal source of truth. If Clockify custom-field metadata is added later, it can become a stronger match source, but description identifiers remain the portable fallback.
 

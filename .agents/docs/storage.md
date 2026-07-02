@@ -20,7 +20,7 @@ The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults 
 - `displayName`: temporary local display name used by settings UI previews.
 - `linearTicketSyncLimit`: maximum number of assigned Linear tickets to sync for ticket lists. Default is `50`.
 - `linearTicketSyncInterval`: how often assigned Linear tickets sync in the background. Default is `30m`.
-- `linearTicketSortBy`: Linear pagination ordering field for ticket sync. Values mirror Linear `PaginationOrderBy` support currently exposed by the app: `createdAt`, `updatedAt`.
+- `linearTicketSyncOrderBy`: Linear pagination ordering field for ticket sync. Values mirror Linear `PaginationOrderBy` support currently exposed by the app: `createdAt`, `updatedAt`.
 - `linearTicketSortOrder`: client-side ticket ordering mode. Values are `custom`, `status`, `created`, `updated`, and `alphabetical`.
 - `quickTimersColumns`: number of Quick Timer columns to show in the dashboard grid. Default is `6`.
 - `quickTimersEnabled`: whether the Quick Timers dashboard feature is enabled. Default is `true`.

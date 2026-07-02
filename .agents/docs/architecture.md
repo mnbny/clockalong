@@ -20,10 +20,12 @@
   - `src-tauri/src/auth_clockify.rs`: Clockify API-key validation and secure credential lifecycle.
   - `src-tauri/src/auth_linear.rs`: Linear OAuth, loopback callback, token refresh, and disconnect.
   - `src-tauri/src/stronghold.rs`: narrow Stronghold read/write/remove helpers for native secrets.
-- Auth routing mirrors the reference app:
+- Auth routing uses Clockify as the app-level gate:
   - `/` waits for native app initialization, then navigates to `/dashboard`.
-  - `_app` guards authenticated routes and redirects unauthenticated users to `/sign-in`.
-  - `_auth` guards authentication routes and redirects fully authenticated users to `/dashboard`.
+  - `_app` guards authenticated routes and redirects users to `/sign-in` only when Clockify is unauthenticated.
+  - `_auth` only waits for app initialization; it does not redirect authenticated users away from the sign-in screen.
+  - The sign-in screen lets users connect Clockify plus optional providers, then explicitly navigate with `Go to dashboard`.
+  - Optional provider surfaces gate themselves. Linear dashboard/settings UI should render only when Linear is authenticated, while Clockify-only and local sources can remain available.
   - Rust exposes authentication state through `clinear_auth_get_state` and `clinear-auth:state-changed`.
 - Tauri configuration lives in `src-tauri/tauri.conf.json`.
 - Tauri permissions live in `src-tauri/capabilities/`.
@@ -38,6 +40,25 @@ Frontend providers are composed in `src/main.tsx` through `ProviderRegistry`. Ke
 `ClockifySyncProvider` depends on TanStack Query and therefore mounts inside `QueryClientProvider`. It owns the background sync into the local Clockify entry collection; routes and widgets should consume the collection instead of starting their own broad Clockify entry pagination.
 
 Work-source sync providers also mount inside `QueryClientProvider`. `LinearSyncProvider` owns the background sync into the local Linear assigned-ticket collection; routes should consume the collection instead of starting their own Linear assigned-issue pagination.
+
+## Frontend surfaces
+
+Dashboard routes should stay thin composition shells. `src/routes/_app.dashboard.tsx` renders provider/source widgets and should not own provider fetches, sync state, table logic, or quick timer state.
+
+Current dashboard widget boundaries:
+
+- `src/components/ClockifyWidget.tsx`: Clockify summary, running timer, overlap repair, and Clockify-centric dashboard controls.
+- `src/components/QuickTimersWidget.tsx`: Quick Timer visibility, active preset lookup, preset CRUD, and preset start forms. It returns `null` when Quick Timers are disabled.
+- `src/components/LinearWidget.tsx`: Linear auth gate, assigned-ticket live query, Clockify summary merge, Linear ticket table, ticket ordering, and Linear timer start/stop controls. It returns `null` when Linear is unauthenticated.
+
+Settings routes should follow the same composition pattern. `src/routes/_app.settings.tsx` owns the settings page header and renders scoped settings sections:
+
+- `src/components/QuickTimersSettings.tsx`
+- `src/components/LinearSettings.tsx`
+- `src/components/ClockifySettings.tsx`
+- `src/components/AppSettings.tsx`
+
+Shared settings row/section layout lives in `src/components/settings/SettingsSection.tsx`. Keep section-specific hooks and service calls inside the scoped settings component that renders that section.
 
 ## Frontend query keys
 

@@ -20,6 +20,8 @@ Do not turn authentication into a large setup wizard. The visible UI should most
 
 Do not assume every future work source requires authentication. Quick Timers are a local source and should not be routed through provider auth.
 
+Clockify is the only app-level authentication requirement. When Clockify is authenticated, users can enter the app even if every optional work-source provider is disconnected. Optional provider UI should gate itself at the component boundary instead of pushing users back to the sign-in route.
+
 The Streamlink Tauri app is the closest local reference for this split. Its useful pattern is not the Twitch-specific sign-in UI. The useful pattern is that Rust stores and refreshes credentials, exposes a small token/auth bridge, emits simple state changes, and lets the frontend API client call the external service directly with an access token.
 
 ## Authentication screen
@@ -35,6 +37,8 @@ The first screen should remain a compact connection checklist:
 - Keep the screen focused on the provider buttons. Do not add a product logo or heading unless users cannot tell what screen they are on.
 - Do not add persistent explanatory copy unless the flow becomes unclear in practice.
 - Do not add detailed per-provider state labels beyond connected or disconnected for the first pass.
+
+The sign-in screen should not auto-redirect just because Clockify is already connected. Users may use it as a provider connection screen, connect optional providers such as Linear, and then click `Go to dashboard`. That button is enabled only after Clockify is authenticated.
 
 The screen should not show a Linear API key field. Linear's default product flow is OAuth. Asking for a Linear API key would make Clinear feel like a personal script and would teach users the wrong integration path.
 
@@ -64,7 +68,8 @@ The frontend should handle the parts that are UI-specific or API-client-specific
 - Render provider buttons and connected indicators.
 - Keep local button loading state.
 - Show toasts for success, failure, cancellation, and retryable issues.
-- Redirect between auth-gated and app routes based on the native auth snapshot.
+- Redirect from authenticated app routes to sign-in only when Clockify is unauthenticated.
+- Keep optional provider auth checks in provider-specific widgets, settings sections, sync providers, and data hooks.
 - Request provider credentials from Rust when a frontend API client needs them.
 - Create and use provider API clients in TypeScript where practical.
 - Avoid storing provider tokens in local storage, route state, or broad global UI state.

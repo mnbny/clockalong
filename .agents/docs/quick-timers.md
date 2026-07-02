@@ -4,7 +4,7 @@ Quick Timers are a first-class local work source made of reusable ad hoc Clockif
 
 ## Dashboard behavior
 
-`src/components/QuickTimersWidget.tsx` owns the Quick Timers dashboard surface.
+`src/components/QuickTimersWidget.tsx` owns the Quick Timers dashboard surface, including the `quickTimersEnabled` gate. The dashboard route should render the widget unconditionally and let the widget return `null` when the feature is disabled.
 
 The widget header stays visible when the feature is enabled. The body grid renders only when saved presets exist. Presets render as compact rectangular controls with an icon and label. `quickTimersColumns` controls the grid column count.
 
@@ -73,3 +73,7 @@ Mutation side effects belong in callbacks:
 - `onError`: show error feedback.
 
 The Clockify dashboard widget owns the generic running-timer stop control. When any Clockify timer is running, it shows a red square stop button opposite the running timer text, visually matching the active Linear row stop button.
+
+## Settings
+
+`src/components/QuickTimersSettings.tsx` owns Quick Timer settings such as enablement and dashboard column count. Keep Quick Timer storage hooks out of `src/routes/_app.settings.tsx`; the route should only compose scoped settings sections.

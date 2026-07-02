@@ -49,7 +49,7 @@ Clinear uses Tauri's updater plugin for direct-download macOS updates. The updat
 - Rust plugin initialization lives in `src-tauri/src/lib.rs`.
 - Frontend updater calls are wrapped in `src/services/tauri/app-updates.ts`.
 - `src/hooks/useAppUpdates.tsx` owns app-wide periodic update checks and update-available toasts.
-- `src/routes/_app.settings.tsx` owns the manual update check/install/restart UI.
+- `src/components/AppSettings.tsx` owns the manual update check/install/restart UI rendered from the settings route.
 - Do not auto-install or auto-restart. Active time tracking should stay user-controlled.
 
 ## Auth gate

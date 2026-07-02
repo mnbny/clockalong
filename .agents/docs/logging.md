@@ -1,6 +1,6 @@
 # Logging
 
-Clinear follows the Streamlink Tauri logging pattern. Rust logs and forwarded browser console logs land in the same app log file, and the settings screen reads that file for diagnostics.
+Clinear follows the Streamlink Tauri logging pattern. Rust logs and forwarded browser console logs land in the same app log file, and the App settings section reads that file for diagnostics.
 
 ## Ownership
 
@@ -39,7 +39,7 @@ The app exposes two narrow commands for diagnostics UI:
 
 ## Settings UI
 
-The settings screen owns the user-facing log viewer. Keep the Streamlink drawer pattern:
+`src/components/AppSettings.tsx` owns the user-facing log viewer. Keep the Streamlink drawer pattern:
 
 - open logs in an end-side drawer
 - read logs lazily when the drawer opens
@@ -47,4 +47,4 @@ The settings screen owns the user-facing log viewer. Keep the Streamlink drawer 
 - show success and error states through toasts
 - filter noisy lines so the drawer shows Rust app logs and known frontend prefixes
 
-When adding a new frontend log prefix that should appear in the drawer, add it to the settings log filter.
+When adding a new frontend log prefix that should appear in the drawer, add it to the App settings log filter.

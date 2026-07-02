@@ -46,10 +46,11 @@ Implementation constraints:
 - Use `viewer.assignedIssues(first, after, orderBy)` with cursor pagination.
 - Store compact assigned-ticket rows in the local collection under the authenticated Linear viewer ID.
 - `linearTicketSyncLimit` controls the maximum number of assigned issues to sync.
-- `linearTicketSortBy` maps to Linear's `PaginationOrderBy` field for the fetch. Current exposed values are `createdAt` and `updatedAt`.
+- `linearTicketSyncOrderBy` maps to Linear's `PaginationOrderBy` field for the fetch. Current exposed values are `createdAt` and `updatedAt`.
 - `viewer.assignedIssues` does not expose a sort-direction argument. Do not treat client-side ordering as an API fetch direction.
 - `linearTicketSyncInterval` controls the provider's background sync interval.
-- Dashboard UI should subscribe to the local collection with TanStack DB live queries instead of starting its own Linear pagination loop.
+- `src/components/LinearWidget.tsx` should subscribe to the local collection with TanStack DB live queries instead of starting its own Linear pagination loop.
+- Linear dashboard and settings UI should gate itself on `useAppAuth().value.linearAuthenticated` and render no Linear data controls when disconnected.
 - Use focused raw GraphQL when the dashboard only needs a compact row DTO.
 - If a compact assigned-ticket request receives `401`, refresh the native Linear credential and retry once with a new SDK client.
 - Fetch status `color`, `type`, and `position`; `position` is used for Linear-like status ordering.
