@@ -1,6 +1,6 @@
 # Linear integration notes
 
-Linear's normal integration path for Clinear is its public GraphQL API through the official `@linear/sdk` TypeScript client. Clinear should treat Linear as a user-authorized service: users connect their own Linear account with OAuth2, while the app ships only public OAuth metadata.
+Linear is Clinear's first external work-source provider. Its normal integration path is the public GraphQL API through the official `@linear/sdk` TypeScript client. Clinear should treat Linear as a user-authorized service: users connect their own Linear account with OAuth2, while the app ships only public OAuth metadata.
 
 Rust owns Linear auth state and token storage. The broader Linear API client should live in the frontend and use the official TypeScript SDK when possible. The native layer should handle OAuth startup, callback verification, secure token storage, token refresh scheduling, auth-state initialization, and clearing credentials.
 
@@ -35,7 +35,7 @@ API behavior to preserve:
 - Prefer `orderBy: updatedAt` for incremental refresh flows.
 - Avoid per-issue polling. Linear explicitly recommends webhooks or narrow updated-data queries for update flows.
 
-The first Clinear issue query should be based on the authenticated viewer, for example `viewer.assignedIssues(...)` through the SDK. Fetch only fields required for the ticket list, timer mapping, and issue detail surfaces.
+The first Clinear issue query should be based on the authenticated viewer, for example `viewer.assignedIssues(...)` through the SDK. Fetch only fields required for the Linear work-source list, timer mapping, and issue detail surfaces.
 
 ## Assigned ticket sync
 

@@ -1,6 +1,6 @@
 # Quick Timers
 
-Quick Timers are reusable ad hoc Clockify timer presets that live on the dashboard. They are separate from Linear tickets and should not depend on Linear data.
+Quick Timers are a first-class local work source made of reusable ad hoc Clockify timer presets. They live on the dashboard, are separate from external providers such as Linear or GitHub, and should not depend on provider data.
 
 ## Dashboard behavior
 
@@ -60,7 +60,7 @@ The registry value stays small:
 
 Do not duplicate the Clockify description, project, task, duration, or timestamps in this registry. Clockify owns the actual time entry data. The registry only answers which preset created a Clockify entry and which template values were submitted.
 
-The dashboard derives the active Quick Timer from the current running Clockify entry id. Active preset cells use the same accent pulse treatment as active Linear rows.
+The dashboard derives the active Quick Timer from the current running Clockify entry id. Active preset cells use the same accent pulse treatment as active provider-backed rows.
 
 ## Clockify start and stop
 

@@ -1,8 +1,20 @@
 # Time tracking
 
-Clinear's primary app surface should optimize for quickly finding Linear issues that are relevant to Clockify time tracking. The dashboard is a time-tracking workspace first, not a general Linear project-management view.
+Clinear's primary app surface should optimize for quickly finding developer work that is relevant to Clockify time tracking. The dashboard is a Clockify companion workspace first, not a general project-management, GitHub, Linear, or invoicing view.
 
-## Ticket scope
+## Work-source scope
+
+Clockify is the core time-tracking provider. Other sources provide context for trackable work items.
+
+Current and planned work sources:
+
+- Linear: external provider for assigned issues.
+- Quick Timers: local source for reusable ad hoc timer presets.
+- GitHub: planned external provider for pull-request-centered tracking and billing review.
+
+Keep source-specific behavior in source-specific docs and modules until multiple implemented sources prove a useful shared abstraction. Shared language is useful in docs, but code should not over-generalize before GitHub exists.
+
+## Linear ticket scope
 
 The default ticket list should show Linear issues assigned to the current user across all statuses.
 
@@ -12,19 +24,19 @@ Showing all visible workspace issues should be a later escape hatch, not the def
 
 ## Dashboard ordering
 
-Default ordering should be opinionated around time-tracking usefulness rather than mirroring Linear exactly.
+Default ordering should be opinionated around time-tracking usefulness rather than mirroring any source exactly.
 
 Prioritize:
 
 - currently running Clockify timer
-- recently clocked Linear issues
-- issues with time entries that likely need review or continuation
-- active Linear workflow states such as in progress or ready
-- recent Linear updates
+- recently clocked work items
+- work items with time entries that likely need review or continuation
+- active provider workflow states such as in progress, ready, or review requested
+- recent source updates
 
-Linear status should influence ordering, but it should not determine whether an issue is visible. Clockify activity should outrank Linear workflow state because Clinear exists to support time tracking.
+Provider state should influence ordering, but it should not determine whether an item is visible by itself. Clockify activity should outrank provider workflow state because Clinear exists to support time tracking.
 
-The current client-side order modes are:
+The current Linear client-side order modes are:
 
 - `custom`: relevance. The running ticket appears first, then recently tracked workable tickets, started tickets, unstarted tickets, backlog/triage tickets, recently tracked terminal tickets, and terminal/unknown tickets. Recent tracking uses the merged Clockify `lastTrackedAt`, not the local link timestamp. Linear status type drives the portable bucket, with workflow-state position, last-tracked time, updated date, and ticket identifier used as tie-breakers.
 - `status`: Linear workflow type and workflow-state position, then updated date.
@@ -38,18 +50,18 @@ Linear sync ordering is separate from dashboard ordering. The sync can choose Li
 
 ## Recency treatment
 
-Recently clocked tickets should be easy to resume. The dashboard may use subtle recency styling, with stronger visual emphasis for the most recently clocked issue and softer treatment for older recent issues.
+Recently clocked work should be easy to resume. The dashboard may use subtle recency styling, with stronger visual emphasis for the most recently clocked item and softer treatment for older recent items.
 
-Recency should stay functional and restrained. The important data is:
+Recency should stay functional and restrained. The data that matters:
 
 - whether a timer is active
 - last tracked time
-- total tracked duration for the issue
-- ticket status
+- total tracked duration for the item
+- source status
 
-Use Day.js relative time for the ticket row's last-tracked value, `humanize-duration` for total tracked duration, and formatted currency for tracked value. Clockify entry aggregation is derived from synced Clockify descriptions that contain a local Linear ticket identifier. Rows without matching Clockify entries show a restrained placeholder.
+Use Day.js relative time for last-tracked values, `humanize-duration` for total tracked duration, and formatted currency for tracked value. Clockify entry aggregation is derived from synced Clockify descriptions or local metadata that can be matched to a source item. Rows without matching Clockify entries show a restrained placeholder.
 
-## Dashboard ticket table
+## Linear dashboard table
 
 The dashboard Linear section is a data table, not a kanban or full Linear browser. Keep row density high enough for scanning.
 
@@ -69,11 +81,11 @@ Make the active tracked row visible without changing table density. Use a subtle
 
 ## Clockify dashboard widget
 
-Keep the Clockify dashboard widget small and operational. It should support the moment when the user opens Clinear to start, stop, resume, or review time on a Linear ticket.
+Keep the Clockify dashboard widget small and operational. It should support the moment when the user opens Clinear to start, stop, resume, or review tracked work.
 
 The first useful widget data is:
 
-- running timer, including elapsed time and the linked Linear ticket when known
+- running timer, including elapsed time and the linked source item when known
 - tracked time and rate-derived amount for today
 - tracked time and rate-derived amount for this week
 - tracked time and rate-derived amount for this month
@@ -97,13 +109,17 @@ The status badge has only two states:
 
 Do not add separate loading or unavailable labels to this badge. The fallback visual state is `Not Running`; use logs, spinners, or toasts for errors and loading when they help.
 
-## Clockify ticket matching
+## Clockify source matching
 
-Clockify does not provide a first-class Linear issue link. Clinear derives ticket ownership from Clockify time-entry descriptions by comparing each description against the identifiers in the local synced Linear ticket collection.
+Clockify is the system of record for time entries, but it does not provide first-class links to most external work-source items. Clinear derives source ownership from provider-specific matching rules and, where available, small local registries.
 
-Matching is intentionally based on Linear-provided identifiers rather than an invented parser. Build the local candidate list from synced Linear tickets, normalize identifiers and descriptions case-insensitively, and match by exact containment. Check longer identifiers first so a longer ticket ID wins before a shorter overlapping one.
+For Linear, matching is intentionally based on Linear-provided identifiers rather than an invented parser. Build the local candidate list from synced Linear tickets, normalize identifiers and descriptions case-insensitively, and match by exact containment. Check longer identifiers first so a longer ticket ID wins before a shorter overlapping one.
 
 Clockify entries without a matching synced Linear identifier are treated as unlinked. This is deliberate: manually created Clockify web entries become visible to Clinear once the user includes the Linear issue ID in the description, and app resets can recover links from Clockify data without a local map.
+
+For Quick Timers, `clockifyQuickTimerEntryLinks` is the local registry that records which preset created a Clockify entry. It should stay small and should not duplicate Clockify-owned entry data.
+
+GitHub matching has not been researched yet. Do not assume whether matching should use pull-request numbers, URLs, branch names, commit SHAs, or explicit local metadata.
 
 ## Per-ticket Clockify summaries
 
@@ -122,20 +138,22 @@ The Linear table refresh button should refresh assigned Linear tickets, the Cloc
 
 ## Controls
 
-The dashboard should support alternate views or sort modes once data is wired:
+The dashboard should support alternate views or sort modes once source data is wired:
 
 - default relevance sort
 - recently clocked
-- Linear status
+- source status
 - created date
 - updated date
 - alphabetical
 - recently updated
 
-Filtering can start small. Useful first filters are assigned work, recently clocked, active timers, done, backlog, and an all-visible fallback when broader issue lookup is needed.
+Filtering can start small. Useful first filters are assigned work, recently clocked, active timers, done, backlog, and an all-visible fallback when broader source lookup is needed.
 
-## Multi-workspace direction
+## Multi-source direction
 
 Initial Linear integration can assume one connected authorization. Loading assigned tickets from multiple Linear workspaces is useful later, but it requires storing and managing multiple Linear OAuth authorizations and presenting the result without making the dashboard noisy.
 
 When multi-workspace support exists, the dashboard should be able to aggregate assigned issues across connected workspaces while still making the workspace/team visible on each row.
+
+GitHub should follow the same source discipline once researched: start narrow, show only work items that improve Clockify tracking and billing review, and avoid broad repository browsing until a concrete time-tracking workflow needs it.

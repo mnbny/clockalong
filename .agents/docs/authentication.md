@@ -1,11 +1,13 @@
 # Authentication
 
-Clinear treats authentication as a short provider checklist. Users connect the services they need, get toast feedback for success or failure, and continue once both required providers are connected.
+Clinear treats authentication as a short provider checklist. Users connect Clockify plus whichever work sources they need, get toast feedback for success or failure, and continue once the currently required providers are connected.
 
 Do not turn authentication into a large setup wizard. The visible UI should mostly be the existing provider buttons, loading feedback while an action is running, and a connected indicator once a provider is ready.
 
 ## Current direction
 
+- Clockify is the core required provider for time tracking.
+- External work-source providers such as Linear and GitHub are optional unless a specific workflow requires them.
 - Rust owns credential lifecycle and storage.
 - The frontend owns the visible authentication screen, toasts, routing, and API clients.
 - Provider API calls should happen in TypeScript when a provider has a practical frontend client.
@@ -15,6 +17,8 @@ Do not turn authentication into a large setup wizard. The visible UI should most
 - Short-lived access tokens may be passed to the frontend when the frontend needs them to call an official SDK.
 - The auth snapshot can stay simple for now, with provider-level connected booleans.
 - More detailed visible states should wait until the product needs them.
+
+Do not assume every future work source requires authentication. Quick Timers are a local source and should not be routed through provider auth.
 
 The Streamlink Tauri app is the closest local reference for this split. Its useful pattern is not the Twitch-specific sign-in UI. The useful pattern is that Rust stores and refreshes credentials, exposes a small token/auth bridge, emits simple state changes, and lets the frontend API client call the external service directly with an access token.
 
@@ -133,6 +137,8 @@ Linear access tokens are short-lived. Rust should return a valid Linear access t
 
 The frontend should use the official Linear TypeScript SDK for normal Linear reads and mutations. Rust should not proxy Linear issue queries, ticket lists, comments, or other regular GraphQL operations. The native layer's Linear role is auth, token storage, refresh, and credential clearing.
 
+Linear is an external work-source provider, not the whole product model. Keep Linear auth and API decisions in the Linear provider boundary.
+
 Shipping rules:
 
 - Ship the Linear OAuth client ID. The current public client ID is `1ef17fb4bbef1626a5f1f838843e067c`.
@@ -174,3 +180,4 @@ Linear disconnect is local-first and provider revocation is best effort. Rust sh
 - Confirm the Linear OAuth app behaves correctly from packaged Tauri builds and local development.
 - Decide whether Linear needs more than the initial `read` scope.
 - Decide whether to add Clockify disconnect UI and whether provider disconnect controls belong only in authenticated app chrome or also in settings.
+- Research GitHub auth before adding GitHub provider UI or commands.
