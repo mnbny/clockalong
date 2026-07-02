@@ -1,4 +1,4 @@
-import type { LinearTicketSortByOption } from './ticket-settings'
+import type { LinearTicketSyncOrderByOption } from './ticket-settings'
 import type { Issue, LinearClient, User, WorkflowState } from '@linear/sdk'
 
 import { auth } from '../tauri/auth-client'
@@ -55,7 +55,7 @@ export type AssignedIssuesPage = AssignedIssuesResponse['viewer']['assignedIssue
 export type AssignedIssuesVariables = {
   after?: string | null
   first: number
-  orderBy: LinearTicketSortByOption
+  orderBy: LinearTicketSyncOrderByOption
 }
 
 const assignedTicketsQuery = `
@@ -99,7 +99,7 @@ export async function requestAssignedIssuesPage(variables: AssignedIssuesVariabl
   linearTicketsLog('assigned fetch page request', {
     afterPresent: Boolean(variables.after),
     first: variables.first,
-    sortBy: variables.orderBy,
+    orderBy: variables.orderBy,
   })
 
   const linearClient = await createLinearClient()

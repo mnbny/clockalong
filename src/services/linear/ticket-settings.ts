@@ -3,15 +3,15 @@ import { PaginationOrderBy } from '@linear/sdk'
 export const linearTicketsPageSize = 50
 export const defaultLinearTicketSyncLimit = linearTicketsPageSize
 export const linearTicketSyncIntervalOptions = ['manual', '5m', '15m', '30m', '1h'] as const
-export const linearTicketSortByOptions = [PaginationOrderBy.CreatedAt, PaginationOrderBy.UpdatedAt] as const
+export const linearTicketSyncOrderByOptions = [PaginationOrderBy.CreatedAt, PaginationOrderBy.UpdatedAt] as const
 export const linearTicketSortOrderOptions = ['custom', 'status', 'created', 'updated', 'alphabetical'] as const
 
 export type LinearTicketSyncIntervalOption = (typeof linearTicketSyncIntervalOptions)[number]
-export type LinearTicketSortByOption = (typeof linearTicketSortByOptions)[number]
+export type LinearTicketSyncOrderByOption = (typeof linearTicketSyncOrderByOptions)[number]
 export type LinearTicketSortOrderOption = (typeof linearTicketSortOrderOptions)[number]
 
 export const defaultLinearTicketSyncInterval: LinearTicketSyncIntervalOption = '30m'
-export const defaultLinearTicketSortBy: LinearTicketSortByOption = linearTicketSortByOptions[0]
+export const defaultLinearTicketSyncOrderBy: LinearTicketSyncOrderByOption = linearTicketSyncOrderByOptions[0]
 export const defaultLinearTicketSortOrder: LinearTicketSortOrderOption = linearTicketSortOrderOptions[0]
 
 export function getLinearTicketSyncIntervalLabel(option: LinearTicketSyncIntervalOption) {
@@ -44,7 +44,7 @@ export function getLinearTicketSyncIntervalMilliseconds(option: LinearTicketSync
   }
 }
 
-export function getLinearTicketSortByLabel(option: LinearTicketSortByOption) {
+export function getLinearTicketSyncOrderByLabel(option: LinearTicketSyncOrderByOption) {
   switch (option) {
     case PaginationOrderBy.CreatedAt:
       return 'Created date'

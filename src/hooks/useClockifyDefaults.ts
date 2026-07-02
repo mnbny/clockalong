@@ -12,10 +12,7 @@ export function useClockifyDefaults() {
   const authState = useAppAuth()
   const [clockifyDefaultProject, setClockifyDefaultProject] = useStorage('clockifyDefaultProject')
   const enabled =
-    !appInitializationState.value.appInitializing &&
-    !authState.loading &&
-    authState.value.linearAuthenticated &&
-    authState.value.clockifyAuthenticated
+    !appInitializationState.value.appInitializing && !authState.loading && authState.value.clockifyAuthenticated
 
   const userQuery = useQuery({
     enabled,

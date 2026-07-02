@@ -4,10 +4,10 @@ import {
 } from '../clockify/description-template'
 import { defaultClockifyEntrySyncDays, defaultClockifyEntrySyncInterval } from '../clockify/sync-settings'
 import {
-  defaultLinearTicketSortBy,
   defaultLinearTicketSortOrder,
   defaultLinearTicketSyncInterval,
   defaultLinearTicketSyncLimit,
+  defaultLinearTicketSyncOrderBy,
 } from '../linear/ticket-settings'
 import { type StorageConfig, StorageService } from './storage'
 
@@ -135,9 +135,9 @@ const storageConfig = {
     default: defaultLinearTicketSyncInterval,
     version: 1,
   },
-  linearTicketSortBy: {
+  linearTicketSyncOrderBy: {
     type: 'string',
-    default: defaultLinearTicketSortBy,
+    default: defaultLinearTicketSyncOrderBy,
     version: 1,
   },
   linearTicketSortOrder: {

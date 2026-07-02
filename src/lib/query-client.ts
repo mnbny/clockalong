@@ -1,4 +1,4 @@
-import type { LinearTicketSortByOption } from '../services/linear/ticket-settings'
+import type { LinearTicketSyncOrderByOption } from '../services/linear/ticket-settings'
 
 import { QueryClient } from '@tanstack/react-query'
 
@@ -8,8 +8,8 @@ export type QueryKeySegments<T> = {
 }
 
 type LinearTicketSyncQueryParams = {
+  orderBy: LinearTicketSyncOrderByOption
   syncLimit: number
-  sortBy: LinearTicketSortByOption
 }
 
 type ClockifyProjectsQueryParams = {

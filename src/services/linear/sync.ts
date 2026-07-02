@@ -9,8 +9,8 @@ import { queryKeys } from '../../lib/query-client'
 import { useStorage } from '../storage/useStorage'
 import {
   getLinearTicketSyncIntervalMilliseconds,
-  type LinearTicketSortByOption,
   linearTicketsPageSize,
+  type LinearTicketSyncOrderByOption,
   normalizeLinearTicketSyncLimit,
 } from './ticket-settings'
 import { type AssignedIssueNode, requestAssignedIssuesPage } from './tickets'
@@ -26,8 +26,8 @@ export type SyncedLinearTicket = {
 }
 
 type LinearTicketSyncOptions = {
+  orderBy: LinearTicketSyncOrderByOption
   syncLimit: number
-  sortBy: LinearTicketSortByOption
 }
 
 type LinearTicketSyncResult = {
@@ -51,14 +51,14 @@ function useLinearSyncData() {
   const authState = useAppAuth()
   const [linearTicketSyncLimit] = useStorage('linearTicketSyncLimit')
   const [linearTicketSyncInterval] = useStorage('linearTicketSyncInterval')
-  const [linearTicketSortBy] = useStorage('linearTicketSortBy')
+  const [linearTicketSyncOrderBy] = useStorage('linearTicketSyncOrderBy')
   const normalizedSyncLimit = normalizeLinearTicketSyncLimit(linearTicketSyncLimit)
   const linearAuthenticated = authState.value.linearAuthenticated && !authState.loading
   const syncQuery = useQuery({
     queryKey: queryKeys.linear.ticketSync({
-      params: { sortBy: linearTicketSortBy, syncLimit: normalizedSyncLimit },
+      params: { orderBy: linearTicketSyncOrderBy, syncLimit: normalizedSyncLimit },
     }),
-    queryFn: () => syncLinearTickets({ sortBy: linearTicketSortBy, syncLimit: normalizedSyncLimit }),
+    queryFn: () => syncLinearTickets({ orderBy: linearTicketSyncOrderBy, syncLimit: normalizedSyncLimit }),
     enabled: linearAuthenticated,
     refetchInterval: getLinearTicketSyncIntervalMilliseconds(linearTicketSyncInterval),
     staleTime: 60_000,
@@ -90,7 +90,20 @@ export function useLinearSync() {
   return context
 }
 
-async function syncLinearTickets({ sortBy, syncLimit }: LinearTicketSyncOptions): Promise<LinearTicketSyncResult> {
+export async function clearSyncedLinearTickets() {
+  await linearTicketsCollection.preload()
+  const ticketIds = linearTicketsCollection.toArray.map(syncedTicket => syncedTicket.id)
+
+  if (!ticketIds.length) {
+    return 0
+  }
+
+  const transaction = linearTicketsCollection.delete(ticketIds)
+  await transaction.isPersisted.promise
+  return ticketIds.length
+}
+
+async function syncLinearTickets({ orderBy, syncLimit }: LinearTicketSyncOptions): Promise<LinearTicketSyncResult> {
   const syncedAt = new Date().toISOString()
   const fetchedTicketIds = new Set<string>()
   let after: string | null = null
@@ -105,7 +118,7 @@ async function syncLinearTickets({ sortBy, syncLimit }: LinearTicketSyncOptions)
     const response = await requestAssignedIssuesPage({
       after,
       first: Math.min(linearTicketsPageSize, syncLimit - ticketsFetched),
-      orderBy: sortBy,
+      orderBy,
     })
     const responseViewerId = response.data?.viewer.id ?? null
     const page = response.data?.viewer.assignedIssues

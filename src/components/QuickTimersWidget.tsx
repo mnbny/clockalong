@@ -10,7 +10,7 @@ import {
   IconTrash,
   IconX,
 } from '@tabler/icons-react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { capitalCase } from 'change-case'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
@@ -36,10 +36,6 @@ type QuickTimerStartFormProps = {
   onCancel: () => void
 }
 
-type QuickTimersWidgetProps = {
-  activeQuickTimerId?: string
-}
-
 const QuickTimerFormSchema = z.object({
   descriptionTemplate: z.string().trim().min(1, 'Description template is required.'),
   icon: z
@@ -60,7 +56,7 @@ const quickTimerFormDefaultValues = {
   name: '',
 } satisfies QuickTimerFormSchema
 
-export function QuickTimersWidget({ activeQuickTimerId }: QuickTimersWidgetProps) {
+export function QuickTimersWidget() {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const startDialogRef = useRef<HTMLDialogElement>(null)
   const [startingQuickTimerId, setStartingQuickTimerId] = useState<string | null>(null)
@@ -70,7 +66,62 @@ export function QuickTimersWidget({ activeQuickTimerId }: QuickTimersWidgetProps
   const [startFormResetKey, setStartFormResetKey] = useState(0)
   const [quickTimers] = useStorage('quickTimers')
   const [quickTimersColumns] = useStorage('quickTimersColumns')
+  const [quickTimersEnabled] = useStorage('quickTimersEnabled')
+  const [clockifyQuickTimerEntryLinks] = useStorage('clockifyQuickTimerEntryLinks')
   const normalizedColumns = normalizeQuickTimerColumns(quickTimersColumns)
+  const clockifyUserQuery = useQuery({
+    enabled: quickTimersEnabled,
+    queryKey: queryKeys.clockify.loggedUser,
+    queryFn: () => clockify.getLoggedUser(),
+    staleTime: 5 * 60_000,
+  })
+  const clockifyWorkspacesQuery = useQuery({
+    enabled: quickTimersEnabled,
+    queryKey: queryKeys.clockify.workspaces,
+    queryFn: () => clockify.getWorkspacesOfUser(),
+    staleTime: 5 * 60_000,
+  })
+  const selectedClockifyWorkspace = useMemo(() => {
+    const user = clockifyUserQuery.data
+    const workspaces = clockifyWorkspacesQuery.data
+
+    if (!user || !workspaces?.length) {
+      return null
+    }
+
+    return (
+      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
+      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
+      workspaces[0]
+    )
+  }, [clockifyUserQuery.data, clockifyWorkspacesQuery.data])
+  const runningEntryQuery = useQuery({
+    enabled: Boolean(quickTimersEnabled && clockifyUserQuery.data?.id && selectedClockifyWorkspace?.id),
+    queryKey: queryKeys.clockify.runningEntry({
+      params: { userId: clockifyUserQuery.data?.id, workspaceId: selectedClockifyWorkspace?.id },
+    }),
+    queryFn: () =>
+      clockify.getTimeEntries({
+        params: { workspaceId: selectedClockifyWorkspace!.id!, userId: clockifyUserQuery.data!.id! },
+        queries: {
+          hydrated: true,
+          'in-progress': 'true',
+          page: 1,
+          'page-size': 1,
+        },
+      }),
+    refetchInterval: 15 * 60_000,
+    staleTime: 60_000,
+  })
+  const runningEntry = useMemo(() => {
+    const runningEntries = runningEntryQuery.data ?? []
+    return runningEntries.find(entry => entry.userId === clockifyUserQuery.data?.id) ?? runningEntries[0] ?? null
+  }, [clockifyUserQuery.data?.id, runningEntryQuery.data])
+  const activeQuickTimerId = runningEntry?.id ? clockifyQuickTimerEntryLinks[runningEntry.id]?.quickTimerId : undefined
+
+  if (!quickTimersEnabled) {
+    return null
+  }
 
   const openNewQuickTimerDialog = () => {
     setEditingQuickTimers(false)

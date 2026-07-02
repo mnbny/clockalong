@@ -114,11 +114,17 @@ impl ClinearAuthState {
 }
 
 pub async fn initialize_auth_lifecycle<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
-    auth_log("initialize_auth_lifecycle: reading stored auth state");
-    let snapshot = read_stored_auth_state(&app).await?;
-    app.state::<ClinearAuthState>()
-        .set_snapshot(&app, snapshot)?;
-    auth_log("initialize_auth_lifecycle: stored auth state loaded");
+    auth_log("initialize_auth_lifecycle: reading stored Clockify auth state");
+    let clockify_authenticated = auth_clockify::validate_stored(&app).await?;
+    app.state::<ClinearAuthState>().set_snapshot(
+        &app,
+        ClinearAuthSnapshot {
+            linear_authenticated: false,
+            clockify_authenticated,
+        },
+    )?;
+    auth_log("initialize_auth_lifecycle: stored Clockify auth state loaded");
+    initialize_optional_linear_auth_lifecycle(app);
 
     Ok(())
 }
@@ -181,16 +187,34 @@ pub async fn clinear_auth_disconnect_linear<R: Runtime>(
     auth_linear::disconnect(app).await
 }
 
-async fn read_stored_auth_state<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Result<ClinearAuthSnapshot, String> {
-    let linear_authenticated = auth_linear::validate_stored(app).await?;
-    let clockify_authenticated = auth_clockify::validate_stored(app).await?;
+fn initialize_optional_linear_auth_lifecycle<R: Runtime>(app: AppHandle<R>) {
+    tauri::async_runtime::spawn(async move {
+        auth_log("initialize_optional_linear_auth_lifecycle: reading stored Linear auth state");
+        match auth_linear::validate_stored(&app).await {
+            Ok(linear_authenticated) => {
+                if let Err(error) = set_linear_authenticated(&app, linear_authenticated) {
+                    auth_log(&format!(
+                        "initialize_optional_linear_auth_lifecycle: failed to update auth state: {error}"
+                    ));
+                    return;
+                }
 
-    Ok(ClinearAuthSnapshot {
-        linear_authenticated,
-        clockify_authenticated,
-    })
+                auth_log(&format!(
+                    "initialize_optional_linear_auth_lifecycle: stored Linear auth state loaded authenticated={linear_authenticated}"
+                ));
+            }
+            Err(error) => {
+                auth_log(&format!(
+                    "initialize_optional_linear_auth_lifecycle: stored Linear auth validation failed: {error}"
+                ));
+                if let Err(state_error) = set_linear_authenticated(&app, false) {
+                    auth_log(&format!(
+                        "initialize_optional_linear_auth_lifecycle: failed to mark Linear disconnected: {state_error}"
+                    ));
+                }
+            }
+        }
+    });
 }
 
 pub(crate) fn set_clockify_authenticated<R: Runtime>(

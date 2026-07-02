@@ -12,10 +12,7 @@ function AppLayout() {
   const appInitializationState = useAppInit()
   const authState = useAppAuth()
   const authenticated =
-    !appInitializationState.value.appInitializing &&
-    !authState.loading &&
-    authState.value.linearAuthenticated &&
-    authState.value.clockifyAuthenticated
+    !appInitializationState.value.appInitializing && !authState.loading && authState.value.clockifyAuthenticated
 
   useClockifyDefaults()
 
