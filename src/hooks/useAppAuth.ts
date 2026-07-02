@@ -8,6 +8,7 @@ export const clockalongAuthStateChangedEvent = 'clockalong-auth:state-changed'
 export async function getClockalongAuthState() {
   const fallback = {
     linearAuthenticated: false,
+    githubAuthenticated: false,
     clockifyAuthenticated: false,
   }
 
@@ -21,12 +22,14 @@ export async function getClockalongAuthState() {
 export const useAppAuth = createTauriReactiveStateHook({
   browserValue: {
     linearAuthenticated: false,
+    githubAuthenticated: false,
     clockifyAuthenticated: false,
   },
   eventName: clockalongAuthStateChangedEvent,
   getSnapshot: getClockalongAuthState,
   initialValue: {
     linearAuthenticated: false,
+    githubAuthenticated: false,
     clockifyAuthenticated: false,
   },
   logScope: 'clockalong auth',

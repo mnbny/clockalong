@@ -1,8 +1,10 @@
-import { IconArrowRight, IconCheck, IconExternalLink, IconLoader2 } from '@tabler/icons-react'
+import { IconArrowRight, IconBrandGithub, IconCheck, IconLoader2 } from '@tabler/icons-react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { type FormEvent, type ReactNode, useRef, useState } from 'react'
+import { type ReactNode, useRef, useState } from 'react'
 
 import { appToast } from '../components/AppToaster'
+import { ClockifyAuthDialog } from '../components/ClockifyAuthDialog'
+import { GitHubAuthDialog } from '../components/GitHubAuthDialog'
 import { ClockifyIcon } from '../components/icons/ClockifyIcon'
 import { LinearIcon } from '../components/icons/LinearIcon'
 import { useAppAuth } from '../hooks/useAppAuth'
@@ -18,7 +20,7 @@ function SignInScreen() {
   const navigate = useNavigate()
   const authState = useAppAuth()
   const clockifyDialogRef = useRef<HTMLDialogElement>(null)
-  const [clockifyApiKey, setClockifyApiKey] = useState('')
+  const githubDialogRef = useRef<HTMLDialogElement>(null)
   const [pendingProvider, setPendingProvider] = useState<ClockalongAuthProvider | null>(null)
   const clockifyAuthenticated = authState.value.clockifyAuthenticated
 
@@ -42,8 +44,12 @@ function SignInScreen() {
 
   const openClockifyDialog = () => {
     signInLog('openClockifyDialog: opening')
-    setClockifyApiKey('')
     clockifyDialogRef.current?.showModal()
+  }
+
+  const openGithubDialog = () => {
+    signInLog('openGithubDialog: opening')
+    githubDialogRef.current?.showModal()
   }
 
   const disconnectProvider = async (provider: ClockalongAuthProvider) => {
@@ -55,6 +61,13 @@ function SignInScreen() {
         await auth.disconnectClockify()
         signInLog('disconnectProvider: clockify disconnected')
         appToast.success('Clockify disconnected.')
+        return
+      }
+
+      if (provider === 'github') {
+        await auth.disconnectGithub()
+        signInLog('disconnectProvider: github disconnected')
+        appToast.success('GitHub disconnected.')
         return
       }
 
@@ -78,27 +91,6 @@ function SignInScreen() {
     await navigate({ to: '/dashboard' })
   }
 
-  const connectClockify = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    signInLog(`connectClockify: submitting key_len=${clockifyApiKey.trim().length}`)
-    setPendingProvider('clockify')
-
-    try {
-      await auth.connectClockify(clockifyApiKey)
-      signInLog('connectClockify: connected')
-      appToast.success('Clockify connected.')
-      clockifyDialogRef.current?.close()
-      setClockifyApiKey('')
-    } catch (error) {
-      signInLog(`connectClockify: failed=${getErrorMessage(error)}`)
-      appToast.error('Could not connect Clockify.', {
-        description: getErrorMessage(error),
-      })
-    } finally {
-      setPendingProvider(null)
-    }
-  }
-
   return (
     <section className="mx-auto grid min-h-full w-full max-w-md content-center py-8">
       <div className="grid gap-6">
@@ -119,6 +111,14 @@ function SignInScreen() {
             onDisconnect={() => void disconnectProvider('linear')}
             onClick={() => void connectLinear()}
           />
+          <AuthenticationButton
+            connected={authState.value.githubAuthenticated}
+            icon={<IconBrandGithub className="size-5" />}
+            label="GitHub"
+            loading={pendingProvider === 'github'}
+            onDisconnect={() => void disconnectProvider('github')}
+            onClick={openGithubDialog}
+          />
           <button
             className="btn btn-primary mt-4 h-12 self-center rounded-lg"
             disabled={!clockifyAuthenticated || Boolean(pendingProvider)}
@@ -130,55 +130,14 @@ function SignInScreen() {
         </div>
       </div>
 
-      <dialog ref={clockifyDialogRef} className="modal">
-        <div className="modal-box max-w-md rounded-lg">
-          <form className="grid gap-5" onSubmit={event => void connectClockify(event)}>
-            <div className="grid gap-2">
-              <h3 className="text-lg leading-7 font-semibold">Connect Clockify</h3>
-              <a
-                className="link link-primary inline-flex w-fit items-center gap-1 text-sm"
-                href="https://app.clockify.me/manage-api-keys"
-                rel="noreferrer"
-                target="_blank">
-                Find your API key
-                <IconExternalLink className="size-4" />
-              </a>
-            </div>
-
-            <label className="form-control grid gap-2">
-              <span className="label-text text-sm font-medium">API key</span>
-              <input
-                autoComplete="off"
-                autoFocus
-                className="input input-bordered w-full font-mono text-sm"
-                disabled={pendingProvider === 'clockify'}
-                spellCheck={false}
-                type="text"
-                value={clockifyApiKey}
-                onChange={event => setClockifyApiKey(event.target.value)}
-              />
-            </label>
-
-            <div className="modal-action mt-0">
-              <button
-                className="btn btn-ghost"
-                disabled={pendingProvider === 'clockify'}
-                type="button"
-                onClick={() => clockifyDialogRef.current?.close()}>
-                Cancel
-              </button>
-              <button className="btn btn-primary" disabled={pendingProvider === 'clockify'} type="submit">
-                {pendingProvider === 'clockify' ? <span className="loading loading-spinner loading-sm" /> : null}
-                Connect
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <form className="modal-backdrop" method="dialog">
-          <button>close</button>
-        </form>
-      </dialog>
+      <ClockifyAuthDialog
+        ref={clockifyDialogRef}
+        onPendingChange={pending => setPendingProvider(pending ? 'clockify' : null)}
+      />
+      <GitHubAuthDialog
+        ref={githubDialogRef}
+        onPendingChange={pending => setPendingProvider(pending ? 'github' : null)}
+      />
     </section>
   )
 }
@@ -238,5 +197,12 @@ function signInLog(message: string) {
 }
 
 function getProviderLabel(provider: ClockalongAuthProvider) {
-  return provider === 'clockify' ? 'Clockify' : 'Linear'
+  switch (provider) {
+    case 'clockify':
+      return 'Clockify'
+    case 'github':
+      return 'GitHub'
+    case 'linear':
+      return 'Linear'
+  }
 }
