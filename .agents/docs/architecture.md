@@ -26,7 +26,7 @@
   - `_auth` only waits for app initialization; it does not redirect authenticated users away from the sign-in screen.
   - The sign-in screen lets users connect Clockify plus optional providers, then explicitly navigate with `Go to dashboard`.
   - Optional provider surfaces gate themselves. Linear dashboard/settings UI should render only when Linear is authenticated, while Clockify-only and local sources can remain available.
-  - Rust exposes authentication state through `clinear_auth_get_state` and `clinear-auth:state-changed`.
+  - Rust exposes authentication state through `clockalong_auth_get_state` and `clockalong-auth:state-changed`.
 - Tauri configuration lives in `src-tauri/tauri.conf.json`.
 - Tauri permissions live in `src-tauri/capabilities/`.
 - Repo-local agent skills live in `.agents/skills/`.

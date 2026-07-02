@@ -1,6 +1,6 @@
 # Linear integration notes
 
-Linear is Clinear's first external work-source provider. Its normal integration path is the public GraphQL API through the official `@linear/sdk` TypeScript client. Clinear should treat Linear as a user-authorized service: users connect their own Linear account with OAuth2, while the app ships only public OAuth metadata.
+Linear is Clockalong's first external work-source provider. Its normal integration path is the public GraphQL API through the official `@linear/sdk` TypeScript client. Clockalong should treat Linear as a user-authorized service: users connect their own Linear account with OAuth2, while the app ships only public OAuth metadata.
 
 Rust owns Linear auth state and token storage. The broader Linear API client should live in the frontend and use the official TypeScript SDK when possible. The native layer should handle OAuth startup, callback verification, secure token storage, token refresh scheduling, auth-state initialization, and clearing credentials.
 
@@ -35,7 +35,7 @@ API behavior to preserve:
 - Prefer `orderBy: updatedAt` for incremental refresh flows.
 - Avoid per-issue polling. Linear explicitly recommends webhooks or narrow updated-data queries for update flows.
 
-The first Clinear issue query should be based on the authenticated viewer, for example `viewer.assignedIssues(...)` through the SDK. Fetch only fields required for the Linear work-source list, timer mapping, and issue detail surfaces.
+The first Clockalong issue query should be based on the authenticated viewer, for example `viewer.assignedIssues(...)` through the SDK. Fetch only fields required for the Linear work-source list, timer mapping, and issue detail surfaces.
 
 ## Assigned ticket sync
 
@@ -58,7 +58,7 @@ Implementation constraints:
 
 The current dashboard row DTO is intentionally small: identifier, title, created/updated timestamps, status, assignee, and nullable tracking fields. Linear fetches initialize tracking fields as empty; the dashboard fills them by merging Clockify ticket summaries keyed by Linear issue ID. Full issue descriptions, labels, comments, and project/cycle detail belong in future detail surfaces that actually need them.
 
-Linear workflow states expose one `color` hex value. The API does not provide separate light/dark status tokens. Clinear uses that color directly for the status badge background and computes a contrasting foreground locally.
+Linear workflow states expose one `color` hex value. The API does not provide separate light/dark status tokens. Clockalong uses that color directly for the status badge background and computes a contrasting foreground locally.
 
 ## Authentication
 
@@ -68,7 +68,7 @@ Linear supports:
 - Personal API keys for personal scripts.
 - Client credentials tokens for server-to-server app actor use.
 
-Clinear should use OAuth2 Authorization Code with PKCE.
+Clockalong should use OAuth2 Authorization Code with PKCE.
 
 OAuth endpoints:
 
@@ -78,7 +78,7 @@ OAuth endpoints:
 
 During Linear disconnect, provider revocation is best effort. Send the token in the `token` form field with the matching `token_type_hint` when revoking with Linear. Local disconnect still wins if Linear revocation fails: clear local tokens, abort scheduled refresh work, emit auth state, and keep the user-visible state disconnected.
 
-OAuth requirements and defaults relevant to Clinear:
+OAuth requirements and defaults relevant to Clockalong:
 
 - Use `response_type=code`.
 - Use a high-entropy `state` value and reject callback responses where `state` does not match.
@@ -87,13 +87,13 @@ OAuth requirements and defaults relevant to Clinear:
 - For refresh tokens generated through PKCE, refresh can use `client_id` without `client_secret`.
 - Access tokens are Bearer tokens and expire after about 24 hours.
 - Token refresh returns a new access token and a new refresh token; update stored refresh token atomically.
-- OAuth `actor=user` is the default and is the right fit for Clinear.
+- OAuth `actor=user` is the default and is the right fit for Clockalong.
 - `actor=app` is for agents, service accounts, and app-authored mutations. Do not use it for the normal personal time-tracking workflow.
 
 Initial scopes should be conservative:
 
 - Start with `read` for viewing assigned issues and metadata.
-- Add `write` only when Clinear needs broad mutation access.
+- Add `write` only when Clockalong needs broad mutation access.
 - Prefer narrower write scopes such as `comments:create` or `issues:create` if the feature only needs those actions.
 - Avoid `admin`.
 
@@ -113,15 +113,15 @@ Okay to ship:
 
 A packaged desktop app is a public client. Anything bundled in the app can be extracted, so a `client_secret` would not be secret. Linear's PKCE support is the correct model for this: the app ships a client ID, generates a per-login PKCE verifier, and exchanges the returned authorization code without a bundled secret.
 
-Personal API keys should not be the default setup path. They are user-owned credentials intended for personal scripts. If Clinear ever supports them, treat API-key auth as an advanced "bring your own key" fallback, store it in native secure storage, and make revocation/clearing obvious.
+Personal API keys should not be the default setup path. They are user-owned credentials intended for personal scripts. If Clockalong ever supports them, treat API-key auth as an advanced "bring your own key" fallback, store it in native secure storage, and make revocation/clearing obvious.
 
 ## MCP authentication context
 
 Official Linear MCP integrations do not ask users to paste API keys because they use OAuth. The MCP client starts an interactive authorization flow, the user grants access in Linear, and the MCP integration stores or manages the resulting tokens.
 
-Linear's MCP server can also accept an OAuth token or API key through an `Authorization: Bearer <token>` header for programmatic setups. That does not change Clinear's product decision: the first-class user flow should still be OAuth2 with PKCE, not manual API keys.
+Linear's MCP server can also accept an OAuth token or API key through an `Authorization: Bearer <token>` header for programmatic setups. That does not change Clockalong's product decision: the first-class user flow should still be OAuth2 with PKCE, not manual API keys.
 
-Community or older local Linear MCP servers often ask for personal API keys because that is simpler to implement. Do not copy that pattern for Clinear's default UX.
+Community or older local Linear MCP servers often ask for personal API keys because that is simpler to implement. Do not copy that pattern for Clockalong's default UX.
 
 ## Desktop redirect
 
@@ -131,19 +131,19 @@ Linear's OAuth docs show localhost callback examples, and OAuth app manifests mo
 http://localhost:<port>/oauth/callback
 ```
 
-Use registered callback URLs because Linear requires redirect URI matching. Clinear uses a small registered port pool rather than arbitrary dynamic ports.
+Use registered callback URLs because Linear requires redirect URI matching. Clockalong uses a small registered port pool rather than arbitrary dynamic ports.
 
 A custom URL scheme may be useful for Tauri generally, but do not assume Linear will accept it until tested against Linear's OAuth app configuration.
 
-Clinear ships this public Linear OAuth client ID in Rust:
+Clockalong ships this public Linear OAuth client ID in Rust:
 
 ```txt
-1ef17fb4bbef1626a5f1f838843e067c
+b1f808a5cc24f7bf5cae1df43b4d7cf7
 ```
 
 This is safe to ship. It is not a secret, and users should not provide it.
 
-Clinear uses this registered redirect URI pool:
+Clockalong uses this registered redirect URI pool:
 
 ```txt
 http://localhost:53682/oauth/linear/callback
@@ -151,7 +151,7 @@ http://localhost:53683/oauth/linear/callback
 http://localhost:53684/oauth/linear/callback
 ```
 
-Register all three callback URLs in the Linear OAuth app. During auth, Rust binds the first available port and sends the matching redirect URI to Linear. Developers can override the redirect URI with `CLINEAR_LINEAR_REDIRECT_URI` if that exact callback URL is also registered in Linear.
+Register all three callback URLs in the Linear OAuth app. During auth, Rust binds the first available port and sends the matching redirect URI to Linear. Developers can override the redirect URI with `CLOCKALONG_LINEAR_REDIRECT_URI` if that exact callback URL is also registered in Linear.
 
 ## Client strategy
 
@@ -187,9 +187,9 @@ Prefer custom raw GraphQL only when the SDK model path fetches too much data, ca
 
 ## Webhooks
 
-Linear supports webhooks for issues, comments, labels, projects, cycles, users, OAuth revocation, and other models. However, a local desktop app cannot receive Linear webhooks without a reachable HTTPS endpoint. For Clinear's initial local-only architecture, use narrow pull-based refreshes instead of webhooks.
+Linear supports webhooks for issues, comments, labels, projects, cycles, users, OAuth revocation, and other models. However, a local desktop app cannot receive Linear webhooks without a reachable HTTPS endpoint. For Clockalong's initial local-only architecture, use narrow pull-based refreshes instead of webhooks.
 
-If Clinear later adds a backend, webhooks become useful for syncing issue changes and OAuth revocation events.
+If Clockalong later adds a backend, webhooks become useful for syncing issue changes and OAuth revocation events.
 
 ## Remaining checks
 

@@ -1,6 +1,6 @@
 # Logging
 
-Clinear follows the Streamlink Tauri logging pattern. Rust logs and forwarded browser console logs land in the same app log file, and the App settings section reads that file for diagnostics.
+Clockalong follows the Streamlink Tauri logging pattern. Rust logs and forwarded browser console logs land in the same app log file, and the App settings section reads that file for diagnostics.
 
 ## Ownership
 

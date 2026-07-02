@@ -1,8 +1,8 @@
 # Project brief
 
-Clinear is a developer-focused Clockify companion. Clockify is the system of record for time entries. Clinear makes it faster to start, stop, classify, review, and reconcile time from the work sources developers already use.
+Clockalong is a Clockify companion app. Clockify is the system of record for time entries. Clockalong makes it faster to start, stop, classify, review, and reconcile time from the work sources people already use.
 
-The app is opinionated around personal developer billing and time review. It is not a general project-management client, a Clockify replacement, or an invoicing system.
+The app is opinionated around personal time tracking, billing-adjacent review, and source-linked work. It is not a general project-management client, a Clockify replacement, or an invoicing system.
 
 ## Product model
 
@@ -40,12 +40,12 @@ Vocabulary:
 
 The user bills hourly but often bills according to delivered value rather than raw elapsed time. Some work spans multiple source items, and some small implementation tasks can reasonably map to more billable time because the value delivered is higher than the wall-clock duration.
 
-Longer term, Clinear should help reconcile tracked work with billable time. A later review flow may use an LLM to look at Clockify entries plus source context from Linear, GitHub, Quick Timers, and future sources, then propose how much time to bill or how to distribute billable time across related work. That billing intelligence is future scope and should wait until the Clockify core and source-specific tracking workflows are solid.
+Longer term, Clockalong should help reconcile tracked work with billable time. A later review flow may use an LLM to look at Clockify entries plus source context from Linear, GitHub, Quick Timers, and future sources, then propose how much time to bill or how to distribute billable time across related work. That billing intelligence is future scope and should wait until the Clockify core and source-specific tracking workflows are solid.
 
 ## Near-term boundary
 
 - Keep new work focused on Clockify companion workflows: tracking, review, source context, and billing-adjacent reconciliation.
-- Avoid turning Clinear into a broad Linear, GitHub, project-management, or invoicing client.
+- Avoid turning Clockalong into a broad Linear, GitHub, project-management, or invoicing client.
 - Avoid Streamlink-derived or unrelated domain concepts.
 - Placeholder UI is acceptable for product areas that are not wired yet, but provider auth should use real native flows once a provider is implemented.
 - Preserve the current Tauri, React, pnpm, Conductor, and agent-doc conventions unless a specific product requirement needs a change.
@@ -54,6 +54,6 @@ Longer term, Clinear should help reconcile tracked work with billable time. A la
 
 - How GitHub should authenticate and which GitHub work items should appear first.
 - How GitHub pull requests, reviews, comments, and review requests should map to Clockify descriptions and review surfaces.
-- Whether Clinear should support more than one default Clockify project or workspace, and whether task mapping is worth adding after the default-project flow proves out.
-- Whether Clinear should ever create Clockify projects/tasks from source data or only attach source metadata to selected Clockify projects through descriptions and links.
+- Whether Clockalong should support more than one default Clockify project or workspace, and whether task mapping is worth adding after the default-project flow proves out.
+- Whether Clockalong should ever create Clockify projects/tasks from source data or only attach source metadata to selected Clockify projects through descriptions and links.
 - How to represent value-based billable time separately from raw tracked time.

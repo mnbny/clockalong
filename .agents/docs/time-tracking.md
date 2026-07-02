@@ -1,6 +1,6 @@
 # Time tracking
 
-Clinear's primary app surface should optimize for quickly finding developer work that is relevant to Clockify time tracking. The dashboard is a Clockify companion workspace first, not a general project-management, GitHub, Linear, or invoicing view.
+Clockalong's primary app surface should optimize for quickly finding work that is relevant to Clockify time tracking. The dashboard is a Clockify companion workspace first, not a general project-management, GitHub, Linear, or invoicing view.
 
 ## Work-source scope
 
@@ -20,7 +20,7 @@ The default ticket list should show Linear issues assigned to the current user a
 
 Do not hide backlog, todo, done, canceled, or otherwise terminal issues by default. The user may track research before an issue is formally in progress, and may also clock follow-up time after an issue is completed.
 
-Showing all visible workspace issues should be a later escape hatch, not the default. The first useful workflow is personal assigned work, because it keeps the list focused and avoids turning Clinear into a broad Linear browser.
+Showing all visible workspace issues should be a later escape hatch, not the default. The first useful workflow is personal assigned work, because it keeps the list focused and avoids turning Clockalong into a broad Linear browser.
 
 ## Dashboard ordering
 
@@ -34,7 +34,7 @@ Prioritize:
 - active provider workflow states such as in progress, ready, or review requested
 - recent source updates
 
-Provider state should influence ordering, but it should not determine whether an item is visible by itself. Clockify activity should outrank provider workflow state because Clinear exists to support time tracking.
+Provider state should influence ordering, but it should not determine whether an item is visible by itself. Clockify activity should outrank provider workflow state because Clockalong exists to support time tracking.
 
 The current Linear client-side order modes are:
 
@@ -81,7 +81,7 @@ Make the active tracked row visible without changing table density. Use a subtle
 
 ## Clockify dashboard widget
 
-Keep the Clockify dashboard widget small and operational. It should support the moment when the user opens Clinear to start, stop, resume, or review tracked work.
+Keep the Clockify dashboard widget small and operational. It should support the moment when the user opens Clockalong to start, stop, resume, or review tracked work.
 
 The first useful widget data is:
 
@@ -111,11 +111,11 @@ Do not add separate loading or unavailable labels to this badge. The fallback vi
 
 ## Clockify source matching
 
-Clockify is the system of record for time entries, but it does not provide first-class links to most external work-source items. Clinear derives source ownership from provider-specific matching rules and, where available, small local registries.
+Clockify is the system of record for time entries, but it does not provide first-class links to most external work-source items. Clockalong derives source ownership from provider-specific matching rules and, where available, small local registries.
 
 For Linear, matching is intentionally based on Linear-provided identifiers rather than an invented parser. Build the local candidate list from synced Linear tickets, normalize identifiers and descriptions case-insensitively, and match by exact containment. Check longer identifiers first so a longer ticket ID wins before a shorter overlapping one.
 
-Clockify entries without a matching synced Linear identifier are treated as unlinked. This is deliberate: manually created Clockify web entries become visible to Clinear once the user includes the Linear issue ID in the description, and app resets can recover links from Clockify data without a local map.
+Clockify entries without a matching synced Linear identifier are treated as unlinked. This is deliberate: manually created Clockify web entries become visible to Clockalong once the user includes the Linear issue ID in the description, and app resets can recover links from Clockify data without a local map.
 
 For Quick Timers, `clockifyQuickTimerEntryLinks` is the local registry that records which preset created a Clockify entry. It should stay small and should not duplicate Clockify-owned entry data.
 

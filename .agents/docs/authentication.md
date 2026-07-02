@@ -1,6 +1,6 @@
 # Authentication
 
-Clinear treats authentication as a short provider checklist. Users connect Clockify plus whichever work sources they need, get toast feedback for success or failure, and continue once the currently required providers are connected.
+Clockalong treats authentication as a short provider checklist. Users connect Clockify plus whichever work sources they need, get toast feedback for success or failure, and continue once the currently required providers are connected.
 
 Do not turn authentication into a large setup wizard. The visible UI should mostly be the existing provider buttons, loading feedback while an action is running, and a connected indicator once a provider is ready.
 
@@ -40,7 +40,7 @@ The first screen should remain a compact connection checklist:
 
 The sign-in screen should not auto-redirect just because Clockify is already connected. Users may use it as a provider connection screen, connect optional providers such as Linear, and then click `Go to dashboard`. That button is enabled only after Clockify is authenticated.
 
-The screen should not show a Linear API key field. Linear's default product flow is OAuth. Asking for a Linear API key would make Clinear feel like a personal script and would teach users the wrong integration path.
+The screen should not show a Linear API key field. Linear's default product flow is OAuth. Asking for a Linear API key would make Clockalong feel like a personal script and would teach users the wrong integration path.
 
 ## Native responsibilities
 
@@ -59,7 +59,7 @@ Rust should handle the parts that are native, sensitive, or hard to do cleanly i
 
 Secure storage is preferred for long-lived provider credentials. For the first real implementation, Stronghold is a reasonable fit because there is already a local Tauri reference app using it successfully. Native Keychain storage is also acceptable if the implementation stays straightforward. Normal Tauri store is fine for non-secret auth metadata, but it should not hold refresh tokens or user API keys once the app is meant to be distributed.
 
-Native auth code is split by provider rather than kept in one large module. `auth.rs` owns the Tauri command surface, public snapshot, and `clinear-auth:state-changed` event. `auth_clockify.rs` owns Clockify API-key validation and storage. `auth_linear.rs` owns Linear OAuth, loopback callback handling, token refresh scheduling, and disconnect. `stronghold.rs` is the shared native secret helper.
+Native auth code is split by provider rather than kept in one large module. `auth.rs` owns the Tauri command surface, public snapshot, and `clockalong-auth:state-changed` event. `auth_clockify.rs` owns Clockify API-key validation and storage. `auth_linear.rs` owns Linear OAuth, loopback callback handling, token refresh scheduling, and disconnect. `stronghold.rs` is the shared native secret helper.
 
 ## Frontend responsibilities
 
@@ -85,11 +85,11 @@ Rust should keep the public auth snapshot simple, but internally it should disti
 - Transient validation failure: mark the provider disconnected, keep the stored credential, and allow a later retry.
 - Successful validation or refresh: mark the provider connected and expose the working credential to the frontend on demand.
 
-A transient failure never means offline authenticated mode. It only means Clinear keeps the saved credential so the user does not have to paste it again before the next validation attempt.
+A transient failure never means offline authenticated mode. It only means Clockalong keeps the saved credential so the user does not have to paste it again before the next validation attempt.
 
 ## Clockify
 
-Clockify should use a user-provided API key. Clockify does not document a normal OAuth or PKCE flow for REST API consumers, so Clinear should not present Clockify as an OAuth provider or ship a Clockify credential.
+Clockify should use a user-provided API key. Clockify does not document a normal OAuth or PKCE flow for REST API consumers, so Clockalong should not present Clockify as an OAuth provider or ship a Clockify credential.
 
 User flow:
 
@@ -98,7 +98,7 @@ User flow:
 - The dialog shows one regular text input for the API key.
 - The dialog links directly to Clockify's API key management page at `https://app.clockify.me/manage-api-keys`.
 - The user submits the key.
-- The frontend calls `clinear_auth_connect_clockify`.
+- The frontend calls `clockalong_auth_connect_clockify`.
 - Rust validates the key against Clockify.
 - If validation succeeds, Rust stores the key in secure native storage, emits an auth-state change, and the frontend shows a success toast.
 - If validation fails, Rust does not store the key, the auth state remains disconnected, and the frontend shows an error toast.
@@ -109,7 +109,7 @@ The Clockify API key input should be a normal text input, not a password input. 
 
 Rust owns Clockify credential storage and auth-state validation. Store the API key in secure native storage. Stronghold matches the Streamlink Tauri reference app and is the preferred first implementation unless the project deliberately chooses a native Keychain crate later. Do not store the API key in normal Tauri store.
 
-Startup behavior should be strict. On every app launch, Rust reads the saved Clockify API key and validates it against Clockify before marking Clockify as connected. Clinear does not support offline Clockify mode. If startup validation fails, Clockify is not authenticated.
+Startup behavior should be strict. On every app launch, Rust reads the saved Clockify API key and validates it against Clockify before marking Clockify as connected. Clockalong does not support offline Clockify mode. If startup validation fails, Clockify is not authenticated.
 
 Validation should use Clockify's current-user endpoint. A valid response means the key identifies a Clockify user and can be treated as authenticated. Invalid credentials should leave Clockify disconnected and clear the saved key. Transient Clockify or network failures should leave Clockify disconnected but keep the saved key for retry.
 
@@ -126,11 +126,11 @@ Subdomain and regional Clockify workspaces may need alternate base URLs. The fir
 Linear should use OAuth2 Authorization Code with PKCE:
 
 - The user clicks the Linear connection button.
-- The frontend calls `clinear_auth_connect_linear`.
+- The frontend calls `clockalong_auth_connect_linear`.
 - Rust creates the OAuth state and PKCE verifier/challenge.
 - Rust starts a local callback receiver.
 - Rust opens the system browser to Linear's authorization page.
-- The user approves Clinear in Linear.
+- The user approves Clockalong in Linear.
 - Linear redirects to the local callback.
 - Rust validates the callback state.
 - Rust exchanges the authorization code for Linear tokens.
@@ -146,14 +146,14 @@ Linear is an external work-source provider, not the whole product model. Keep Li
 
 Shipping rules:
 
-- Ship the Linear OAuth client ID. The current public client ID is `1ef17fb4bbef1626a5f1f838843e067c`.
+- Ship the Linear OAuth client ID. The current public client ID is `b1f808a5cc24f7bf5cae1df43b4d7cf7`.
 - Ship the registered redirect URI pool.
 - Do not ship a Linear personal API key.
 - Do not ship an OAuth client secret.
 - Do not ship client-credentials secrets.
 - Do not make personal API keys the default Linear setup path.
 
-Clinear ships this redirect URI pool:
+Clockalong ships this redirect URI pool:
 
 - `http://localhost:53682/oauth/linear/callback`
 - `http://localhost:53683/oauth/linear/callback`
@@ -163,9 +163,9 @@ Rust should bind the first available callback port and send that exact matching 
 
 Personal API-key support is only an optional future fallback. If it ever exists, it should be advanced/manual, stored securely, and kept out of the normal auth screen.
 
-Initial Linear scopes should be conservative. Start with read access for the assigned-ticket workflow. Add write scopes only when Clinear has a concrete write feature. Avoid admin scopes unless a future feature has a strong reason for them.
+Initial Linear scopes should be conservative. Start with read access for the assigned-ticket workflow. Add write scopes only when Clockalong has a concrete write feature. Avoid admin scopes unless a future feature has a strong reason for them.
 
-Linear MCP integrations are useful context because they usually avoid pasted API keys through OAuth. That does not mean Clinear should depend on MCP. It means our product flow should also be OAuth-first.
+Linear MCP integrations are useful context because they usually avoid pasted API keys through OAuth. That does not mean Clockalong should depend on MCP. It means our product flow should also be OAuth-first.
 
 ## Token refresh
 

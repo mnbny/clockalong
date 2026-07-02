@@ -1,6 +1,6 @@
 # GitHub provider
 
-GitHub is a planned external work-source provider for developer-focused Clockify tracking and review. The current product bet is pull-request-centered billing: authored pull requests, review requests, pull-request feedback, and related developer work that should become accurate Clockify time entries.
+GitHub is a planned external work-source provider for Clockify tracking and review. The current product bet is pull-request-centered billing: authored pull requests, review requests, pull-request feedback, and related work that should become accurate Clockify time entries.
 
 This provider has not been researched or designed yet. Do not make implementation decisions from this placeholder.
 

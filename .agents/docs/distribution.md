@@ -1,10 +1,10 @@
 # Distribution
 
-Clinear is currently planned for direct macOS distribution, not the Mac App Store.
+Clockalong is currently planned for direct macOS distribution, not the Mac App Store.
 
 ## macOS identity
 
-- Bundle identifier: `app.moonbunny.clinear`
+- Bundle identifier: `app.moonbunny.clockalong`
 - Release version source: `src-tauri/tauri.conf.json`; `package.json` and `src-tauri/Cargo.toml` intentionally use `0.0.0`
 - Signing identity: `Developer ID Application: Yulian Glukhenko (XRRAJG7BU8)`
 - Initial supported architecture: Apple Silicon only, using `aarch64-apple-darwin`
@@ -23,7 +23,7 @@ For a local Apple Silicon DMG build:
 
 ```sh
 export APPLE_SIGNING_IDENTITY="Developer ID Application: Yulian Glukhenko (XRRAJG7BU8)"
-export TAURI_SIGNING_PRIVATE_KEY_PATH="$HOME/Documents/clinear-updater.key"
+export TAURI_SIGNING_PRIVATE_KEY_PATH="$HOME/Documents/clockalong-updater.key"
 pnpm release:mac
 ```
 
@@ -48,10 +48,10 @@ Apple ID notarization is also supported, but keep app-specific passwords out of 
 Release hosting target:
 
 ```txt
-https://github.com/mnbny/clinear
+https://github.com/mnbny/clockalong
 ```
 
-Clinear releases are built locally and published through the GitHub CLI. Do not add GitHub Actions release automation unless the project deliberately changes release ownership later.
+Clockalong releases are built locally and published through the GitHub CLI. Do not add GitHub Actions release automation unless the project deliberately changes release ownership later.
 
 Local release publishing uses:
 

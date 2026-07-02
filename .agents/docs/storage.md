@@ -35,8 +35,8 @@ Clockify stores the user API key in native Stronghold storage, not in the Tauri 
 
 ## Local Clockify entry cache
 
-Recent Clockify time entries are persisted by TanStack DB through browser localStorage under `clinear.clockify.timeEntries.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for recent entry-level UI, rebuilt by `ClockifySyncProvider` from Clockify's API.
+Recent Clockify time entries are persisted by TanStack DB through browser localStorage under `clockalong.clockify.timeEntries.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for recent entry-level UI, rebuilt by `ClockifySyncProvider` from Clockify's API.
 
 ## Local Linear ticket cache
 
-Assigned Linear ticket rows are persisted by TanStack DB through browser localStorage under `clinear.linear.tickets.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for compact ticket-list UI, rebuilt by `LinearSyncProvider` from Linear's API.
+Assigned Linear ticket rows are persisted by TanStack DB through browser localStorage under `clockalong.linear.tickets.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for compact ticket-list UI, rebuilt by `LinearSyncProvider` from Linear's API.
