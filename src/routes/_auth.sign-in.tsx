@@ -7,7 +7,7 @@ import { ClockifyIcon } from '../components/icons/ClockifyIcon'
 import { LinearIcon } from '../components/icons/LinearIcon'
 import { useAppAuth } from '../hooks/useAppAuth'
 import { clearSyncedLinearTickets } from '../services/linear/sync'
-import { auth, type ClinearAuthProvider } from '../services/tauri/auth-client'
+import { auth, type ClockalongAuthProvider } from '../services/tauri/auth-client'
 import { getErrorMessage } from '../utils/errors'
 
 export const Route = createFileRoute('/_auth/sign-in')({
@@ -19,7 +19,7 @@ function SignInScreen() {
   const authState = useAppAuth()
   const clockifyDialogRef = useRef<HTMLDialogElement>(null)
   const [clockifyApiKey, setClockifyApiKey] = useState('')
-  const [pendingProvider, setPendingProvider] = useState<ClinearAuthProvider | null>(null)
+  const [pendingProvider, setPendingProvider] = useState<ClockalongAuthProvider | null>(null)
   const clockifyAuthenticated = authState.value.clockifyAuthenticated
 
   const connectLinear = async () => {
@@ -46,7 +46,7 @@ function SignInScreen() {
     clockifyDialogRef.current?.showModal()
   }
 
-  const disconnectProvider = async (provider: ClinearAuthProvider) => {
+  const disconnectProvider = async (provider: ClockalongAuthProvider) => {
     signInLog(`disconnectProvider: requested provider=${provider}`)
     setPendingProvider(provider)
 
@@ -237,6 +237,6 @@ function signInLog(message: string) {
   console.info(`[sign in] ${message}`)
 }
 
-function getProviderLabel(provider: ClinearAuthProvider) {
+function getProviderLabel(provider: ClockalongAuthProvider) {
   return provider === 'clockify' ? 'Clockify' : 'Linear'
 }

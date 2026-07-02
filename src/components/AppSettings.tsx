@@ -75,7 +75,7 @@ export function AppSettings() {
             </fieldset>
           </SettingsRow>
 
-          <SettingsRow label="Updates" description="Check for new Clinear releases.">
+          <SettingsRow label="Updates" description="Check for new Clockalong releases.">
             <AppUpdatesControl />
           </SettingsRow>
 
@@ -175,9 +175,9 @@ function AppUpdatesControl() {
       setAvailableUpdate(update)
 
       if (update) {
-        appToast.info(`Clinear ${update.version} is available`)
+        appToast.info(`Clockalong ${update.version} is available`)
       } else {
-        appToast.success('Clinear is up to date')
+        appToast.success('Clockalong is up to date')
       }
     } catch (error) {
       appToast.error('Could not check for updates', {
@@ -200,7 +200,7 @@ function AppUpdatesControl() {
       await appUpdates.install(setProgress)
       setInstalled(true)
       appToast.success('Update installed', {
-        description: 'Restart Clinear to finish.',
+        description: 'Restart Clockalong to finish.',
       })
     } catch (error) {
       appToast.error('Could not install update', {
@@ -251,7 +251,7 @@ function AppUpdatesControl() {
 
       {availableUpdate ? (
         <div className="bg-base-200 rounded-box min-w-0 p-3">
-          <div className="text-sm leading-6 font-medium">Clinear {availableUpdate.version}</div>
+          <div className="text-sm leading-6 font-medium">Clockalong {availableUpdate.version}</div>
           {availableUpdate.body ? (
             <div className="text-base-content/70 overflow-wrap-anywhere mt-1 text-xs leading-5 whitespace-pre-wrap">
               {availableUpdate.body}
@@ -321,7 +321,7 @@ function isDisplayedAppLogLine(line: string) {
 }
 
 function isRustAppLogLine(line: string) {
-  return line.includes('][clinear')
+  return line.includes('][clockalong')
 }
 
 function isCustomFrontendLogLine(line: string) {
@@ -335,7 +335,7 @@ const customFrontendLogPrefixes = [
   '[clockify api]',
   '[clockify auth]',
   '[console logging]',
-  '[clinear auth]',
+  '[clockalong auth]',
   '[dev tools]',
   '[linear auth]',
   '[linear tickets]',

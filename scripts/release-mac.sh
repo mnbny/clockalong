@@ -3,13 +3,13 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET="aarch64-apple-darwin"
-APP_NAME="Clinear"
+APP_NAME="Clockalong"
 VERSION="$(node -p "JSON.parse(require('fs').readFileSync('${ROOT_DIR}/src-tauri/tauri.conf.json', 'utf8')).version")"
 DMG_DIR="${ROOT_DIR}/src-tauri/target/${TARGET}/release/bundle/dmg"
 DMG_PATH="${DMG_DIR}/${APP_NAME}_${VERSION}_aarch64.dmg"
 
 APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:-Developer ID Application: Yulian Glukhenko (XRRAJG7BU8)}"
-TAURI_SIGNING_PRIVATE_KEY_PATH="${TAURI_SIGNING_PRIVATE_KEY_PATH:-${HOME}/Documents/clinear-updater.key}"
+TAURI_SIGNING_PRIVATE_KEY_PATH="${TAURI_SIGNING_PRIVATE_KEY_PATH:-${HOME}/Documents/clockalong-updater.key}"
 TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
 
 require_env() {

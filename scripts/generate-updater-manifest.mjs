@@ -10,7 +10,7 @@ if (!version) {
   fail('Missing version in src-tauri/tauri.conf.json')
 }
 const tag = `v${version}`
-const repo = process.env.GITHUB_REPOSITORY || 'mnbny/clinear'
+const repo = process.env.GITHUB_REPOSITORY || 'mnbny/clockalong'
 const macosBundleDir = path.join(rootDir, 'src-tauri/target/aarch64-apple-darwin/release/bundle/macos')
 const files = await readdir(macosBundleDir)
 const updateBundle = files.find(file => file.endsWith('.app.tar.gz'))

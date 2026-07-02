@@ -38,7 +38,7 @@ export function AppHeader() {
   }, [theme])
 
   const goToSignIn = async () => {
-    console.info('[clinear auth] goToSignIn: requested from header')
+    console.info('[clockalong auth] goToSignIn: requested from header')
     await navigate({ to: '/sign-in' })
   }
 
@@ -51,7 +51,7 @@ export function AppHeader() {
       <h1 className="pointer-events-none flex h-10 min-w-0 items-center gap-3 justify-self-center text-lg leading-none font-semibold">
         <span className="truncate">Moon Bunny</span>
         <MoonBunnyLogo className="size-10 self-center" />
-        <span className="truncate">Clinear</span>
+        <span className="truncate">Clockalong</span>
       </h1>
 
       <div className="flex items-center gap-1 justify-self-end">

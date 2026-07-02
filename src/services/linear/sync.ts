@@ -15,7 +15,7 @@ import {
 } from './ticket-settings'
 import { type AssignedIssueNode, requestAssignedIssuesPage } from './tickets'
 
-const linearTicketSyncStorageKey = 'clinear.linear.tickets.v1'
+const linearTicketSyncStorageKey = 'clockalong.linear.tickets.v1'
 
 export type SyncedLinearTicket = {
   id: string

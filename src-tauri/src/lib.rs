@@ -40,8 +40,8 @@ pub fn run() {
 
     builder
         .manage(app_initialization::AppInitializationState::default())
-        .manage(auth::ClinearAuthState::default())
-        .manage(stronghold::ClinearStrongholdState::default())
+        .manage(auth::ClockalongAuthState::default())
+        .manage(stronghold::ClockalongStrongholdState::default())
         .setup(|app| {
             let salt_path = app
                 .path()
@@ -74,14 +74,14 @@ pub fn run() {
             app_logs::app_clear_log_file,
             app_logs::app_read_log_file,
             app_initialization::app_get_initialization_state,
-            auth::clinear_auth_connect_clockify,
-            auth::clinear_auth_connect_linear,
-            auth::clinear_auth_disconnect_clockify,
-            auth::clinear_auth_disconnect_linear,
-            auth::clinear_auth_get_clockify_credential,
-            auth::clinear_auth_get_linear_credential,
-            auth::clinear_auth_get_state,
-            auth::clinear_auth_refresh_linear_credential,
+            auth::clockalong_auth_connect_clockify,
+            auth::clockalong_auth_connect_linear,
+            auth::clockalong_auth_disconnect_clockify,
+            auth::clockalong_auth_disconnect_linear,
+            auth::clockalong_auth_get_clockify_credential,
+            auth::clockalong_auth_get_linear_credential,
+            auth::clockalong_auth_get_state,
+            auth::clockalong_auth_refresh_linear_credential,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -4,31 +4,31 @@ use tauri::{async_runtime::JoinHandle, AppHandle, Emitter, Manager, Runtime};
 
 use crate::{auth_clockify, auth_linear};
 
-pub const CLINEAR_AUTH_STATE_CHANGED_EVENT: &str = "clinear-auth:state-changed";
+pub const CLOCKALONG_AUTH_STATE_CHANGED_EVENT: &str = "clockalong-auth:state-changed";
 
-pub struct ClinearAuthState {
-    snapshot: Mutex<ClinearAuthSnapshot>,
+pub struct ClockalongAuthState {
+    snapshot: Mutex<ClockalongAuthSnapshot>,
     linear_refresh_lock: tokio::sync::Mutex<()>,
     linear_refresh_task: Mutex<Option<JoinHandle<()>>>,
 }
 
 #[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClinearAuthSnapshot {
+pub struct ClockalongAuthSnapshot {
     pub(crate) linear_authenticated: bool,
     pub(crate) clockify_authenticated: bool,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClinearAuthConnectionResult {
+pub struct ClockalongAuthConnectionResult {
     provider: &'static str,
     status: &'static str,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClinearAuthDisconnectResult {
+pub struct ClockalongAuthDisconnectResult {
     provider: &'static str,
     status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -37,47 +37,47 @@ pub struct ClinearAuthDisconnectResult {
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClinearClockifyCredentialSnapshot {
+pub struct ClockalongClockifyCredentialSnapshot {
     api_key: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClinearLinearCredentialSnapshot {
+pub struct ClockalongLinearCredentialSnapshot {
     pub(crate) access_token: Option<String>,
 }
 
-impl Default for ClinearAuthState {
+impl Default for ClockalongAuthState {
     fn default() -> Self {
         Self {
-            snapshot: Mutex::new(ClinearAuthSnapshot::default()),
+            snapshot: Mutex::new(ClockalongAuthSnapshot::default()),
             linear_refresh_lock: tokio::sync::Mutex::new(()),
             linear_refresh_task: Mutex::new(None),
         }
     }
 }
 
-impl ClinearAuthState {
+impl ClockalongAuthState {
     pub fn set_snapshot<R: Runtime>(
         &self,
         app: &AppHandle<R>,
-        snapshot: ClinearAuthSnapshot,
+        snapshot: ClockalongAuthSnapshot,
     ) -> Result<(), String> {
         *self
             .snapshot
             .lock()
-            .map_err(|_| "Failed to update Clinear auth state".to_string())? = snapshot;
+            .map_err(|_| "Failed to update Clockalong auth state".to_string())? = snapshot;
 
-        app.emit(CLINEAR_AUTH_STATE_CHANGED_EVENT, self.snapshot()?)
+        app.emit(CLOCKALONG_AUTH_STATE_CHANGED_EVENT, self.snapshot()?)
             .map_err(to_error_message)?;
 
         Ok(())
     }
 
-    pub(crate) fn snapshot(&self) -> Result<ClinearAuthSnapshot, String> {
+    pub(crate) fn snapshot(&self) -> Result<ClockalongAuthSnapshot, String> {
         self.snapshot
             .lock()
-            .map_err(|_| "Failed to read Clinear auth state".to_string())
+            .map_err(|_| "Failed to read Clockalong auth state".to_string())
             .map(|snapshot| snapshot.clone())
     }
 
@@ -116,9 +116,9 @@ impl ClinearAuthState {
 pub async fn initialize_auth_lifecycle<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     auth_log("initialize_auth_lifecycle: reading stored Clockify auth state");
     let clockify_authenticated = auth_clockify::validate_stored(&app).await?;
-    app.state::<ClinearAuthState>().set_snapshot(
+    app.state::<ClockalongAuthState>().set_snapshot(
         &app,
-        ClinearAuthSnapshot {
+        ClockalongAuthSnapshot {
             linear_authenticated: false,
             clockify_authenticated,
         },
@@ -130,60 +130,60 @@ pub async fn initialize_auth_lifecycle<R: Runtime>(app: AppHandle<R>) -> Result<
 }
 
 #[tauri::command]
-pub fn clinear_auth_get_state(
-    state: tauri::State<'_, ClinearAuthState>,
-) -> Result<ClinearAuthSnapshot, String> {
-    auth_log("clinear_auth_get_state: snapshot requested");
+pub fn clockalong_auth_get_state(
+    state: tauri::State<'_, ClockalongAuthState>,
+) -> Result<ClockalongAuthSnapshot, String> {
+    auth_log("clockalong_auth_get_state: snapshot requested");
     state.snapshot()
 }
 
 #[tauri::command]
-pub async fn clinear_auth_connect_clockify<R: Runtime>(
+pub async fn clockalong_auth_connect_clockify<R: Runtime>(
     app: AppHandle<R>,
     api_key: String,
-) -> Result<ClinearAuthConnectionResult, String> {
+) -> Result<ClockalongAuthConnectionResult, String> {
     auth_clockify::connect(app, api_key).await
 }
 
 #[tauri::command]
-pub fn clinear_auth_get_clockify_credential<R: Runtime>(
+pub fn clockalong_auth_get_clockify_credential<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<ClinearClockifyCredentialSnapshot, String> {
+) -> Result<ClockalongClockifyCredentialSnapshot, String> {
     auth_clockify::credential_snapshot(app)
 }
 
 #[tauri::command]
-pub fn clinear_auth_disconnect_clockify<R: Runtime>(
+pub fn clockalong_auth_disconnect_clockify<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<ClinearAuthDisconnectResult, String> {
+) -> Result<ClockalongAuthDisconnectResult, String> {
     auth_clockify::disconnect(app)
 }
 
 #[tauri::command]
-pub async fn clinear_auth_connect_linear<R: Runtime>(
+pub async fn clockalong_auth_connect_linear<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<ClinearAuthConnectionResult, String> {
+) -> Result<ClockalongAuthConnectionResult, String> {
     auth_linear::connect(app).await
 }
 
 #[tauri::command]
-pub async fn clinear_auth_get_linear_credential<R: Runtime>(
+pub async fn clockalong_auth_get_linear_credential<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<ClinearLinearCredentialSnapshot, String> {
+) -> Result<ClockalongLinearCredentialSnapshot, String> {
     auth_linear::credential_snapshot(app).await
 }
 
 #[tauri::command]
-pub async fn clinear_auth_refresh_linear_credential<R: Runtime>(
+pub async fn clockalong_auth_refresh_linear_credential<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<ClinearLinearCredentialSnapshot, String> {
+) -> Result<ClockalongLinearCredentialSnapshot, String> {
     auth_linear::refresh_credential(app).await
 }
 
 #[tauri::command]
-pub async fn clinear_auth_disconnect_linear<R: Runtime>(
+pub async fn clockalong_auth_disconnect_linear<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<ClinearAuthDisconnectResult, String> {
+) -> Result<ClockalongAuthDisconnectResult, String> {
     auth_linear::disconnect(app).await
 }
 
@@ -221,7 +221,7 @@ pub(crate) fn set_clockify_authenticated<R: Runtime>(
     app: &AppHandle<R>,
     clockify_authenticated: bool,
 ) -> Result<(), String> {
-    let state = app.state::<ClinearAuthState>();
+    let state = app.state::<ClockalongAuthState>();
     let mut snapshot = state.snapshot()?;
     snapshot.clockify_authenticated = clockify_authenticated;
     state.set_snapshot(app, snapshot)
@@ -231,7 +231,7 @@ pub(crate) fn set_linear_authenticated<R: Runtime>(
     app: &AppHandle<R>,
     linear_authenticated: bool,
 ) -> Result<(), String> {
-    let state = app.state::<ClinearAuthState>();
+    let state = app.state::<ClockalongAuthState>();
     let mut snapshot = state.snapshot()?;
     snapshot.linear_authenticated = linear_authenticated;
     state.set_snapshot(app, snapshot)
@@ -239,18 +239,18 @@ pub(crate) fn set_linear_authenticated<R: Runtime>(
 
 pub(crate) fn clockify_credential_snapshot(
     api_key: Option<String>,
-) -> ClinearClockifyCredentialSnapshot {
-    ClinearClockifyCredentialSnapshot { api_key }
+) -> ClockalongClockifyCredentialSnapshot {
+    ClockalongClockifyCredentialSnapshot { api_key }
 }
 
 pub(crate) fn linear_credential_snapshot(
     access_token: Option<String>,
-) -> ClinearLinearCredentialSnapshot {
-    ClinearLinearCredentialSnapshot { access_token }
+) -> ClockalongLinearCredentialSnapshot {
+    ClockalongLinearCredentialSnapshot { access_token }
 }
 
-pub(crate) fn connection_result(provider: &'static str) -> ClinearAuthConnectionResult {
-    ClinearAuthConnectionResult {
+pub(crate) fn connection_result(provider: &'static str) -> ClockalongAuthConnectionResult {
+    ClockalongAuthConnectionResult {
         provider,
         status: "connected",
     }
@@ -259,8 +259,8 @@ pub(crate) fn connection_result(provider: &'static str) -> ClinearAuthConnection
 pub(crate) fn disconnect_result(
     provider: &'static str,
     revocation_status: Option<&'static str>,
-) -> ClinearAuthDisconnectResult {
-    ClinearAuthDisconnectResult {
+) -> ClockalongAuthDisconnectResult {
+    ClockalongAuthDisconnectResult {
         provider,
         status: "disconnected",
         revocation_status,

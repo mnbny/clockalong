@@ -5,8 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET="aarch64-apple-darwin"
 VERSION="$(node -p "JSON.parse(require('fs').readFileSync('${ROOT_DIR}/src-tauri/tauri.conf.json', 'utf8')).version")"
 TAG="v${VERSION}"
-GITHUB_REPO="${GITHUB_REPO:-mnbny/clinear}"
-DMG_PATH="${ROOT_DIR}/src-tauri/target/${TARGET}/release/bundle/dmg/Clinear_${VERSION}_aarch64.dmg"
+GITHUB_REPO="${GITHUB_REPO:-mnbny/clockalong}"
+DMG_PATH="${ROOT_DIR}/src-tauri/target/${TARGET}/release/bundle/dmg/Clockalong_${VERSION}_aarch64.dmg"
 MACOS_BUNDLE_DIR="${ROOT_DIR}/src-tauri/target/${TARGET}/release/bundle/macos"
 MANIFEST_PATH="${ROOT_DIR}/src-tauri/target/${TARGET}/release/bundle/latest.json"
 RELEASE_MODE="--draft"
@@ -34,7 +34,7 @@ fi
 if [[ -n "${RELEASE_NOTES_BODY//[[:space:]]/}" ]]; then
   RELEASE_NOTES_PROVIDED="1"
 else
-  RELEASE_NOTES_BODY="Clinear ${VERSION}"
+  RELEASE_NOTES_BODY="Clockalong ${VERSION}"
 fi
 
 RELEASE_NOTES_FILE="$(mktemp)"
@@ -72,7 +72,7 @@ else
   gh release create "${TAG}" \
     --repo "${GITHUB_REPO}" \
     ${RELEASE_MODE} \
-    --title "Clinear ${VERSION}" \
+    --title "Clockalong ${VERSION}" \
     --notes-file "${RELEASE_NOTES_FILE}" \
     "${DMG_PATH}" \
     "${UPDATE_BUNDLE}" \

@@ -13,7 +13,7 @@ import { clockify } from './client'
 import { type ClockifyEntrySyncDaysOption, getClockifyEntrySyncIntervalMilliseconds } from './sync-settings'
 
 const clockifyEntrySyncPageSize = 100
-const clockifyEntrySyncStorageKey = 'clinear.clockify.timeEntries.v1'
+const clockifyEntrySyncStorageKey = 'clockalong.clockify.timeEntries.v1'
 
 export type SyncedClockifyTimeEntry = {
   entry: TimeEntryWithRatesDtoV1

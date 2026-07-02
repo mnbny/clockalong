@@ -122,7 +122,7 @@ const storageConfig = {
   },
   displayName: {
     type: 'string',
-    default: 'Moon Bunny Clinear',
+    default: 'Moon Bunny Clockalong',
     version: 1,
   },
   linearTicketSyncLimit: {

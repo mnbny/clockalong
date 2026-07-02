@@ -2,14 +2,14 @@ import { type SVGProps, useId } from 'react'
 
 import { cx } from '../utils/cx'
 
-export type ClinearLogoProps = Omit<SVGProps<SVGSVGElement>, 'color'> & {
+export type ClockalongLogoProps = Omit<SVGProps<SVGSVGElement>, 'color'> & {
   backgroundColor?: string
   markColor?: string
   showBackground?: boolean
   title?: string
 }
 
-export function ClinearLogo({
+export function ClockalongLogo({
   backgroundColor = '#151515',
   className,
   markColor = 'currentColor',
@@ -19,7 +19,7 @@ export function ClinearLogo({
   height = 32,
   role,
   ...props
-}: ClinearLogoProps) {
+}: ClockalongLogoProps) {
   const titleId = useId()
   const ariaHidden = title ? undefined : (props['aria-hidden'] ?? true)
 
@@ -49,4 +49,4 @@ export function ClinearLogo({
   )
 }
 
-export default ClinearLogo
+export default ClockalongLogo
