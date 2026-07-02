@@ -32,6 +32,11 @@ type ClockifyEntrySyncQueryParams = {
   workspaceId?: string
 }
 
+type GithubRepositoryQueryParams = {
+  owner?: string
+  repo?: string
+}
+
 function spreadQueryKeySegments(keys?: QueryKeySegments<unknown>) {
   return [...(keys?.params ? [keys.params] : []), ...(keys?.other ?? [])]
 }
@@ -52,6 +57,13 @@ export const queryKeys = {
   linear: {
     ticketSync: (keys?: QueryKeySegments<LinearTicketSyncQueryParams>) =>
       ['linear', 'ticket-sync', ...spreadQueryKeySegments(keys)] as const,
+  },
+  github: {
+    repositories: ['github', 'repositories'] as const,
+    repositoryIssues: (keys?: QueryKeySegments<GithubRepositoryQueryParams>) =>
+      ['github', 'repository-issues', ...spreadQueryKeySegments(keys)] as const,
+    repositoryPullRequests: (keys?: QueryKeySegments<GithubRepositoryQueryParams>) =>
+      ['github', 'repository-pull-requests', ...spreadQueryKeySegments(keys)] as const,
   },
 }
 

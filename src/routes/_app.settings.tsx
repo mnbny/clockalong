@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 
 import { AppSettings } from '../components/AppSettings'
 import { ClockifySettings } from '../components/ClockifySettings'
+import { GitHubSettings } from '../components/GitHubSettings'
 import { LinearSettings } from '../components/LinearSettings'
 import { PageHeader } from '../components/PageHeader'
 import { QuickTimersSettings } from '../components/QuickTimersSettings'
@@ -26,6 +27,7 @@ function SettingsScreen() {
       <div className="flex w-full flex-col gap-10">
         <QuickTimersSettings />
         <LinearSettings />
+        <GitHubSettings />
         <ClockifySettings />
         <AppSettings />
       </div>

@@ -9,6 +9,7 @@ catalog:
   '@hookform/resolvers': 5.4.0
   '@linear/sdk': 87.0.0
   '@mantine/hooks': 9.4.0
+  '@octokit/rest': 22.0.1
   '@tabler/icons-react': 3.44.0
   '@tailwindcss/vite': 4.3.1
   '@tanstack/react-db': 0.1.91

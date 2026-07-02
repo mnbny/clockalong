@@ -4,6 +4,12 @@ import {
 } from '../clockify/description-template'
 import { defaultClockifyEntrySyncDays, defaultClockifyEntrySyncInterval } from '../clockify/sync-settings'
 import {
+  defaultGithubIssueDescriptionTemplate,
+  defaultGithubIssueDescriptionTemplateFallback,
+  defaultGithubPullRequestDescriptionTemplate,
+  defaultGithubPullRequestDescriptionTemplateFallback,
+} from '../github/description-template'
+import {
   defaultLinearTicketSortOrder,
   defaultLinearTicketSyncInterval,
   defaultLinearTicketSyncLimit,
@@ -30,6 +36,18 @@ export type ClockifyDefaultProject = {
   workspaceId: string
   workspaceName: string
 } | null
+export type GithubSelectedRepository = {
+  fullName: string
+  id: number
+  name: string
+  owner: string
+  private: boolean
+  url: string
+}
+export type GithubVisibleWorkItemTypes = {
+  issues: boolean
+  pullRequests: boolean
+}
 export type ThemeOption = (typeof themeOptions)[number]
 export type DefaultViewOption = (typeof defaultViewOptions)[number]
 export type QuickTimerPreset = {
@@ -144,6 +162,36 @@ const storageConfig = {
     type: 'string',
     default: defaultLinearTicketSortOrder,
     version: 2,
+  },
+  githubSelectedRepositories: {
+    type: 'object',
+    default: [] as GithubSelectedRepository[],
+    version: 1,
+  },
+  githubVisibleWorkItemTypes: {
+    type: 'object',
+    default: { issues: true, pullRequests: true } as GithubVisibleWorkItemTypes,
+    version: 1,
+  },
+  githubIssueDescriptionTemplate: {
+    type: 'string',
+    default: defaultGithubIssueDescriptionTemplate,
+    version: 1,
+  },
+  githubIssueDescriptionTemplateFallback: {
+    type: 'string',
+    default: defaultGithubIssueDescriptionTemplateFallback,
+    version: 1,
+  },
+  githubPullRequestDescriptionTemplate: {
+    type: 'string',
+    default: defaultGithubPullRequestDescriptionTemplate,
+    version: 1,
+  },
+  githubPullRequestDescriptionTemplateFallback: {
+    type: 'string',
+    default: defaultGithubPullRequestDescriptionTemplateFallback,
+    version: 1,
   },
   refreshInterval: {
     type: 'string',
