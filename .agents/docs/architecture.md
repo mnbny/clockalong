@@ -19,13 +19,14 @@
   - `src-tauri/src/auth.rs`: Tauri command surface, public auth snapshot, and auth-state events.
   - `src-tauri/src/auth_clockify.rs`: Clockify API-key validation and secure credential lifecycle.
   - `src-tauri/src/auth_linear.rs`: Linear OAuth, loopback callback, token refresh, and disconnect.
+  - `src-tauri/src/auth_github.rs`: GitHub PAT validation, secure credential lifecycle, and disconnect.
   - `src-tauri/src/stronghold.rs`: narrow Stronghold read/write/remove helpers for native secrets.
 - Auth routing uses Clockify as the app-level gate:
   - `/` waits for native app initialization, then navigates to `/dashboard`.
   - `_app` guards authenticated routes and redirects users to `/sign-in` only when Clockify is unauthenticated.
   - `_auth` only waits for app initialization; it does not redirect authenticated users away from the sign-in screen.
   - The sign-in screen lets users connect Clockify plus optional providers, then explicitly navigate with `Go to dashboard`.
-  - Optional provider surfaces gate themselves. Linear dashboard/settings UI should render only when Linear is authenticated, while Clockify-only and local sources can remain available.
+  - Optional provider surfaces gate themselves. Linear and GitHub UI should render only when the matching provider is authenticated, while Clockify-only and local sources can remain available.
   - Rust exposes authentication state through `clockalong_auth_get_state` and `clockalong-auth:state-changed`.
 - Tauri configuration lives in `src-tauri/tauri.conf.json`.
 - Tauri permissions live in `src-tauri/capabilities/`.
@@ -55,6 +56,7 @@ Settings routes should follow the same composition pattern. `src/routes/_app.set
 
 - `src/components/QuickTimersSettings.tsx`
 - `src/components/LinearSettings.tsx`
+- `src/components/GitHubSettings.tsx`
 - `src/components/ClockifySettings.tsx`
 - `src/components/AppSettings.tsx`
 

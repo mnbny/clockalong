@@ -18,6 +18,12 @@ The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults 
 - `density`: temporary numeric UI density value.
 - `desktopAlerts`: temporary preference for desktop notifications.
 - `displayName`: temporary local display name used by settings UI previews.
+- `githubSelectedRepositories`: GitHub repositories allowed to appear in GitHub dashboard surfaces. Stores compact repository snapshots.
+- `githubVisibleWorkItemTypes`: GitHub item types allowed to appear in GitHub dashboard surfaces. Defaults to issues and pull requests.
+- `githubIssueDescriptionTemplate`: Clockify time-entry description format for GitHub issue variables.
+- `githubIssueDescriptionTemplateFallback`: replacement text for missing values in the GitHub issue description template.
+- `githubPullRequestDescriptionTemplate`: Clockify time-entry description format for GitHub pull request variables.
+- `githubPullRequestDescriptionTemplateFallback`: replacement text for missing values in the GitHub pull request description template.
 - `linearTicketSyncLimit`: maximum number of assigned Linear tickets to sync for ticket lists. Default is `50`.
 - `linearTicketSyncInterval`: how often assigned Linear tickets sync in the background. Default is `30m`.
 - `linearTicketSyncOrderBy`: Linear pagination ordering field for ticket sync. Values mirror Linear `PaginationOrderBy` support currently exposed by the app: `createdAt`, `updatedAt`.
