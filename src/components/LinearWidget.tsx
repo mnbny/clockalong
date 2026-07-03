@@ -80,7 +80,11 @@ const ticketColumns: Array<ColumnDef<LinearTicket>> = [
   {
     accessorKey: 'title',
     header: 'Ticket',
-    cell: info => <span className="block max-w-3xl truncate font-medium">{info.getValue<string>()}</span>,
+    cell: info => (
+      <span className="block min-w-0 truncate font-medium" title={info.getValue<string>()}>
+        {info.getValue<string>()}
+      </span>
+    ),
   },
   {
     accessorKey: 'lastTrackedAt',
@@ -453,7 +457,17 @@ function LinearWidgetContent() {
         </header>
 
         <div className="overflow-x-auto">
-          <table className="table-zebra table-sm table">
+          <table className="table-zebra table-sm table table-fixed w-full">
+            <colgroup>
+              <col className="w-14" />
+              <col className="w-24" />
+              <col className="w-32" />
+              <col className="w-full" />
+              <col className="w-28" />
+              <col className="w-20" />
+              <col className="w-24" />
+              <col className="w-12" />
+            </colgroup>
             <thead>
               {table.getHeaderGroups().map(headerGroup => (
                 <tr key={headerGroup.id}>
@@ -648,11 +662,11 @@ function getTicketTableCellClassName(columnId: string) {
     case 'lastTrackedAt':
     case 'totalTrackedSeconds':
     case 'totalTrackedAmount':
-      return 'w-1 whitespace-nowrap'
+      return 'whitespace-nowrap'
     case 'externalLink':
       return 'w-12 min-w-12 text-center'
     case 'title':
-      return 'w-full'
+      return 'w-full min-w-0'
     default:
       return undefined
   }
