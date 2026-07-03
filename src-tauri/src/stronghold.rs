@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[derive(Default)]
-pub struct ClinearStrongholdState {
+pub struct ClockalongStrongholdState {
     lock: Mutex<()>,
 }
 
@@ -79,11 +79,11 @@ fn with_client<R: Runtime, T>(
     save: bool,
     operation: impl FnOnce(&iota_stronghold::Client) -> Result<T, String>,
 ) -> Result<T, String> {
-    let state = app.state::<ClinearStrongholdState>();
+    let state = app.state::<ClockalongStrongholdState>();
     let _guard = state
         .lock
         .lock()
-        .map_err(|_| "Failed to lock Clinear Stronghold access".to_string())?;
+        .map_err(|_| "Failed to lock Clockalong Stronghold access".to_string())?;
 
     stronghold_log(&format!(
         "with_client: opening locked stronghold session save={save}"

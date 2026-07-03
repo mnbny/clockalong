@@ -5,8 +5,8 @@ use tauri::{AppHandle, Manager, Runtime};
 use crate::{
     auth::{
         auth_log, clockify_credential_snapshot, connection_result, disconnect_result,
-        set_clockify_authenticated, ClinearAuthConnectionResult, ClinearAuthDisconnectResult,
-        ClinearAuthState, ClinearClockifyCredentialSnapshot,
+        set_clockify_authenticated, ClockalongAuthConnectionResult, ClockalongAuthDisconnectResult,
+        ClockalongAuthState, ClockalongClockifyCredentialSnapshot,
     },
     stronghold,
 };
@@ -17,10 +17,10 @@ const CLOCKIFY_API_KEY_STRONGHOLD_KEY: &str = "clockifyApiKey";
 pub async fn connect<R: Runtime>(
     app: AppHandle<R>,
     api_key: String,
-) -> Result<ClinearAuthConnectionResult, String> {
+) -> Result<ClockalongAuthConnectionResult, String> {
     let api_key = api_key.trim().to_string();
     auth_log(&format!(
-        "clinear_auth_connect_clockify: validation requested key_len={}",
+        "clockalong_auth_connect_clockify: validation requested key_len={}",
         api_key.len()
     ));
 
@@ -39,9 +39,9 @@ pub async fn connect<R: Runtime>(
 
 pub fn credential_snapshot<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<ClinearClockifyCredentialSnapshot, String> {
-    auth_log("clinear_auth_get_clockify_credential: snapshot requested");
-    let auth_snapshot = app.state::<ClinearAuthState>().snapshot()?;
+) -> Result<ClockalongClockifyCredentialSnapshot, String> {
+    auth_log("clockalong_auth_get_clockify_credential: snapshot requested");
+    let auth_snapshot = app.state::<ClockalongAuthState>().snapshot()?;
 
     if !auth_snapshot.clockify_authenticated {
         return Ok(clockify_credential_snapshot(None));
@@ -57,8 +57,8 @@ pub fn credential_snapshot<R: Runtime>(
     Ok(clockify_credential_snapshot(api_key))
 }
 
-pub fn disconnect<R: Runtime>(app: AppHandle<R>) -> Result<ClinearAuthDisconnectResult, String> {
-    auth_log("clinear_auth_disconnect_clockify: disconnect requested");
+pub fn disconnect<R: Runtime>(app: AppHandle<R>) -> Result<ClockalongAuthDisconnectResult, String> {
+    auth_log("clockalong_auth_disconnect_clockify: disconnect requested");
     stronghold::remove_value(&app, CLOCKIFY_API_KEY_STRONGHOLD_KEY)?;
     set_clockify_authenticated(&app, false)?;
 

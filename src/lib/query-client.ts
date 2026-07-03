@@ -1,4 +1,4 @@
-import type { LinearTicketSortByOption } from '../services/storage/config'
+import type { LinearTicketSyncOrderByOption } from '../services/linear/ticket-settings'
 
 import { QueryClient } from '@tanstack/react-query'
 
@@ -7,9 +7,9 @@ export type QueryKeySegments<T> = {
   other?: unknown[]
 }
 
-type AssignedLinearTicketsQueryParams = {
-  fetchLimit: number
-  sortBy: LinearTicketSortByOption
+type LinearTicketSyncQueryParams = {
+  orderBy: LinearTicketSyncOrderByOption
+  syncLimit: number
 }
 
 type ClockifyProjectsQueryParams = {
@@ -27,11 +27,21 @@ type ClockifySummaryReportQueryParams = {
   workspaceId?: string
 }
 
-type ClockifyTimeEntriesQueryParams = {
-  end?: string
-  start?: string
+type ClockifyEntrySyncQueryParams = {
   userId?: string
   workspaceId?: string
+}
+
+type GithubRepositoryQueryParams = {
+  owner?: string
+  repo?: string
+}
+
+type GithubWorkItemSyncQueryParams = {
+  issues: boolean
+  limit: number
+  pullRequests: boolean
+  repositories: string
 }
 
 function spreadQueryKeySegments(keys?: QueryKeySegments<unknown>) {
@@ -40,6 +50,8 @@ function spreadQueryKeySegments(keys?: QueryKeySegments<unknown>) {
 
 export const queryKeys = {
   clockify: {
+    entrySync: (keys?: QueryKeySegments<ClockifyEntrySyncQueryParams>) =>
+      ['clockify', 'entry-sync', ...spreadQueryKeySegments(keys)] as const,
     loggedUser: ['clockify', 'logged-user'] as const,
     projects: (keys?: QueryKeySegments<ClockifyProjectsQueryParams>) =>
       ['clockify', 'projects', ...spreadQueryKeySegments(keys)] as const,
@@ -47,13 +59,21 @@ export const queryKeys = {
       ['clockify', 'running-entry', ...spreadQueryKeySegments(keys)] as const,
     summaryReport: (keys?: QueryKeySegments<ClockifySummaryReportQueryParams>) =>
       ['clockify', 'summary-report', ...spreadQueryKeySegments(keys)] as const,
-    timeEntries: (keys?: QueryKeySegments<ClockifyTimeEntriesQueryParams>) =>
-      ['clockify', 'time-entries', ...spreadQueryKeySegments(keys)] as const,
     workspaces: ['clockify', 'workspaces'] as const,
   },
   linear: {
-    assignedTickets: (keys?: QueryKeySegments<AssignedLinearTicketsQueryParams>) =>
-      ['linear', 'assigned-tickets', ...spreadQueryKeySegments(keys)] as const,
+    ticketSync: (keys?: QueryKeySegments<LinearTicketSyncQueryParams>) =>
+      ['linear', 'ticket-sync', ...spreadQueryKeySegments(keys)] as const,
+  },
+  github: {
+    repositories: ['github', 'repositories'] as const,
+    repositoryIssues: (keys?: QueryKeySegments<GithubRepositoryQueryParams>) =>
+      ['github', 'repository-issues', ...spreadQueryKeySegments(keys)] as const,
+    repositoryPullRequests: (keys?: QueryKeySegments<GithubRepositoryQueryParams>) =>
+      ['github', 'repository-pull-requests', ...spreadQueryKeySegments(keys)] as const,
+    viewer: ['github', 'viewer'] as const,
+    workItemSync: (keys?: QueryKeySegments<GithubWorkItemSyncQueryParams>) =>
+      ['github', 'work-item-sync', ...spreadQueryKeySegments(keys)] as const,
   },
 }
 

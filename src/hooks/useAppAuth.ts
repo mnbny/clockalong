@@ -3,11 +3,12 @@ import { isTauri } from '@tauri-apps/api/core'
 import { auth } from '../services/tauri/auth-client'
 import { createTauriReactiveStateHook } from '../utils/create-tauri-reactive-state-hook'
 
-export const clinearAuthStateChangedEvent = 'clinear-auth:state-changed'
+export const clockalongAuthStateChangedEvent = 'clockalong-auth:state-changed'
 
-export async function getClinearAuthState() {
+export async function getClockalongAuthState() {
   const fallback = {
     linearAuthenticated: false,
+    githubAuthenticated: false,
     clockifyAuthenticated: false,
   }
 
@@ -21,14 +22,16 @@ export async function getClinearAuthState() {
 export const useAppAuth = createTauriReactiveStateHook({
   browserValue: {
     linearAuthenticated: false,
+    githubAuthenticated: false,
     clockifyAuthenticated: false,
   },
-  eventName: clinearAuthStateChangedEvent,
-  getSnapshot: getClinearAuthState,
+  eventName: clockalongAuthStateChangedEvent,
+  getSnapshot: getClockalongAuthState,
   initialValue: {
     linearAuthenticated: false,
+    githubAuthenticated: false,
     clockifyAuthenticated: false,
   },
-  logScope: 'clinear auth',
+  logScope: 'clockalong auth',
   stateName: 'useAppAuth',
 })

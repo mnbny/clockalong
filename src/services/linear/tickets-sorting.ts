@@ -1,16 +1,30 @@
-import type { ClockifyLinearEntryLinkRegistry, LinearTicketSortOrderOption } from '../storage/config'
+import type { LinearTicketSortOrderOption } from './ticket-settings'
 import type { LinearTicket } from './tickets'
 
-type TicketLinkSummary = {
-  entryCount: number
-  lastLinkedAt: number
+export type SortLinearTicketsOptions = {
+  activeLinearIssueId?: string | null
+  sortOrder: LinearTicketSortOrderOption
 }
 
-type TicketLinkSummaries = Map<string, TicketLinkSummary>
+type RelevanceBucket =
+  | 'running'
+  | 'recentlyTrackedWorkable'
+  | 'started'
+  | 'unstarted'
+  | 'backlog'
+  | 'recentlyTrackedTerminal'
+  | 'terminal'
 
-export type SortLinearTicketsOptions = {
-  clockifyLinearEntryLinks: ClockifyLinearEntryLinkRegistry
-  sortOrder: LinearTicketSortOrderOption
+const recentTrackedWindowMs = 7 * 24 * 60 * 60 * 1000
+
+const relevanceBucketRank: Record<RelevanceBucket, number> = {
+  running: 0,
+  recentlyTrackedWorkable: 1,
+  started: 2,
+  unstarted: 3,
+  backlog: 4,
+  recentlyTrackedTerminal: 5,
+  terminal: 6,
 }
 
 const linearStatusTypeRank: Record<string, number> = {
@@ -26,7 +40,7 @@ const linearStatusTypeRank: Record<string, number> = {
 let previousSortLogSignature: string | null = null
 
 export function sortLinearTickets(tickets: LinearTicket[], options: SortLinearTicketsOptions) {
-  const linkSummaries = summarizeTicketLinks(options.clockifyLinearEntryLinks)
+  const now = Date.now()
   const sortedTickets = [...tickets].sort((firstTicket, secondTicket) => {
     switch (options.sortOrder) {
       case 'alphabetical':
@@ -36,7 +50,7 @@ export function sortLinearTickets(tickets: LinearTicket[], options: SortLinearTi
           compareDateDesc(firstTicket.createdAt, secondTicket.createdAt) || compareStable(firstTicket, secondTicket)
         )
       case 'custom':
-        return compareCustom(firstTicket, secondTicket, linkSummaries)
+        return compareCustom(firstTicket, secondTicket, options, now)
       case 'status':
         return compareStatus(firstTicket, secondTicket) || compareStable(firstTicket, secondTicket)
       case 'updated':
@@ -46,25 +60,21 @@ export function sortLinearTickets(tickets: LinearTicket[], options: SortLinearTi
     }
   })
 
-  logSortSummary(sortedTickets, options, linkSummaries)
+  logSortSummary(sortedTickets, options)
 
   return sortedTickets
 }
 
-function logSortSummary(
-  sortedTickets: LinearTicket[],
-  options: SortLinearTicketsOptions,
-  linkSummaries: TicketLinkSummaries,
-) {
-  const linkedTicketCount = [...linkSummaries.keys()].filter(linearIssueId =>
-    sortedTickets.some(ticket => ticket.id === linearIssueId),
-  ).length
+function logSortSummary(sortedTickets: LinearTicket[], options: SortLinearTicketsOptions) {
+  const activeLinearIssuePresent = sortedTickets.some(ticket => ticket.id === options.activeLinearIssueId)
+  const trackedTicketCount = sortedTickets.filter(ticket => ticket.lastTrackedAt || ticket.totalTrackedSeconds).length
   const topIdentifiers = sortedTickets.slice(0, 5).map(ticket => ticket.identifier)
   const signature = JSON.stringify({
+    activeLinearIssuePresent,
     count: sortedTickets.length,
-    linkedTicketCount,
     sortOrder: options.sortOrder,
     topIdentifiers,
+    trackedTicketCount,
   })
 
   if (signature === previousSortLogSignature) {
@@ -73,43 +83,72 @@ function logSortSummary(
 
   previousSortLogSignature = signature
   linearTicketsLog('sort complete', {
-    linkedTicketCount,
+    activeLinearIssuePresent,
     sortOrder: options.sortOrder,
     topIdentifiers,
     totalTickets: sortedTickets.length,
+    trackedTicketCount,
   })
 }
 
-function summarizeTicketLinks(clockifyLinearEntryLinks: ClockifyLinearEntryLinkRegistry) {
-  const summaries: TicketLinkSummaries = new Map()
-
-  for (const link of Object.values(clockifyLinearEntryLinks)) {
-    const currentSummary = summaries.get(link.linearIssueId) ?? {
-      entryCount: 0,
-      lastLinkedAt: 0,
-    }
-    const linkedAt = Date.parse(link.linkedAt)
-
-    summaries.set(link.linearIssueId, {
-      entryCount: currentSummary.entryCount + 1,
-      lastLinkedAt: Math.max(currentSummary.lastLinkedAt, Number.isFinite(linkedAt) ? linkedAt : 0),
-    })
-  }
-
-  return summaries
-}
-
-function compareCustom(firstTicket: LinearTicket, secondTicket: LinearTicket, linkSummaries: TicketLinkSummaries) {
-  const firstSummary = linkSummaries.get(firstTicket.id)
-  const secondSummary = linkSummaries.get(secondTicket.id)
+function compareCustom(
+  firstTicket: LinearTicket,
+  secondTicket: LinearTicket,
+  options: SortLinearTicketsOptions,
+  now: number,
+) {
+  const firstBucket = getRelevanceBucket(firstTicket, options, now)
+  const secondBucket = getRelevanceBucket(secondTicket, options, now)
+  const firstBucketRank = relevanceBucketRank[firstBucket]
+  const secondBucketRank = relevanceBucketRank[secondBucket]
+  const inRecentBucket =
+    firstBucket === 'recentlyTrackedWorkable' ||
+    firstBucket === 'recentlyTrackedTerminal' ||
+    secondBucket === 'recentlyTrackedWorkable' ||
+    secondBucket === 'recentlyTrackedTerminal'
 
   return (
-    compareNumberDesc(firstSummary?.lastLinkedAt ?? 0, secondSummary?.lastLinkedAt ?? 0) ||
-    compareNumberDesc(firstSummary?.entryCount ?? 0, secondSummary?.entryCount ?? 0) ||
+    compareNumberAsc(firstBucketRank, secondBucketRank) ||
+    (inRecentBucket ? compareLastTrackedDesc(firstTicket, secondTicket) : 0) ||
     compareStatus(firstTicket, secondTicket) ||
+    compareLastTrackedDesc(firstTicket, secondTicket) ||
     compareDateDesc(firstTicket.updatedAt, secondTicket.updatedAt) ||
     compareStable(firstTicket, secondTicket)
   )
+}
+
+function getRelevanceBucket(ticket: LinearTicket, options: SortLinearTicketsOptions, now: number): RelevanceBucket {
+  if (ticket.id === options.activeLinearIssueId) {
+    return 'running'
+  }
+
+  const recentlyTracked = isRecentlyTracked(ticket, now)
+
+  switch (ticket.status.type) {
+    case 'started':
+      return recentlyTracked ? 'recentlyTrackedWorkable' : 'started'
+    case 'unstarted':
+      return recentlyTracked ? 'recentlyTrackedWorkable' : 'unstarted'
+    case 'backlog':
+    case 'triage':
+      return 'backlog'
+    case 'canceled':
+    case 'completed':
+    case 'duplicate':
+      return recentlyTracked ? 'recentlyTrackedTerminal' : 'terminal'
+    default:
+      return 'terminal'
+  }
+}
+
+function isRecentlyTracked(ticket: LinearTicket, now: number) {
+  const lastTrackedAt = parseDate(ticket.lastTrackedAt)
+
+  if (!lastTrackedAt) {
+    return false
+  }
+
+  return now - lastTrackedAt <= recentTrackedWindowMs
 }
 
 function compareStatus(firstTicket: LinearTicket, secondTicket: LinearTicket) {
@@ -122,7 +161,7 @@ function compareStatus(firstTicket: LinearTicket, secondTicket: LinearTicket) {
 }
 
 function getStatusTypeRank(ticket: LinearTicket) {
-  return linearStatusTypeRank[ticket.status.type] ?? linearStatusTypeRank.backlog
+  return linearStatusTypeRank[ticket.status.type] ?? linearStatusTypeRank.duplicate + 1
 }
 
 function compareAlphabetical(firstTicket: LinearTicket, secondTicket: LinearTicket) {
@@ -133,11 +172,19 @@ function compareStable(firstTicket: LinearTicket, secondTicket: LinearTicket) {
   return firstTicket.identifier.localeCompare(secondTicket.identifier)
 }
 
+function compareLastTrackedDesc(firstTicket: LinearTicket, secondTicket: LinearTicket) {
+  return compareNumberDesc(parseDate(firstTicket.lastTrackedAt), parseDate(secondTicket.lastTrackedAt))
+}
+
 function compareDateDesc(firstDate: string, secondDate: string) {
   return compareNumberDesc(parseDate(firstDate), parseDate(secondDate))
 }
 
-function parseDate(date: string) {
+function parseDate(date: string | null) {
+  if (!date) {
+    return 0
+  }
+
   const timestamp = Date.parse(date)
   return Number.isFinite(timestamp) ? timestamp : 0
 }

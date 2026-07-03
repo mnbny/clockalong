@@ -1,10 +1,8 @@
-import type { LinearTicketSortByOption } from '../storage/config'
+import type { LinearTicketSyncOrderByOption } from './ticket-settings'
 import type { Issue, LinearClient, User, WorkflowState } from '@linear/sdk'
 
 import { auth } from '../tauri/auth-client'
 import { createLinearClient } from './client'
-
-export const linearTicketsPageSize = 50
 
 export type LinearTicketAssignee = Pick<
   User,
@@ -14,7 +12,7 @@ export type LinearTicketAssignee = Pick<
 export type LinearTicketStatus = Pick<WorkflowState, 'color' | 'id' | 'name' | 'position' | 'type'>
 
 type SerializedIssueFields = Omit<
-  Pick<Issue, 'createdAt' | 'id' | 'identifier' | 'title' | 'updatedAt'>,
+  Pick<Issue, 'createdAt' | 'id' | 'identifier' | 'title' | 'updatedAt' | 'url'>,
   'createdAt' | 'updatedAt'
 > & {
   createdAt: string
@@ -29,8 +27,11 @@ export type LinearTicket = {
   lastTrackedAt: string | null
   status: LinearTicketStatus
   title: string
+  totalTrackedAmount: number | null
+  totalTrackedAmountCurrency: string | null
   totalTrackedSeconds: number | null
   updatedAt: string
+  url: string
 }
 
 export type AssignedIssueNode = SerializedIssueFields & {
@@ -40,6 +41,7 @@ export type AssignedIssueNode = SerializedIssueFields & {
 
 type AssignedIssuesResponse = {
   viewer: {
+    id: string
     assignedIssues: {
       nodes: AssignedIssueNode[]
       pageInfo: {
@@ -53,17 +55,19 @@ export type AssignedIssuesPage = AssignedIssuesResponse['viewer']['assignedIssue
 export type AssignedIssuesVariables = {
   after?: string | null
   first: number
-  orderBy: LinearTicketSortByOption
+  orderBy: LinearTicketSyncOrderByOption
 }
 
 const assignedTicketsQuery = `
   query DashboardAssignedTickets($first: Int!, $after: String, $orderBy: PaginationOrderBy) {
     viewer {
+      id
       assignedIssues(first: $first, after: $after, orderBy: $orderBy) {
         nodes {
           id
           identifier
           title
+          url
           createdAt
           updatedAt
           state {
@@ -95,7 +99,7 @@ export async function requestAssignedIssuesPage(variables: AssignedIssuesVariabl
   linearTicketsLog('assigned fetch page request', {
     afterPresent: Boolean(variables.after),
     first: variables.first,
-    sortBy: variables.orderBy,
+    orderBy: variables.orderBy,
   })
 
   const linearClient = await createLinearClient()

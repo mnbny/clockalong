@@ -17,14 +17,14 @@ use url::Url;
 use crate::{
     auth::{
         auth_log, connection_result, disconnect_result, linear_credential_snapshot,
-        set_linear_authenticated, to_error_message, ClinearAuthConnectionResult,
-        ClinearAuthDisconnectResult, ClinearAuthState, ClinearLinearCredentialSnapshot,
+        set_linear_authenticated, to_error_message, ClockalongAuthConnectionResult,
+        ClockalongAuthDisconnectResult, ClockalongAuthState, ClockalongLinearCredentialSnapshot,
     },
     stronghold,
 };
 
 const LINEAR_AUTHORIZE_URL: &str = "https://linear.app/oauth/authorize";
-const LINEAR_CLIENT_ID: &str = "1ef17fb4bbef1626a5f1f838843e067c";
+const LINEAR_CLIENT_ID: &str = "b1f808a5cc24f7bf5cae1df43b4d7cf7";
 const LINEAR_REVOKE_URL: &str = "https://api.linear.app/oauth/revoke";
 const LINEAR_TOKEN_URL: &str = "https://api.linear.app/oauth/token";
 const LINEAR_CALLBACK_PORTS: [u16; 3] = [53682, 53683, 53684];
@@ -64,12 +64,14 @@ struct LinearOAuthCallback {
     code: String,
 }
 
-pub async fn connect<R: Runtime>(app: AppHandle<R>) -> Result<ClinearAuthConnectionResult, String> {
-    auth_log("clinear_auth_connect_linear: starting OAuth flow");
+pub async fn connect<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<ClockalongAuthConnectionResult, String> {
+    auth_log("clockalong_auth_connect_linear: starting OAuth flow");
     let client_id = linear_client_id();
     let (redirect_uri, callback_config, listener) = open_linear_callback_listener()?;
     auth_log(&format!(
-        "clinear_auth_connect_linear: callback listener ready redirect_uri={redirect_uri}"
+        "clockalong_auth_connect_linear: callback listener ready redirect_uri={redirect_uri}"
     ));
 
     let oauth_state = generate_oauth_token();
@@ -81,7 +83,7 @@ pub async fn connect<R: Runtime>(app: AppHandle<R>) -> Result<ClinearAuthConnect
     app.opener()
         .open_url(authorize_url.as_str(), None::<&str>)
         .map_err(to_error_message)?;
-    auth_log("clinear_auth_connect_linear: opened system browser");
+    auth_log("clockalong_auth_connect_linear: opened system browser");
 
     let expected_state = oauth_state.clone();
     let expected_path = callback_config.path.clone();
@@ -90,9 +92,9 @@ pub async fn connect<R: Runtime>(app: AppHandle<R>) -> Result<ClinearAuthConnect
     })
     .await
     .map_err(to_error_message)??;
-    auth_log("clinear_auth_connect_linear: callback validated");
+    auth_log("clockalong_auth_connect_linear: callback validated");
 
-    auth_log("clinear_auth_connect_linear: exchanging authorization code");
+    auth_log("clockalong_auth_connect_linear: exchanging authorization code");
     let token_response = exchange_linear_authorization_code(
         &client_id,
         &redirect_uri,
@@ -104,15 +106,15 @@ pub async fn connect<R: Runtime>(app: AppHandle<R>) -> Result<ClinearAuthConnect
     let expires_at = write_linear_tokens(&app, token_response)?;
     schedule_refresh(&app, expires_at)?;
     set_linear_authenticated(&app, true)?;
-    auth_log("clinear_auth_connect_linear: OAuth flow connected");
+    auth_log("clockalong_auth_connect_linear: OAuth flow connected");
 
     Ok(connection_result("linear"))
 }
 
 pub async fn credential_snapshot<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<ClinearLinearCredentialSnapshot, String> {
-    auth_log("clinear_auth_get_linear_credential: token requested");
+) -> Result<ClockalongLinearCredentialSnapshot, String> {
+    auth_log("clockalong_auth_get_linear_credential: token requested");
 
     match linear_access_token_snapshot(&app).await {
         Ok(snapshot) => {
@@ -121,21 +123,21 @@ pub async fn credential_snapshot<R: Runtime>(
         }
         Err(error) if error.is_invalid_auth() => {
             auth_log(&format!(
-                "clinear_auth_get_linear_credential: invalid credentials, clearing: {error}"
+                "clockalong_auth_get_linear_credential: invalid credentials, clearing: {error}"
             ));
             stronghold::remove_value(&app, LINEAR_OAUTH_TOKENS_STRONGHOLD_KEY)?;
-            app.state::<ClinearAuthState>()
+            app.state::<ClockalongAuthState>()
                 .abort_linear_refresh_task()?;
             set_linear_authenticated(&app, false)?;
             Err(error.to_string())
         }
         Err(error) => {
             auth_log(&format!(
-                "clinear_auth_get_linear_credential: token unavailable, keeping credentials: {error}"
+                "clockalong_auth_get_linear_credential: token unavailable, keeping credentials: {error}"
             ));
             if let Err(schedule_error) = schedule_refresh_retry(&app) {
                 auth_log(&format!(
-                    "clinear_auth_get_linear_credential: failed to schedule refresh retry: {schedule_error}"
+                    "clockalong_auth_get_linear_credential: failed to schedule refresh retry: {schedule_error}"
                 ));
             }
             set_linear_authenticated(&app, false)?;
@@ -146,28 +148,28 @@ pub async fn credential_snapshot<R: Runtime>(
 
 pub async fn refresh_credential<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<ClinearLinearCredentialSnapshot, String> {
-    auth_log("clinear_auth_refresh_linear_credential: refresh requested");
+) -> Result<ClockalongLinearCredentialSnapshot, String> {
+    auth_log("clockalong_auth_refresh_linear_credential: refresh requested");
 
     match refresh_from_storage_and_schedule(app.clone()).await {
         Ok(snapshot) => Ok(snapshot),
         Err(error) if error.is_invalid_auth() => {
             auth_log(&format!(
-                "clinear_auth_refresh_linear_credential: invalid credentials, clearing: {error}"
+                "clockalong_auth_refresh_linear_credential: invalid credentials, clearing: {error}"
             ));
             stronghold::remove_value(&app, LINEAR_OAUTH_TOKENS_STRONGHOLD_KEY)?;
-            app.state::<ClinearAuthState>()
+            app.state::<ClockalongAuthState>()
                 .abort_linear_refresh_task()?;
             set_linear_authenticated(&app, false)?;
             Err(error.to_string())
         }
         Err(error) => {
             auth_log(&format!(
-                "clinear_auth_refresh_linear_credential: refresh unavailable, keeping credentials: {error}"
+                "clockalong_auth_refresh_linear_credential: refresh unavailable, keeping credentials: {error}"
             ));
             if let Err(schedule_error) = schedule_refresh_retry(&app) {
                 auth_log(&format!(
-                    "clinear_auth_refresh_linear_credential: failed to schedule refresh retry: {schedule_error}"
+                    "clockalong_auth_refresh_linear_credential: failed to schedule refresh retry: {schedule_error}"
                 ));
             }
             set_linear_authenticated(&app, false)?;
@@ -178,15 +180,15 @@ pub async fn refresh_credential<R: Runtime>(
 
 pub async fn disconnect<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<ClinearAuthDisconnectResult, String> {
-    auth_log("clinear_auth_disconnect_linear: disconnect requested");
-    app.state::<ClinearAuthState>()
+) -> Result<ClockalongAuthDisconnectResult, String> {
+    auth_log("clockalong_auth_disconnect_linear: disconnect requested");
+    app.state::<ClockalongAuthState>()
         .abort_linear_refresh_task()?;
     let tokens = read_linear_tokens(&app)?;
     let revocation_status = match tokens.as_ref() {
         Some(tokens) => revoke_linear_access_token(tokens).await,
         None => {
-            auth_log("clinear_auth_disconnect_linear: no stored tokens to revoke");
+            auth_log("clockalong_auth_disconnect_linear: no stored tokens to revoke");
             LinearRevocationStatus::Skipped
         }
     };
@@ -194,7 +196,7 @@ pub async fn disconnect<R: Runtime>(
     stronghold::remove_value(&app, LINEAR_OAUTH_TOKENS_STRONGHOLD_KEY)?;
     set_linear_authenticated(&app, false)?;
     auth_log(&format!(
-        "clinear_auth_disconnect_linear: local disconnect complete revocation_status={}",
+        "clockalong_auth_disconnect_linear: local disconnect complete revocation_status={}",
         revocation_status.as_str()
     ));
 
@@ -232,7 +234,7 @@ pub async fn validate_stored<R: Runtime>(app: &AppHandle<R>) -> Result<bool, Str
                 "validate_stored_linear_tokens: invalid stored tokens, clearing credential: {error}"
             ));
             stronghold::remove_value(app, LINEAR_OAUTH_TOKENS_STRONGHOLD_KEY)?;
-            app.state::<ClinearAuthState>()
+            app.state::<ClockalongAuthState>()
                 .abort_linear_refresh_task()?;
             Ok(false)
         }
@@ -252,7 +254,7 @@ pub async fn validate_stored<R: Runtime>(app: &AppHandle<R>) -> Result<bool, Str
 
 async fn linear_access_token_snapshot<R: Runtime>(
     app: &AppHandle<R>,
-) -> Result<ClinearLinearCredentialSnapshot, LinearAuthError> {
+) -> Result<ClockalongLinearCredentialSnapshot, LinearAuthError> {
     let Some(tokens) = read_linear_tokens(app).map_err(LinearAuthError::transient)? else {
         auth_log("linear_access_token_snapshot: no stored tokens");
         return Ok(linear_credential_snapshot(None));
@@ -283,9 +285,9 @@ fn linear_client_id() -> String {
 }
 
 fn linear_redirect_uri_override() -> Option<String> {
-    std::env::var("CLINEAR_LINEAR_REDIRECT_URI")
+    std::env::var("CLOCKALONG_LINEAR_REDIRECT_URI")
         .ok()
-        .or_else(|| option_env!("CLINEAR_LINEAR_REDIRECT_URI").map(str::to_string))
+        .or_else(|| option_env!("CLOCKALONG_LINEAR_REDIRECT_URI").map(str::to_string))
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
 }
@@ -549,9 +551,9 @@ fn write_linear_oauth_callback_response(
         "Linear connection failed"
     };
     let body = if success {
-        "Linear is connected. You can close this browser window and return to Clinear."
+        "Linear is connected. You can close this browser window and return to Clockalong."
     } else {
-        "Linear could not be connected. Return to Clinear and try again."
+        "Linear could not be connected. Return to Clockalong and try again."
     };
     let html = format!(
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>{title}</title></head><body><main><h1>{title}</h1><p>{body}</p></main></body></html>"
@@ -799,7 +801,7 @@ fn schedule_refresh<R: Runtime>(
                 let _ = stronghold::remove_value(&task_app, LINEAR_OAUTH_TOKENS_STRONGHOLD_KEY);
                 let _ = set_linear_authenticated(&task_app, false);
                 let _ = task_app
-                    .state::<ClinearAuthState>()
+                    .state::<ClockalongAuthState>()
                     .abort_linear_refresh_task();
             } else {
                 let _ = set_linear_authenticated(&task_app, false);
@@ -808,7 +810,7 @@ fn schedule_refresh<R: Runtime>(
         }
     });
 
-    app.state::<ClinearAuthState>()
+    app.state::<ClockalongAuthState>()
         .replace_linear_refresh_task(Some(task))
 }
 
@@ -832,7 +834,7 @@ fn schedule_refresh_retry<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> 
                 let _ = stronghold::remove_value(&task_app, LINEAR_OAUTH_TOKENS_STRONGHOLD_KEY);
                 let _ = set_linear_authenticated(&task_app, false);
                 let _ = task_app
-                    .state::<ClinearAuthState>()
+                    .state::<ClockalongAuthState>()
                     .abort_linear_refresh_task();
             } else {
                 let _ = set_linear_authenticated(&task_app, false);
@@ -841,15 +843,15 @@ fn schedule_refresh_retry<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> 
         }
     });
 
-    app.state::<ClinearAuthState>()
+    app.state::<ClockalongAuthState>()
         .replace_linear_refresh_task(Some(task))
 }
 
 async fn refresh_from_storage_and_schedule<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<ClinearLinearCredentialSnapshot, LinearAuthError> {
+) -> Result<ClockalongLinearCredentialSnapshot, LinearAuthError> {
     auth_log("refresh_from_storage_and_schedule: start");
-    let app_state = app.state::<ClinearAuthState>();
+    let app_state = app.state::<ClockalongAuthState>();
     let _refresh_guard = app_state.linear_refresh_lock().lock().await;
     let tokens = read_linear_tokens(&app)
         .map_err(LinearAuthError::transient)?

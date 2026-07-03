@@ -10,7 +10,7 @@ import {
   IconTrash,
   IconX,
 } from '@tabler/icons-react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { capitalCase } from 'change-case'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
@@ -36,10 +36,6 @@ type QuickTimerStartFormProps = {
   onCancel: () => void
 }
 
-type QuickTimersWidgetProps = {
-  activeQuickTimerId?: string
-}
-
 const QuickTimerFormSchema = z.object({
   descriptionTemplate: z.string().trim().min(1, 'Description template is required.'),
   icon: z
@@ -60,7 +56,7 @@ const quickTimerFormDefaultValues = {
   name: '',
 } satisfies QuickTimerFormSchema
 
-export function QuickTimersWidget({ activeQuickTimerId }: QuickTimersWidgetProps) {
+export function QuickTimersWidget() {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const startDialogRef = useRef<HTMLDialogElement>(null)
   const [startingQuickTimerId, setStartingQuickTimerId] = useState<string | null>(null)
@@ -70,7 +66,62 @@ export function QuickTimersWidget({ activeQuickTimerId }: QuickTimersWidgetProps
   const [startFormResetKey, setStartFormResetKey] = useState(0)
   const [quickTimers] = useStorage('quickTimers')
   const [quickTimersColumns] = useStorage('quickTimersColumns')
+  const [quickTimersEnabled] = useStorage('quickTimersEnabled')
+  const [clockifyQuickTimerEntryLinks] = useStorage('clockifyQuickTimerEntryLinks')
   const normalizedColumns = normalizeQuickTimerColumns(quickTimersColumns)
+  const clockifyUserQuery = useQuery({
+    enabled: quickTimersEnabled,
+    queryKey: queryKeys.clockify.loggedUser,
+    queryFn: () => clockify.getLoggedUser(),
+    staleTime: 5 * 60_000,
+  })
+  const clockifyWorkspacesQuery = useQuery({
+    enabled: quickTimersEnabled,
+    queryKey: queryKeys.clockify.workspaces,
+    queryFn: () => clockify.getWorkspacesOfUser(),
+    staleTime: 5 * 60_000,
+  })
+  const selectedClockifyWorkspace = useMemo(() => {
+    const user = clockifyUserQuery.data
+    const workspaces = clockifyWorkspacesQuery.data
+
+    if (!user || !workspaces?.length) {
+      return null
+    }
+
+    return (
+      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
+      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
+      workspaces[0]
+    )
+  }, [clockifyUserQuery.data, clockifyWorkspacesQuery.data])
+  const runningEntryQuery = useQuery({
+    enabled: Boolean(quickTimersEnabled && clockifyUserQuery.data?.id && selectedClockifyWorkspace?.id),
+    queryKey: queryKeys.clockify.runningEntry({
+      params: { userId: clockifyUserQuery.data?.id, workspaceId: selectedClockifyWorkspace?.id },
+    }),
+    queryFn: () =>
+      clockify.getTimeEntries({
+        params: { workspaceId: selectedClockifyWorkspace!.id!, userId: clockifyUserQuery.data!.id! },
+        queries: {
+          hydrated: true,
+          'in-progress': 'true',
+          page: 1,
+          'page-size': 1,
+        },
+      }),
+    refetchInterval: 15 * 60_000,
+    staleTime: 60_000,
+  })
+  const runningEntry = useMemo(() => {
+    const runningEntries = runningEntryQuery.data ?? []
+    return runningEntries.find(entry => entry.userId === clockifyUserQuery.data?.id) ?? runningEntries[0] ?? null
+  }, [clockifyUserQuery.data?.id, runningEntryQuery.data])
+  const activeQuickTimerId = runningEntry?.id ? clockifyQuickTimerEntryLinks[runningEntry.id]?.quickTimerId : undefined
+
+  if (!quickTimersEnabled) {
+    return null
+  }
 
   const openNewQuickTimerDialog = () => {
     setEditingQuickTimers(false)
@@ -119,75 +170,77 @@ export function QuickTimersWidget({ activeQuickTimerId }: QuickTimersWidgetProps
 
   return (
     <>
-      <section className="border-base-content/5 bg-base-100 rounded-box overflow-hidden border">
-        <header className="border-base-content/5 flex min-w-0 items-center justify-between gap-3 border-b px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <IconTimeDuration15 className="text-primary size-6" />
-            <div className="min-w-0">
-              <h2 className="text-base leading-6 font-semibold">Quick Timers</h2>
-              <p className="text-base-content/60 truncate text-sm">Reusable time presets</p>
+      <section className="card card-border bg-base-200/10 dark:bg-base-200/40">
+        <div className="card-body gap-0 p-0">
+          <header className="border-base-content/5 flex min-w-0 items-center justify-between gap-3 border-b px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <IconTimeDuration15 className="text-primary size-6" />
+              <div className="min-w-0">
+                <h2 className="text-base leading-6 font-semibold">Quick Timers</h2>
+                <p className="text-base-content/60 truncate text-sm">Reusable time presets</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-1">
-            {quickTimers.length > 0 ? (
+            <div className="flex items-center gap-1">
+              {quickTimers.length > 0 ? (
+                <button
+                  className="btn btn-square btn-ghost btn-sm"
+                  type="button"
+                  aria-label="Edit Quick Timers"
+                  aria-pressed={editingQuickTimers}
+                  onClick={toggleQuickTimersEditing}>
+                  <IconPencil className="size-4" />
+                </button>
+              ) : null}
               <button
                 className="btn btn-square btn-ghost btn-sm"
                 type="button"
-                aria-label="Edit Quick Timers"
-                aria-pressed={editingQuickTimers}
-                onClick={toggleQuickTimersEditing}>
-                <IconPencil className="size-4" />
+                aria-label="Add Quick Timer"
+                onClick={openNewQuickTimerDialog}>
+                <IconPlus className="size-4" />
               </button>
-            ) : null}
-            <button
-              className="btn btn-square btn-ghost btn-sm"
-              type="button"
-              aria-label="Add Quick Timer"
-              onClick={openNewQuickTimerDialog}>
-              <IconPlus className="size-4" />
-            </button>
-          </div>
-        </header>
+            </div>
+          </header>
 
-        {quickTimers.length > 0 ? (
-          <div
-            className="grid gap-4 p-4"
-            style={{ gridTemplateColumns: `repeat(${normalizedColumns}, minmax(0, 1fr))` }}>
-            {quickTimers.map(quickTimer => (
-              <button
-                key={quickTimer.id}
-                className={cx(
-                  'group flex min-w-0 cursor-pointer flex-col items-center gap-1 text-center',
-                  editingQuickTimers && 'animate-pulse',
-                )}
-                type="button"
-                aria-label={
-                  editingQuickTimers ? `Edit ${quickTimer.name} Quick Timer` : `Start ${quickTimer.name} Quick Timer`
-                }
-                onClick={() => {
-                  if (editingQuickTimers) {
-                    editQuickTimer(quickTimer.id)
-                    return
-                  }
-
-                  startQuickTimer(quickTimer.id)
-                }}>
-                <span
+          {quickTimers.length > 0 ? (
+            <div
+              className="grid gap-4 p-4"
+              style={{ gridTemplateColumns: `repeat(${normalizedColumns}, minmax(0, 1fr))` }}>
+              {quickTimers.map(quickTimer => (
+                <button
+                  key={quickTimer.id}
                   className={cx(
-                    'border-base-content/10 group-focus-visible:outline-primary grid h-[60px] w-full place-items-center rounded-md border transition-colors group-focus-visible:outline-2 group-focus-visible:outline-offset-2',
-                    editingQuickTimers
-                      ? 'bg-warning text-warning-content group-hover:bg-warning/80'
-                      : activeQuickTimerId === quickTimer.id
-                        ? 'tracking-active-surface group-hover:bg-accent/40'
-                        : 'bg-base-200 group-hover:bg-primary group-hover:text-primary-content',
-                  )}>
-                  <QuickTimerIcon icon={quickTimer.icon} />
-                </span>
-                <span className="w-full truncate text-xs leading-4 font-medium">{quickTimer.name}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
+                    'group flex min-w-0 cursor-pointer flex-col items-center gap-1 text-center',
+                    editingQuickTimers && 'animate-pulse',
+                  )}
+                  type="button"
+                  aria-label={
+                    editingQuickTimers ? `Edit ${quickTimer.name} Quick Timer` : `Start ${quickTimer.name} Quick Timer`
+                  }
+                  onClick={() => {
+                    if (editingQuickTimers) {
+                      editQuickTimer(quickTimer.id)
+                      return
+                    }
+
+                    startQuickTimer(quickTimer.id)
+                  }}>
+                  <span
+                    className={cx(
+                      'border-base-content/10 group-focus-visible:outline-primary grid h-[60px] w-full place-items-center rounded-md border transition-colors group-focus-visible:outline-2 group-focus-visible:outline-offset-2',
+                      editingQuickTimers
+                        ? 'bg-warning text-warning-content group-hover:bg-warning/80'
+                        : activeQuickTimerId === quickTimer.id
+                          ? 'tracking-active-surface group-hover:bg-accent/40'
+                          : 'bg-base-200 group-hover:bg-primary group-hover:text-primary-content',
+                    )}>
+                    <QuickTimerIcon icon={quickTimer.icon} />
+                  </span>
+                  <span className="w-full truncate text-xs leading-4 font-medium">{quickTimer.name}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </section>
 
       <dialog ref={dialogRef} className="modal" onClose={resetNewQuickTimerForm}>
@@ -411,7 +464,10 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
   )
   const defaultValues = useMemo(
     () =>
-      Object.fromEntries(templateTokens.map(token => [token, cachedValues?.[token] ?? ''])) as Record<string, string>,
+      Object.fromEntries(templateTokens.map(token => [token, getQuickTimerCachedValue(cachedValues, token)])) as Record<
+        string,
+        string
+      >,
     [cachedValues, templateTokens],
   )
   const { handleSubmit, register, reset } = useForm<Record<string, string>>({
@@ -443,7 +499,7 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
         ...current.filter(entry => entry.id !== quickTimerId),
         {
           id: quickTimerId,
-          ...Object.fromEntries(templateTokens.map(token => [token, values[token] ?? ''])),
+          values: Object.fromEntries(templateTokens.map(token => [token, values[token] ?? ''])),
         },
       ])
     },
@@ -466,7 +522,7 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
       appToast.success(`Started timer for ${quickTimer?.name ?? 'Quick Timer'}`)
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.timeEntries() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.entrySync() })
       onCancel()
     },
   })
@@ -538,10 +594,18 @@ function QuickTimerIcon({ icon }: { icon?: string }) {
 
 function normalizeQuickTimerColumns(columns: number) {
   if (!Number.isFinite(columns)) {
-    return 6
+    return 5
   }
 
   return Math.min(12, Math.max(1, Math.floor(columns)))
+}
+
+function getQuickTimerCachedValue(
+  cachedValues: ({ values?: Record<string, string> } & Record<string, unknown>) | undefined,
+  token: string,
+) {
+  const value = cachedValues?.values?.[token] ?? cachedValues?.[token]
+  return typeof value === 'string' ? value : ''
 }
 
 function getSafeSvgIcon(icon: string | undefined) {

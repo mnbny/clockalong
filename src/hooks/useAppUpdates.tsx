@@ -50,7 +50,7 @@ export function useAppUpdates() {
 }
 
 function showUpdateToast(update: AppUpdate) {
-  appToast.info(`Clinear ${update.version} is available`, {
+  appToast.info(`Clockalong ${update.version} is available`, {
     action: {
       label: 'Install',
       onClick: installUpdate,
@@ -67,7 +67,7 @@ async function installUpdate() {
         label: 'Restart',
         onClick: appUpdates.relaunch,
       },
-      description: 'Restart Clinear to finish.',
+      description: 'Restart Clockalong to finish.',
     })
   } catch (error) {
     appToast.error('Could not install update', {

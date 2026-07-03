@@ -1,6 +1,5 @@
-import { createFileRoute, Navigate, Outlet } from '@tanstack/react-router'
+import { createFileRoute, Outlet } from '@tanstack/react-router'
 
-import { useAppAuth } from '../hooks/useAppAuth'
 import { useAppInit } from '../hooks/useAppInit'
 
 export const Route = createFileRoute('/_auth')({
@@ -9,14 +8,9 @@ export const Route = createFileRoute('/_auth')({
 
 function AuthLayout() {
   const appInitializationState = useAppInit()
-  const authState = useAppAuth()
 
-  if (appInitializationState.value.appInitializing || authState.loading) {
+  if (appInitializationState.value.appInitializing) {
     return null
-  }
-
-  if (authState.value.linearAuthenticated && authState.value.clockifyAuthenticated) {
-    return <Navigate to="/dashboard" replace />
   }
 
   return <Outlet />

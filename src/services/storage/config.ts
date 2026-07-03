@@ -1,9 +1,20 @@
-import { PaginationOrderBy } from '@linear/sdk'
-
 import {
   defaultClockifyDescriptionTemplate,
   defaultClockifyDescriptionTemplateFallback,
 } from '../clockify/description-template'
+import { defaultClockifyEntrySyncDays, defaultClockifyEntrySyncInterval } from '../clockify/sync-settings'
+import {
+  defaultGithubIssueDescriptionTemplate,
+  defaultGithubIssueDescriptionTemplateFallback,
+  defaultGithubPullRequestDescriptionTemplate,
+  defaultGithubPullRequestDescriptionTemplateFallback,
+} from '../github/description-template'
+import {
+  defaultLinearTicketSortOrder,
+  defaultLinearTicketSyncInterval,
+  defaultLinearTicketSyncLimit,
+  defaultLinearTicketSyncOrderBy,
+} from '../linear/ticket-settings'
 import { type StorageConfig, StorageService } from './storage'
 
 export const storagePath = 'settings.json'
@@ -12,16 +23,8 @@ export const themeOptions = [
   { theme: 'emerald', appearance: 'light' },
 ] as const
 export const defaultViewOptions = ['dashboard', 'recent', 'active'] as const
-export const linearTicketRefetchIntervalOptions = ['manual', '5m', '15m', '30m', '1h'] as const
-export const linearTicketSortByOptions = [PaginationOrderBy.CreatedAt, PaginationOrderBy.UpdatedAt] as const
-export const linearTicketSortOrderOptions = ['custom', 'status', 'created', 'updated', 'alphabetical'] as const
 export const refreshIntervalOptions = ['manual', '5m', '15m', '30m'] as const
 
-export type ClockifyLinearEntryLink = {
-  linearIssueId: string
-  linkedAt: string
-}
-export type ClockifyLinearEntryLinkRegistry = Record<string, ClockifyLinearEntryLink>
 export type ClockifyQuickTimerEntryLink = {
   quickTimerId: string
   values: Record<string, string>
@@ -33,11 +36,22 @@ export type ClockifyDefaultProject = {
   workspaceId: string
   workspaceName: string
 } | null
+export type GithubSelectedRepository = {
+  fullName: string
+  id: number
+  name: string
+  owner: string
+  private: boolean
+  url: string
+}
+export type GithubVisibleWorkItemTypes = {
+  issues: boolean
+  pullRequests: boolean
+}
+export const defaultGithubWorkItemSyncLimit = 30
+export const maxGithubWorkItemSyncLimit = 100
 export type ThemeOption = (typeof themeOptions)[number]
 export type DefaultViewOption = (typeof defaultViewOptions)[number]
-export type LinearTicketRefetchIntervalOption = (typeof linearTicketRefetchIntervalOptions)[number]
-export type LinearTicketSortByOption = (typeof linearTicketSortByOptions)[number]
-export type LinearTicketSortOrderOption = (typeof linearTicketSortOrderOptions)[number]
 export type QuickTimerPreset = {
   descriptionTemplate: string
   icon: string
@@ -46,7 +60,8 @@ export type QuickTimerPreset = {
 }
 export type QuickTimersCacheEntry = {
   id: string
-} & Record<string, string>
+  values: Record<string, string>
+}
 export type RefreshIntervalOption = (typeof refreshIntervalOptions)[number]
 
 const storageConfig = {
@@ -90,9 +105,14 @@ const storageConfig = {
     default: defaultClockifyDescriptionTemplateFallback,
     version: 1,
   },
-  clockifyLinearEntryLinks: {
-    type: 'object',
-    default: {} as ClockifyLinearEntryLinkRegistry,
+  clockifyEntrySyncDays: {
+    type: 'number',
+    default: defaultClockifyEntrySyncDays,
+    version: 1,
+  },
+  clockifyEntrySyncInterval: {
+    type: 'string',
+    default: defaultClockifyEntrySyncInterval,
     version: 1,
   },
   clockifyQuickTimerEntryLinks: {
@@ -107,7 +127,7 @@ const storageConfig = {
   },
   quickTimersColumns: {
     type: 'number',
-    default: 6,
+    default: 5,
     version: 1,
   },
   quickTimers: {
@@ -122,28 +142,73 @@ const storageConfig = {
   },
   displayName: {
     type: 'string',
-    default: 'Moon Bunny Clinear',
+    default: 'Moon Bunny Clockalong',
     version: 1,
   },
-  linearTicketFetchLimit: {
+  linearTicketSyncLimit: {
     type: 'number',
-    default: 50,
+    default: defaultLinearTicketSyncLimit,
     version: 1,
   },
-  linearTicketRefetchInterval: {
+  linearTicketSyncInterval: {
     type: 'string',
-    default: '30m' as LinearTicketRefetchIntervalOption,
+    default: defaultLinearTicketSyncInterval,
     version: 1,
   },
-  linearTicketSortBy: {
+  linearTicketSyncOrderBy: {
     type: 'string',
-    default: linearTicketSortByOptions[0] as LinearTicketSortByOption,
+    default: defaultLinearTicketSyncOrderBy,
     version: 1,
   },
   linearTicketSortOrder: {
     type: 'string',
-    default: linearTicketSortOrderOptions[0] as LinearTicketSortOrderOption,
+    default: defaultLinearTicketSortOrder,
     version: 2,
+  },
+  githubSelectedRepositories: {
+    type: 'object',
+    default: [] as GithubSelectedRepository[],
+    version: 1,
+  },
+  githubVisibleWorkItemTypes: {
+    type: 'object',
+    default: { issues: true, pullRequests: true } as GithubVisibleWorkItemTypes,
+    version: 1,
+  },
+  githubWorkItemSyncLimit: {
+    type: 'number',
+    default: defaultGithubWorkItemSyncLimit,
+    version: 1,
+  },
+  githubAuthoredWorkItemsOnly: {
+    type: 'boolean',
+    default: true,
+    version: 1,
+  },
+  githubShowClosedWorkItems: {
+    type: 'boolean',
+    default: false,
+    version: 1,
+  },
+  githubIssueDescriptionTemplate: {
+    type: 'string',
+    default: defaultGithubIssueDescriptionTemplate,
+    version: 1,
+  },
+  githubIssueDescriptionTemplateFallback: {
+    type: 'string',
+    default: defaultGithubIssueDescriptionTemplateFallback,
+    version: 1,
+  },
+  githubPullRequestDescriptionTemplate: {
+    type: 'string',
+    default: defaultGithubPullRequestDescriptionTemplate,
+    version: 1,
+  },
+  githubPullRequestDescriptionTemplateFallback: {
+    type: 'string',
+    default: defaultGithubPullRequestDescriptionTemplateFallback,
+    version: 1,
   },
   refreshInterval: {
     type: 'string',

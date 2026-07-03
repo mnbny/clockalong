@@ -1,7 +1,26 @@
 {
-  "name": "clinear",
+  "name": "clockalong",
   "version": "0.0.0",
   "private": true,
+  "description": "A Clockify companion app for tracking time from connected work sources.",
+  "keywords": [
+    "clockify",
+    "time-tracking",
+    "tauri",
+    "react",
+    "linear",
+    "quick-timers"
+  ],
+  "homepage": "https://github.com/mnbny/clockalong#readme",
+  "bugs": {
+    "url": "https://github.com/mnbny/clockalong/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com:mnbny/clockalong.git"
+  },
+  "license": "UNLICENSED",
+  "author": "Moon Bunny",
   "type": "module",
   "scripts": {
     "build": "tsr generate && tsc && vite build",
@@ -31,7 +50,9 @@
     "@hookform/resolvers": "catalog:",
     "@linear/sdk": "catalog:",
     "@mantine/hooks": "catalog:",
+    "@octokit/rest": "catalog:",
     "@tabler/icons-react": "catalog:",
+    "@tanstack/react-db": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "@tanstack/react-table": "catalog:",
@@ -86,5 +107,10 @@
     "typescript": "catalog:",
     "typescript-eslint": "catalog:",
     "vite": "catalog:"
+  },
+  "packageManager": "pnpm@11.1.2",
+  "engines": {
+    "node": ">=20.19.0",
+    "pnpm": ">=11.1.2"
   }
 }

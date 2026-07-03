@@ -1,10 +1,10 @@
 # Quick Timers
 
-Quick Timers are reusable ad hoc Clockify timer presets that live on the dashboard. They are separate from Linear tickets and should not depend on Linear data.
+Quick Timers are a first-class local work source made of reusable ad hoc Clockify timer presets. They live on the dashboard, are separate from external providers such as Linear or GitHub, and should not depend on provider data.
 
 ## Dashboard behavior
 
-`src/components/QuickTimersWidget.tsx` owns the Quick Timers dashboard surface.
+`src/components/QuickTimersWidget.tsx` owns the Quick Timers dashboard surface, including the `quickTimersEnabled` gate. The dashboard route should render the widget unconditionally and let the widget return `null` when the feature is disabled.
 
 The widget header stays visible when the feature is enabled. The body grid renders only when saved presets exist. Presets render as compact rectangular controls with an icon and label. `quickTimersColumns` controls the grid column count.
 
@@ -60,7 +60,7 @@ The registry value stays small:
 
 Do not duplicate the Clockify description, project, task, duration, or timestamps in this registry. Clockify owns the actual time entry data. The registry only answers which preset created a Clockify entry and which template values were submitted.
 
-The dashboard derives the active Quick Timer from the current running Clockify entry id. Active preset cells use the same accent pulse treatment as active Linear rows.
+The dashboard derives the active Quick Timer from the current running Clockify entry id. Active preset cells use the same accent pulse treatment as active provider-backed rows.
 
 ## Clockify start and stop
 
@@ -73,3 +73,7 @@ Mutation side effects belong in callbacks:
 - `onError`: show error feedback.
 
 The Clockify dashboard widget owns the generic running-timer stop control. When any Clockify timer is running, it shows a red square stop button opposite the running timer text, visually matching the active Linear row stop button.
+
+## Settings
+
+`src/components/QuickTimersSettings.tsx` owns Quick Timer settings such as enablement and dashboard column count. Keep Quick Timer storage hooks out of `src/routes/_app.settings.tsx`; the route should only compose scoped settings sections.

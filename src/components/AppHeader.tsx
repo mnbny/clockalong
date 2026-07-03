@@ -1,21 +1,19 @@
 import { useHotkeys } from '@mantine/hooks'
 import { IconLogout, IconMoon, IconSettings, IconSun } from '@tabler/icons-react'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useCallback, useEffect } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
 import { useStorage } from '../services/storage/useStorage'
-import { auth } from '../services/tauri/auth-client'
-import { getErrorMessage } from '../utils/errors'
-import { appToast } from './AppToaster'
 import { MoonBunnyLogo } from './MoonBunnyLogo'
 
 export function AppHeader() {
+  const navigate = useNavigate()
   const [theme, setTheme] = useStorage('theme')
   const authState = useAppAuth()
-  const authenticated = authState.value.linearAuthenticated && authState.value.clockifyAuthenticated
+  const authenticated = authState.value.clockifyAuthenticated
 
   const toggleTheme = useCallback(() => {
     void setTheme(current =>
@@ -39,19 +37,9 @@ export function AppHeader() {
       })
   }, [theme])
 
-  const disconnectLinear = async () => {
-    console.info('[clinear auth] disconnectLinear: requested from header')
-
-    try {
-      const result = await auth.disconnectLinear()
-      console.info(`[clinear auth] disconnectLinear: revocation_status=${result.revocationStatus}`)
-      appToast.success('Linear disconnected.')
-    } catch (error) {
-      console.error('[clinear auth] disconnectLinear: failed', error)
-      appToast.error('Could not disconnect Linear.', {
-        description: getErrorMessage(error),
-      })
-    }
+  const goToSignIn = async () => {
+    console.info('[clockalong auth] goToSignIn: requested from header')
+    await navigate({ to: '/sign-in' })
   }
 
   return (
@@ -63,7 +51,7 @@ export function AppHeader() {
       <h1 className="pointer-events-none flex h-10 min-w-0 items-center gap-3 justify-self-center text-lg leading-none font-semibold">
         <span className="truncate">Moon Bunny</span>
         <MoonBunnyLogo className="size-10 self-center" />
-        <span className="truncate">Clinear</span>
+        <span className="truncate">Clockalong</span>
       </h1>
 
       <div className="flex items-center gap-1 justify-self-end">
@@ -75,8 +63,8 @@ export function AppHeader() {
             <button
               className="btn btn-square btn-ghost"
               type="button"
-              aria-label="Disconnect Linear"
-              onClick={() => void disconnectLinear()}>
+              aria-label="Go to sign in"
+              onClick={() => void goToSignIn()}>
               <IconLogout className="size-5" />
             </button>
           </>

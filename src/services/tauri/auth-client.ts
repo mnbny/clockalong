@@ -1,38 +1,49 @@
 import { invoke } from '@tauri-apps/api/core'
 
-export type ClinearAuthSnapshot = {
+export type ClockalongAuthSnapshot = {
   linearAuthenticated: boolean
+  githubAuthenticated: boolean
   clockifyAuthenticated: boolean
 }
 
-export type ClinearAuthProvider = 'linear' | 'clockify'
+export type ClockalongAuthProvider = 'linear' | 'github' | 'clockify'
 
-export type ClinearAuthConnectionResult = {
-  provider: ClinearAuthProvider
+export type ClockalongAuthConnectionResult = {
+  provider: ClockalongAuthProvider
   status: 'connected'
 }
 
-export type ClinearAuthDisconnectResult = {
-  provider: ClinearAuthProvider
+export type ClockalongAuthDisconnectResult = {
+  provider: ClockalongAuthProvider
   status: 'disconnected'
   revocationStatus?: 'confirmed' | 'failed' | 'skipped'
 }
 
-export type ClinearClockifyCredentialSnapshot = {
+export type ClockalongClockifyCredentialSnapshot = {
   apiKey: string | null
 }
 
-export type ClinearLinearCredentialSnapshot = {
+export type ClockalongLinearCredentialSnapshot = {
+  accessToken: string | null
+}
+
+export type ClockalongGithubCredentialSnapshot = {
   accessToken: string | null
 }
 
 export const auth = {
-  connectClockify: (apiKey: string) => invoke<ClinearAuthConnectionResult>('clinear_auth_connect_clockify', { apiKey }),
-  connectLinear: () => invoke<ClinearAuthConnectionResult>('clinear_auth_connect_linear'),
-  disconnectClockify: () => invoke<ClinearAuthDisconnectResult>('clinear_auth_disconnect_clockify'),
-  disconnectLinear: () => invoke<ClinearAuthDisconnectResult>('clinear_auth_disconnect_linear'),
-  getClockifyCredential: () => invoke<ClinearClockifyCredentialSnapshot>('clinear_auth_get_clockify_credential'),
-  getLinearCredential: () => invoke<ClinearLinearCredentialSnapshot>('clinear_auth_get_linear_credential'),
-  getState: () => invoke<ClinearAuthSnapshot>('clinear_auth_get_state'),
-  refreshLinearCredential: () => invoke<ClinearLinearCredentialSnapshot>('clinear_auth_refresh_linear_credential'),
+  connectClockify: (apiKey: string) =>
+    invoke<ClockalongAuthConnectionResult>('clockalong_auth_connect_clockify', { apiKey }),
+  connectGithub: (accessToken: string) =>
+    invoke<ClockalongAuthConnectionResult>('clockalong_auth_connect_github', { accessToken }),
+  connectLinear: () => invoke<ClockalongAuthConnectionResult>('clockalong_auth_connect_linear'),
+  disconnectClockify: () => invoke<ClockalongAuthDisconnectResult>('clockalong_auth_disconnect_clockify'),
+  disconnectGithub: () => invoke<ClockalongAuthDisconnectResult>('clockalong_auth_disconnect_github'),
+  disconnectLinear: () => invoke<ClockalongAuthDisconnectResult>('clockalong_auth_disconnect_linear'),
+  getClockifyCredential: () => invoke<ClockalongClockifyCredentialSnapshot>('clockalong_auth_get_clockify_credential'),
+  getGithubCredential: () => invoke<ClockalongGithubCredentialSnapshot>('clockalong_auth_get_github_credential'),
+  getLinearCredential: () => invoke<ClockalongLinearCredentialSnapshot>('clockalong_auth_get_linear_credential'),
+  getState: () => invoke<ClockalongAuthSnapshot>('clockalong_auth_get_state'),
+  refreshLinearCredential: () =>
+    invoke<ClockalongLinearCredentialSnapshot>('clockalong_auth_refresh_linear_credential'),
 }

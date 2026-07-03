@@ -43,17 +43,17 @@ Frontend-to-Rust bridge calls should be grouped by domain in `src/services/tauri
 
 ## Updates
 
-Clinear uses Tauri's updater plugin for direct-download macOS updates. The updater is not automatic UI; frontend code must call the plugin and decide how to notify or install.
+Clockalong uses Tauri's updater plugin for direct-download macOS updates. The updater is not automatic UI; frontend code must call the plugin and decide how to notify or install.
 
 - Updater configuration lives in `src-tauri/tauri.conf.json`.
 - Rust plugin initialization lives in `src-tauri/src/lib.rs`.
 - Frontend updater calls are wrapped in `src/services/tauri/app-updates.ts`.
 - `src/hooks/useAppUpdates.tsx` owns app-wide periodic update checks and update-available toasts.
-- `src/routes/_app.settings.tsx` owns the manual update check/install/restart UI.
+- `src/components/AppSettings.tsx` owns the manual update check/install/restart UI rendered from the settings route.
 - Do not auto-install or auto-restart. Active time tracking should stay user-controlled.
 
 ## Auth gate
 
-Rust owns the startup authentication snapshot. `src-tauri/src/auth.rs` exposes the command/event surface and delegates provider-specific credential work to `auth_linear.rs` and `auth_clockify.rs`. Those modules read provider credentials from Stronghold during setup, validate or refresh them as needed, emit `clinear-auth:state-changed`, and leave app initialization blocked until that native check completes.
+Rust owns the startup authentication snapshot. `src-tauri/src/auth.rs` exposes the command/event surface and delegates provider-specific credential work to `auth_linear.rs` and `auth_clockify.rs`. Those modules read provider credentials from Stronghold during setup, validate or refresh them as needed, emit `clockalong-auth:state-changed`, and leave app initialization blocked until that native check completes.
 
 Linear starts through the native OAuth command. Clockify uses a native API-key connection command that validates the key before saving it. The frontend should keep route decisions tied to the native auth snapshot instead of trying to infer auth state from local UI state.
