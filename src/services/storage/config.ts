@@ -48,6 +48,8 @@ export type GithubVisibleWorkItemTypes = {
   issues: boolean
   pullRequests: boolean
 }
+export const defaultGithubWorkItemSyncLimit = 30
+export const maxGithubWorkItemSyncLimit = 100
 export type ThemeOption = (typeof themeOptions)[number]
 export type DefaultViewOption = (typeof defaultViewOptions)[number]
 export type QuickTimerPreset = {
@@ -125,7 +127,7 @@ const storageConfig = {
   },
   quickTimersColumns: {
     type: 'number',
-    default: 6,
+    default: 5,
     version: 1,
   },
   quickTimers: {
@@ -171,6 +173,21 @@ const storageConfig = {
   githubVisibleWorkItemTypes: {
     type: 'object',
     default: { issues: true, pullRequests: true } as GithubVisibleWorkItemTypes,
+    version: 1,
+  },
+  githubWorkItemSyncLimit: {
+    type: 'number',
+    default: defaultGithubWorkItemSyncLimit,
+    version: 1,
+  },
+  githubAuthoredWorkItemsOnly: {
+    type: 'boolean',
+    default: true,
+    version: 1,
+  },
+  githubShowClosedWorkItems: {
+    type: 'boolean',
+    default: false,
     version: 1,
   },
   githubIssueDescriptionTemplate: {

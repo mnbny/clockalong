@@ -1,6 +1,6 @@
 import { type RestEndpointMethodTypes } from '@octokit/rest'
 import { IconBrandGithub, IconCheck, IconRestore } from '@tabler/icons-react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
@@ -22,7 +22,11 @@ import {
   sampleGithubIssueDescriptionTemplateValues,
   sampleGithubPullRequestDescriptionTemplateValues,
 } from '../services/github/description-template'
-import { type GithubSelectedRepository } from '../services/storage/config'
+import {
+  defaultGithubWorkItemSyncLimit,
+  type GithubSelectedRepository,
+  maxGithubWorkItemSyncLimit,
+} from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
 import { cx } from '../utils/cx'
 import { getErrorMessage } from '../utils/errors'
@@ -49,7 +53,7 @@ function DisconnectedGitHubSettings({ authLoading }: { authLoading: boolean }) {
 
   return (
     <SettingsSection title="GitHub">
-      <SettingsRow label="GitHub account" description="Connect GitHub to choose repositories for dashboard tracking.">
+      <SettingsRow label="GitHub account" description="Connect GitHub to sync issues and pull requests.">
         <button
           className="btn btn-primary"
           disabled={authLoading || connecting}
@@ -72,6 +76,9 @@ function DisconnectedGitHubSettings({ authLoading }: { authLoading: boolean }) {
 function ConnectedGitHubSettings() {
   const [githubSelectedRepositories, setGithubSelectedRepositories] = useStorage('githubSelectedRepositories')
   const [githubVisibleWorkItemTypes, setGithubVisibleWorkItemTypes] = useStorage('githubVisibleWorkItemTypes')
+  const [githubWorkItemSyncLimit, setGithubWorkItemSyncLimit] = useStorage('githubWorkItemSyncLimit')
+  const [githubAuthoredWorkItemsOnly, setGithubAuthoredWorkItemsOnly] = useStorage('githubAuthoredWorkItemsOnly')
+  const [githubShowClosedWorkItems, setGithubShowClosedWorkItems] = useStorage('githubShowClosedWorkItems')
   const [githubIssueDescriptionTemplate, setGithubIssueDescriptionTemplate, resetGithubIssueDescriptionTemplate] =
     useStorage('githubIssueDescriptionTemplate')
   const [
@@ -100,53 +107,6 @@ function ConnectedGitHubSettings() {
     () => (repositoriesQuery.data ?? []).flatMap(toGithubRepositoryOption).sort(compareGithubRepositories),
     [repositoriesQuery.data],
   )
-  const issueAccessQueries = useQueries({
-    queries: candidateRepositories.map(repository => ({
-      queryKey: queryKeys.github.repositoryIssues({
-        params: { owner: repository.owner, repo: repository.name },
-      }),
-      queryFn: async () => {
-        const github = await createGithubClient()
-
-        return github.rest.issues.listForRepo({
-          owner: repository.owner,
-          repo: repository.name,
-          state: 'all',
-          per_page: 1,
-        })
-      },
-      retry: 1,
-      staleTime: 5 * 60_000,
-    })),
-  })
-  const pullRequestAccessQueries = useQueries({
-    queries: candidateRepositories.map(repository => ({
-      queryKey: queryKeys.github.repositoryPullRequests({
-        params: { owner: repository.owner, repo: repository.name },
-      }),
-      queryFn: async () => {
-        const github = await createGithubClient()
-
-        return github.rest.pulls.list({
-          owner: repository.owner,
-          repo: repository.name,
-          state: 'all',
-          per_page: 1,
-        })
-      },
-      retry: 1,
-      staleTime: 5 * 60_000,
-    })),
-  })
-  const repositoryAccessLoading =
-    issueAccessQueries.some(query => query.isFetching) || pullRequestAccessQueries.some(query => query.isFetching)
-  const repositories = useMemo(
-    () =>
-      candidateRepositories.filter(
-        (_repository, index) => issueAccessQueries[index]?.isSuccess && pullRequestAccessQueries[index]?.isSuccess,
-      ),
-    [candidateRepositories, issueAccessQueries, pullRequestAccessQueries],
-  )
   const selectedFullNames = useMemo(
     () => new Set(githubSelectedRepositories.map(repository => repository.fullName)),
     [githubSelectedRepositories],
@@ -164,12 +124,10 @@ function ConnectedGitHubSettings() {
 
   return (
     <SettingsSection title="GitHub">
-      <SettingsRow label="Active Repositories" description="GitHub repositories allowed to appear on the dashboard.">
+      <SettingsRow label="Sync: Active" description="Repositories included in GitHub sync.">
         <div className="grid w-full gap-3">
           <div className="flex min-h-6 items-center">
-            {repositoriesQuery.isFetching || repositoryAccessLoading ? (
-              <span className="loading loading-spinner loading-xs" />
-            ) : null}
+            {repositoriesQuery.isFetching ? <span className="loading loading-spinner loading-xs" /> : null}
           </div>
 
           {repositoriesQuery.isError ? (
@@ -179,7 +137,7 @@ function ConnectedGitHubSettings() {
           ) : null}
 
           <div className="flex max-h-72 flex-wrap gap-2 overflow-y-auto pr-1 filter">
-            {repositories.map(repository => (
+            {candidateRepositories.map(repository => (
               <input
                 key={repository.fullName}
                 aria-label={repository.fullName}
@@ -191,13 +149,13 @@ function ConnectedGitHubSettings() {
             ))}
           </div>
 
-          {repositoriesQuery.isSuccess && !repositoryAccessLoading && !repositories.length ? (
+          {repositoriesQuery.isSuccess && !candidateRepositories.length ? (
             <div className="text-base-content/60 text-sm">No repositories available.</div>
           ) : null}
         </div>
       </SettingsRow>
 
-      <SettingsRow label="Work item types" description="GitHub item types shown on the dashboard.">
+      <SettingsRow label="Sync: Types" description="GitHub item types included in sync.">
         <fieldset className="flex flex-wrap items-center gap-4" aria-label="GitHub work item types">
           <label className="flex cursor-pointer items-center gap-2">
             <input
@@ -231,7 +189,48 @@ function ConnectedGitHubSettings() {
         </fieldset>
       </SettingsRow>
 
-      <SettingsRow label="Entry description" description="Format used when creating time entries from GitHub items.">
+      <SettingsRow label="Work item fetch limit" description="Number of GitHub items to sync per repository.">
+        <label className="input input-primary w-full max-w-32">
+          <input
+            aria-label="GitHub work item fetch limit"
+            className="min-w-0 grow text-sm"
+            max={maxGithubWorkItemSyncLimit}
+            min={1}
+            step={1}
+            type="number"
+            value={githubWorkItemSyncLimit}
+            onChange={event =>
+              void setGithubWorkItemSyncLimit(
+                normalizePositiveInteger(event.currentTarget.value, defaultGithubWorkItemSyncLimit),
+              )
+            }
+          />
+        </label>
+      </SettingsRow>
+
+      <SettingsRow
+        label="Dashboard: Authored by me"
+        description="Show only GitHub items opened by you.">
+        <input
+          aria-label="Only show GitHub work items authored by me"
+          checked={githubAuthoredWorkItemsOnly}
+          className="toggle toggle-primary"
+          type="checkbox"
+          onChange={event => void setGithubAuthoredWorkItemsOnly(event.currentTarget.checked)}
+        />
+      </SettingsRow>
+
+      <SettingsRow label="Dashboard: Closed Items" description="Show closed pull requests on the dashboard.">
+        <input
+          aria-label="Show closed GitHub work items"
+          checked={githubShowClosedWorkItems}
+          className="toggle toggle-primary"
+          type="checkbox"
+          onChange={event => void setGithubShowClosedWorkItems(event.currentTarget.checked)}
+        />
+      </SettingsRow>
+
+      <SettingsRow label="Clockify: Template" description="Clockify description format for GitHub timers.">
         <div className="flex w-full min-w-0 flex-col gap-4">
           <div className="tabs tabs-box w-fit">
             <button
@@ -449,7 +448,14 @@ function GithubDescriptionTemplateEditor({
       <div className="flex flex-col gap-3">
         {tokenGroups.map(group => (
           <div key={group.label} className="flex min-w-0 flex-col gap-2">
-            <div className="text-base-content/60 text-xs leading-5 font-medium">{group.label}</div>
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <div className="text-base-content/60 text-xs leading-5 font-medium">{group.label}</div>
+              {group.label === 'Tracking' ? (
+                <div className="text-base-content/50 text-xs leading-5">
+                  Recommended so Clockalong can match Clockify entries back to source items.
+                </div>
+              ) : null}
+            </div>
             <div className="flex flex-wrap gap-2">
               {group.tokens.map(token => (
                 <button
@@ -515,4 +521,14 @@ function toGithubRepositoryOption(repository: GithubRepositoryResponse): GithubS
 
 function compareGithubRepositories(left: GithubSelectedRepository, right: GithubSelectedRepository) {
   return left.fullName.localeCompare(right.fullName)
+}
+
+function normalizePositiveInteger(value: string, fallback: number) {
+  const parsedValue = Number(value)
+
+  if (!Number.isFinite(parsedValue)) {
+    return fallback
+  }
+
+  return Math.min(maxGithubWorkItemSyncLimit, Math.max(1, Math.floor(parsedValue)))
 }

@@ -5,7 +5,25 @@ export type FormatTemplateOptions = {
   knownTokens?: Iterable<string>
 }
 
-const templateTokenPattern = /\{([A-Za-z][A-Za-z0-9]*)\}/g
+export type GithubInternalRef = {
+  itemType: 'issue' | 'pr'
+  number: number
+  provider: 'github'
+  repository: string
+}
+
+export type LinearInternalRef = {
+  issueIdentifier: string
+  provider: 'linear'
+  workspaceSlug: string
+}
+
+export type InternalRef = GithubInternalRef | LinearInternalRef
+
+export const internalRefTemplateToken = 'internal-ref'
+
+const templateTokenPattern = /\{([A-Za-z][A-Za-z0-9-]*)\}/g
+const internalRefPattern = /\bref:(github|linear):([^\s),;\]}]+)/g
 
 export function parseTemplateTokens(template: string) {
   const tokens = new Set<string>()
@@ -63,4 +81,64 @@ export function cleanupFormattedTemplate(description: string) {
     .replace(/\s+([:,\]])/g, '$1')
     .replace(/([[(])\s+/g, '$1')
     .trim()
+}
+
+export function formatInternalRef(ref: InternalRef) {
+  if (ref.provider === 'github') {
+    return `ref:github:${ref.repository}:${ref.itemType}:${ref.number}`
+  }
+
+  return `ref:linear:${ref.workspaceSlug}:${ref.issueIdentifier}`
+}
+
+export function parseInternalRefs(description: string | null | undefined): InternalRef[] {
+  if (!description) {
+    return []
+  }
+
+  return [...description.matchAll(internalRefPattern)].flatMap(match => {
+    const provider = match[1]
+    const body = match[2]
+
+    if (!provider || !body) {
+      return []
+    }
+
+    return parseInternalRef(provider, body)
+  })
+}
+
+export function normalizeInternalRef(value: string) {
+  return value.trim().toLocaleLowerCase()
+}
+
+function parseInternalRef(provider: string, body: string): InternalRef[] {
+  const parts = body.split(':')
+
+  if (provider === 'github') {
+    const [repository, itemType, numberValue] = parts
+    const number = Number(numberValue)
+
+    if (!repository || !isGithubInternalRefItemType(itemType) || !Number.isFinite(number)) {
+      return []
+    }
+
+    return [{ itemType, number, provider, repository }]
+  }
+
+  if (provider === 'linear') {
+    const [workspaceSlug, issueIdentifier] = parts
+
+    if (!workspaceSlug || !issueIdentifier) {
+      return []
+    }
+
+    return [{ issueIdentifier, provider, workspaceSlug }]
+  }
+
+  return []
+}
+
+function isGithubInternalRefItemType(value: string | undefined): value is GithubInternalRef['itemType'] {
+  return value === 'issue' || value === 'pr'
 }

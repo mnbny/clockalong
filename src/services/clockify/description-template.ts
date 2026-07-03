@@ -1,6 +1,6 @@
-import { formatTemplate, getUnknownTemplateTokens } from '../../utils/templates'
+import { formatTemplate, getUnknownTemplateTokens, internalRefTemplateToken } from '../../utils/templates'
 
-export const defaultClockifyDescriptionTemplate = '{identifier}: {title}'
+export const defaultClockifyDescriptionTemplate = '{identifier}: {title} [{internal-ref}]'
 export const defaultClockifyDescriptionTemplateFallback = 'n/a'
 
 export type ClockifyDescriptionTemplateToken =
@@ -11,6 +11,7 @@ export type ClockifyDescriptionTemplateToken =
   | 'teamKey'
   | 'stateName'
   | 'assigneeName'
+  | typeof internalRefTemplateToken
 
 export type ClockifyDescriptionTemplateValues = Partial<
   Record<ClockifyDescriptionTemplateToken, string | number | null | undefined>
@@ -34,6 +35,10 @@ export const clockifyDescriptionTemplateTokenGroups = [
     label: 'Details',
     tokens: ['teamKey', 'stateName', 'assigneeName'],
   },
+  {
+    label: 'Tracking',
+    tokens: [internalRefTemplateToken],
+  },
 ] satisfies ClockifyDescriptionTemplateTokenGroup[]
 
 export const clockifyDescriptionTemplateTokens = clockifyDescriptionTemplateTokenGroups.flatMap(group => group.tokens)
@@ -41,6 +46,7 @@ export const clockifyDescriptionTemplateTokens = clockifyDescriptionTemplateToke
 export const sampleClockifyDescriptionTemplateValues = {
   assigneeName: 'Alex Chen',
   identifier: 'ENG-123',
+  [internalRefTemplateToken]: 'ref:linear:example:ENG-123',
   number: 123,
   stateName: 'In Progress',
   teamKey: 'ENG',

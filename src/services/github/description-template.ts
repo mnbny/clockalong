@@ -1,8 +1,8 @@
-import { formatTemplate, getUnknownTemplateTokens } from '../../utils/templates'
+import { formatTemplate, getUnknownTemplateTokens, internalRefTemplateToken } from '../../utils/templates'
 
-export const defaultGithubIssueDescriptionTemplate = 'Issue#{number} - {repository}: {title}'
+export const defaultGithubIssueDescriptionTemplate = 'Issue#{number} - {repository}: {title} [{internal-ref}]'
 export const defaultGithubPullRequestDescriptionTemplate =
-  'PR#{number} - {repository}: {title} - ({headBranch} -> {baseBranch})'
+  'PR#{number} - {repository}: {title} - ({headBranch} -> {baseBranch}) [{internal-ref}]'
 export const defaultGithubIssueDescriptionTemplateFallback = 'n/a'
 export const defaultGithubPullRequestDescriptionTemplateFallback = 'n/a'
 
@@ -14,6 +14,7 @@ export type GithubIssueDescriptionTemplateToken =
   | 'owner'
   | 'author'
   | 'state'
+  | typeof internalRefTemplateToken
 
 export type GithubPullRequestDescriptionTemplateToken =
   | GithubIssueDescriptionTemplateToken
@@ -48,6 +49,10 @@ export const githubIssueDescriptionTemplateTokenGroups = [
     label: 'Repository',
     tokens: ['repository', 'owner', 'author', 'state'],
   },
+  {
+    label: 'Tracking',
+    tokens: [internalRefTemplateToken],
+  },
 ] satisfies GithubDescriptionTemplateTokenGroup<GithubIssueDescriptionTemplateToken>[]
 
 export const githubPullRequestDescriptionTemplateTokenGroups = [
@@ -63,6 +68,10 @@ export const githubPullRequestDescriptionTemplateTokenGroups = [
     label: 'Branches',
     tokens: ['headBranch', 'baseBranch'],
   },
+  {
+    label: 'Tracking',
+    tokens: [internalRefTemplateToken],
+  },
 ] satisfies GithubDescriptionTemplateTokenGroup<GithubPullRequestDescriptionTemplateToken>[]
 
 export const githubIssueDescriptionTemplateTokens = githubIssueDescriptionTemplateTokenGroups.flatMap(
@@ -74,6 +83,7 @@ export const githubPullRequestDescriptionTemplateTokens = githubPullRequestDescr
 
 export const sampleGithubIssueDescriptionTemplateValues = {
   author: 'alexchen',
+  [internalRefTemplateToken]: 'ref:github:moon-bunny/clockalong:issue:42',
   number: 42,
   owner: 'moon-bunny',
   repository: 'moon-bunny/clockalong',
@@ -86,6 +96,7 @@ export const sampleGithubPullRequestDescriptionTemplateValues = {
   author: 'alexchen',
   baseBranch: 'main',
   headBranch: 'fix/settings-repo-picker',
+  [internalRefTemplateToken]: 'ref:github:moon-bunny/clockalong:pr:128',
   number: 128,
   owner: 'moon-bunny',
   repository: 'moon-bunny/clockalong',

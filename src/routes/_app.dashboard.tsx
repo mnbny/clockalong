@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { ClockifyWidget } from '../components/ClockifyWidget'
+import { GitHubWidget } from '../components/GitHubWidget'
 import { LinearWidget } from '../components/LinearWidget'
 import { QuickTimersWidget } from '../components/QuickTimersWidget'
 
@@ -13,6 +14,7 @@ function DashboardScreen() {
     <section className="mx-auto grid w-full max-w-6xl gap-4">
       <ClockifyWidget />
       <QuickTimersWidget />
+      <GitHubWidget />
       <LinearWidget />
     </section>
   )

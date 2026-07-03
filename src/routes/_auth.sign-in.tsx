@@ -8,6 +8,7 @@ import { GitHubAuthDialog } from '../components/GitHubAuthDialog'
 import { ClockifyIcon } from '../components/icons/ClockifyIcon'
 import { LinearIcon } from '../components/icons/LinearIcon'
 import { useAppAuth } from '../hooks/useAppAuth'
+import { clearSyncedGithubWorkItems } from '../services/github/sync'
 import { clearSyncedLinearTickets } from '../services/linear/sync'
 import { auth, type ClockalongAuthProvider } from '../services/tauri/auth-client'
 import { getErrorMessage } from '../utils/errors'
@@ -66,7 +67,9 @@ function SignInScreen() {
 
       if (provider === 'github') {
         await auth.disconnectGithub()
+        const clearedWorkItems = await clearSyncedGithubWorkItems()
         signInLog('disconnectProvider: github disconnected')
+        signInLog(`disconnectProvider: cleared_github_work_items=${clearedWorkItems}`)
         appToast.success('GitHub disconnected.')
         return
       }

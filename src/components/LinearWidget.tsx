@@ -2,14 +2,10 @@ import type { AssignedIssueNode, LinearTicket, LinearTicketStatus } from '../ser
 import type { ColumnDef } from '@tanstack/react-table'
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
 
-import { formatCurrency } from '@automattic/format-currency'
-import { IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react'
+import { IconExternalLink, IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react'
 import { and, eq, useLiveQuery } from '@tanstack/react-db'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
-import dayjs from 'dayjs'
-import relativeTime from 'dayjs/plugin/relativeTime'
-import humanizeDuration from 'humanize-duration'
 import { useCallback, useMemo } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
@@ -24,6 +20,7 @@ import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
 import {
   type ClockifyTicketTimeSummaries,
   getClockifyEntryLinearTicket,
+  getLinearTicketInternalRef,
   summarizeClockifyTicketTimeEntries,
 } from '../services/clockify/ticket-summaries'
 import { linearTicketsCollection, useLinearSync } from '../services/linear/sync'
@@ -37,27 +34,10 @@ import { sortLinearTickets } from '../services/linear/tickets-sorting'
 import { useStorage } from '../services/storage/useStorage'
 import { getContrastingColor } from '../utils/colors'
 import { getErrorMessage } from '../utils/errors'
-import { parseTemplateTokens } from '../utils/templates'
+import { internalRefTemplateToken, parseTemplateTokens } from '../utils/templates'
 import { appToast } from './AppToaster'
 import { LinearIcon } from './icons/LinearIcon'
-
-dayjs.extend(relativeTime)
-
-const formatTrackedDuration = humanizeDuration.humanizer({
-  delimiter: ' ',
-  language: 'shortEn',
-  languages: {
-    shortEn: {
-      h: () => 'h',
-      m: () => 'm',
-      s: () => 's',
-    },
-  },
-  largest: 3,
-  round: true,
-  spacer: '',
-  units: ['h', 'm', 's'],
-})
+import { LastTrackedCell, TotalTrackedAmountCell, TotalTrackedCell } from './TrackingSummaryCells'
 
 type TicketTableMeta = {
   activeLinearIssueId: string | undefined
@@ -122,6 +102,24 @@ const ticketColumns: Array<ColumnDef<LinearTicket>> = [
           totalTrackedAmount={info.getValue<number | null>()}
           totalTrackedAmountCurrency={ticket.totalTrackedAmountCurrency}
         />
+      )
+    },
+  },
+  {
+    id: 'externalLink',
+    header: () => <span className="sr-only">Open</span>,
+    cell: info => {
+      const ticket = info.row.original
+
+      return (
+        <a
+          className="btn btn-square btn-ghost text-primary hover:bg-primary/10 btn-sm"
+          href={ticket.url}
+          rel="noreferrer"
+          target="_blank"
+          aria-label={`Open ${ticket.identifier} in Linear`}>
+          <IconExternalLink className="size-4" />
+        </a>
       )
     },
   },
@@ -410,100 +408,102 @@ function LinearWidgetContent() {
   })
 
   return (
-    <div className="border-base-content/5 bg-base-100 rounded-box overflow-hidden border">
-      <header className="border-base-content/5 flex min-w-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-        <div className="flex min-w-0 items-center gap-3">
-          {linearSyncing ? (
-            <span className="text-primary grid size-6 place-items-center">
-              <span className="loading loading-spinner size-6" />
-            </span>
-          ) : (
-            <LinearIcon className="text-primary size-6" />
-          )}
-          <div className="min-w-0">
-            <h2 className="text-base leading-6 font-semibold">Linear</h2>
-            <p className="text-base-content/60 truncate text-sm">Linear issues assigned to you</p>
+    <section className="card card-border bg-base-200/10 dark:bg-base-200/40">
+      <div className="card-body gap-0 p-0">
+        <header className="border-base-content/5 flex min-w-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            {linearSyncing ? (
+              <span className="text-primary grid size-6 place-items-center">
+                <span className="loading loading-spinner size-6" />
+              </span>
+            ) : (
+              <LinearIcon className="text-primary size-6" />
+            )}
+            <div className="min-w-0">
+              <h2 className="text-base leading-6 font-semibold">Linear</h2>
+              <p className="text-base-content/60 truncate text-sm">Linear issues assigned to you</p>
+            </div>
           </div>
-        </div>
 
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
-          <button
-            className="btn btn-square btn-ghost btn-sm"
-            type="button"
-            aria-label="Refresh Linear tickets"
-            disabled={ticketsRefreshing}
-            onClick={refreshTickets}>
-            <IconRefresh className="size-4" />
-          </button>
-          <label className="w-36">
-            <select
-              aria-label="Ticket sort order"
-              className="select select-sm select-bordered w-full"
-              value={linearTicketSortOrder}
-              onChange={event =>
-                void setLinearTicketSortOrder(event.currentTarget.value as LinearTicketSortOrderOption)
-              }>
-              {linearTicketSortOrderOptions.map(option => (
-                <option key={option} value={option}>
-                  {getLinearTicketSortOrderLabel(option)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </header>
-
-      <div className="overflow-x-auto">
-        <table className="table-zebra table-sm table">
-          <thead>
-            {table.getHeaderGroups().map(headerGroup => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map(header => (
-                  <th key={header.id} className={getTicketTableCellClassName(header.column.id)}>
-                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
+            <button
+              className="btn btn-square btn-ghost btn-sm"
+              type="button"
+              aria-label="Refresh Linear tickets"
+              disabled={ticketsRefreshing}
+              onClick={refreshTickets}>
+              <IconRefresh className="size-4" />
+            </button>
+            <label className="w-36">
+              <select
+                aria-label="Ticket sort order"
+                className="select select-sm select-bordered w-full"
+                value={linearTicketSortOrder}
+                onChange={event =>
+                  void setLinearTicketSortOrder(event.currentTarget.value as LinearTicketSortOrderOption)
+                }>
+                {linearTicketSortOrderOptions.map(option => (
+                  <option key={option} value={option}>
+                    {getLinearTicketSortOrderLabel(option)}
+                  </option>
                 ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.getRowModel().rows.map(row => (
-              <tr key={row.id} className={getTicketTableRowClassName(row.original.id === activeLinearIssueId)}>
-                {row.getVisibleCells().map(cell =>
-                  cell.column.id === 'identifier' ? (
-                    <th key={cell.id} className={getTicketTableCellClassName(cell.column.id)} scope="row">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              </select>
+            </label>
+          </div>
+        </header>
+
+        <div className="overflow-x-auto">
+          <table className="table-zebra table-sm table">
+            <thead>
+              {table.getHeaderGroups().map(headerGroup => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map(header => (
+                    <th key={header.id} className={getTicketTableCellClassName(header.column.id)}>
+                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                     </th>
-                  ) : (
-                    <td key={cell.id} className={getTicketTableCellClassName(cell.column.id)}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ),
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  ))}
+                </tr>
+              ))}
+            </thead>
+            <tbody>
+              {table.getRowModel().rows.map(row => (
+                <tr key={row.id} className={getTicketTableRowClassName(row.original.id === activeLinearIssueId)}>
+                  {row.getVisibleCells().map(cell =>
+                    cell.column.id === 'identifier' ? (
+                      <th key={cell.id} className={getTicketTableCellClassName(cell.column.id)} scope="row">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </th>
+                    ) : (
+                      <td key={cell.id} className={getTicketTableCellClassName(cell.column.id)}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ),
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {linearSyncQuery.isLoading ? (
+          <div className="grid min-h-48 place-items-center">
+            <span className="loading loading-spinner loading-md" />
+          </div>
+        ) : null}
+
+        {linearSyncQuery.isError ? (
+          <div className="text-error grid min-h-48 place-items-center px-4 text-center text-sm">
+            Could not load Linear tickets.
+          </div>
+        ) : null}
+
+        {linearSyncQuery.isSuccess && linearTickets.length === 0 ? (
+          <div className="text-base-content/60 grid min-h-48 place-items-center px-4 text-center text-sm">
+            No assigned tickets found.
+          </div>
+        ) : null}
       </div>
-
-      {linearSyncQuery.isLoading ? (
-        <div className="grid min-h-48 place-items-center">
-          <span className="loading loading-spinner loading-md" />
-        </div>
-      ) : null}
-
-      {linearSyncQuery.isError ? (
-        <div className="text-error grid min-h-48 place-items-center px-4 text-center text-sm">
-          Could not load Linear tickets.
-        </div>
-      ) : null}
-
-      {linearSyncQuery.isSuccess && linearTickets.length === 0 ? (
-        <div className="text-base-content/60 grid min-h-48 place-items-center px-4 text-center text-sm">
-          No assigned tickets found.
-        </div>
-      ) : null}
-    </div>
+    </section>
   )
 }
 
@@ -601,44 +601,6 @@ function StatusCell({ status }: { status: LinearTicketStatus }) {
   )
 }
 
-function LastTrackedCell({ lastTrackedAt }: { lastTrackedAt: string | null }) {
-  if (!lastTrackedAt) {
-    return <TrackingPlaceholder />
-  }
-
-  return <span className="font-medium whitespace-nowrap">{dayjs(lastTrackedAt).fromNow()}</span>
-}
-
-function TotalTrackedCell({ totalTrackedSeconds }: { totalTrackedSeconds: number | null }) {
-  if (totalTrackedSeconds === null) {
-    return <TrackingPlaceholder />
-  }
-
-  return <span className="font-medium whitespace-nowrap">{formatTrackedDuration(totalTrackedSeconds * 1000)}</span>
-}
-
-function TotalTrackedAmountCell({
-  totalTrackedAmount,
-  totalTrackedAmountCurrency,
-}: {
-  totalTrackedAmount: number | null
-  totalTrackedAmountCurrency: string | null
-}) {
-  if (totalTrackedAmount === null || !totalTrackedAmountCurrency) {
-    return <TrackingPlaceholder />
-  }
-
-  return (
-    <span className="font-medium whitespace-nowrap">
-      {formatCurrency(totalTrackedAmount, totalTrackedAmountCurrency)}
-    </span>
-  )
-}
-
-function TrackingPlaceholder() {
-  return <span className="text-base-content/40 font-medium">Not tracked</span>
-}
-
 function mergeTicketTimeSummaries(
   tickets: LinearTicket[],
   ticketTimeSummaries: ClockifyTicketTimeSummaries,
@@ -678,7 +640,22 @@ function toLinearTicket(issue: AssignedIssueNode): LinearTicket {
 }
 
 function getTicketTableCellClassName(columnId: string) {
-  return columnId === 'trackingAction' ? 'w-14 min-w-14 text-center' : undefined
+  switch (columnId) {
+    case 'trackingAction':
+      return 'w-14 min-w-14 text-center'
+    case 'identifier':
+    case 'status':
+    case 'lastTrackedAt':
+    case 'totalTrackedSeconds':
+    case 'totalTrackedAmount':
+      return 'w-1 whitespace-nowrap'
+    case 'externalLink':
+      return 'w-12 min-w-12 text-center'
+    case 'title':
+      return 'w-full'
+    default:
+      return undefined
+  }
 }
 
 function getTicketTableRowClassName(active: boolean) {
@@ -703,6 +680,7 @@ async function startClockifyTimerForTicket({
   const descriptionValues = {
     assigneeName: ticket.assignee?.displayName ?? ticket.assignee?.name,
     identifier: ticket.identifier,
+    [internalRefTemplateToken]: getLinearTicketInternalRef(ticket),
     number: getLinearTicketNumber(ticket.identifier),
     stateName: ticket.status.name,
     teamKey: getLinearTicketTeamKey(ticket.identifier),

@@ -6,6 +6,7 @@ import { registerConsoleLogging } from './lib/logging'
 import { queryClient } from './lib/query-client'
 import { routeTree } from './routeTree.gen'
 import { ClockifySyncProvider } from './services/clockify/sync'
+import { GithubSyncProvider } from './services/github/sync'
 import { LinearSyncProvider } from './services/linear/sync'
 import { ProviderRegistry } from './utils/provider-registry'
 
@@ -27,8 +28,8 @@ declare module '@tanstack/react-router' {
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <ProviderRegistry
-    registry={{ ClockifySyncProvider, LinearSyncProvider, QueryClientProvider }}
-    providers={['QueryClientProvider', 'LinearSyncProvider', 'ClockifySyncProvider']}
+    registry={{ ClockifySyncProvider, GithubSyncProvider, LinearSyncProvider, QueryClientProvider }}
+    providers={['QueryClientProvider', 'LinearSyncProvider', 'GithubSyncProvider', 'ClockifySyncProvider']}
     QueryClientProviderProps={{ client: queryClient }}>
     <RouterProvider router={router} />
   </ProviderRegistry>,

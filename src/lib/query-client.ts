@@ -37,6 +37,13 @@ type GithubRepositoryQueryParams = {
   repo?: string
 }
 
+type GithubWorkItemSyncQueryParams = {
+  issues: boolean
+  limit: number
+  pullRequests: boolean
+  repositories: string
+}
+
 function spreadQueryKeySegments(keys?: QueryKeySegments<unknown>) {
   return [...(keys?.params ? [keys.params] : []), ...(keys?.other ?? [])]
 }
@@ -64,6 +71,9 @@ export const queryKeys = {
       ['github', 'repository-issues', ...spreadQueryKeySegments(keys)] as const,
     repositoryPullRequests: (keys?: QueryKeySegments<GithubRepositoryQueryParams>) =>
       ['github', 'repository-pull-requests', ...spreadQueryKeySegments(keys)] as const,
+    viewer: ['github', 'viewer'] as const,
+    workItemSync: (keys?: QueryKeySegments<GithubWorkItemSyncQueryParams>) =>
+      ['github', 'work-item-sync', ...spreadQueryKeySegments(keys)] as const,
   },
 }
 
