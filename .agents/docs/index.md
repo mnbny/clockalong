@@ -9,7 +9,7 @@
 - `storage.md`: store key contract
 - `authentication.md`: authentication ownership, screen behavior, and provider decisions
 - `linear.md`: Linear API, SDK, OAuth, and client strategy
-- `github.md`: placeholder for planned GitHub provider research
+- `github.md`: GitHub provider auth, settings, sync, dashboard, and Clockify matching decisions
 - `clockify.md`: Clockify API, auth, and client strategy
 - `distribution.md`: macOS signing, notarization, release, and updater direction
 

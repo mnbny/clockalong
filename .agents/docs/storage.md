@@ -20,6 +20,9 @@ The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults 
 - `displayName`: temporary local display name used by settings UI previews.
 - `githubSelectedRepositories`: GitHub repositories allowed to appear in GitHub dashboard surfaces. Stores compact repository snapshots.
 - `githubVisibleWorkItemTypes`: GitHub item types allowed to appear in GitHub dashboard surfaces. Defaults to issues and pull requests.
+- `githubWorkItemSyncLimit`: maximum number of GitHub issues or pull requests fetched per active repository. Default is `30`, capped at `100`.
+- `githubAuthoredWorkItemsOnly`: whether GitHub dashboard surfaces should show only issues and pull requests opened by the connected GitHub user. Sync still stores all configured GitHub work items.
+- `githubShowClosedWorkItems`: whether GitHub dashboard surfaces show closed synced GitHub work items. Defaults to `false`. Sync still stores closed pull requests.
 - `githubIssueDescriptionTemplate`: Clockify time-entry description format for GitHub issue variables.
 - `githubIssueDescriptionTemplateFallback`: replacement text for missing values in the GitHub issue description template.
 - `githubPullRequestDescriptionTemplate`: Clockify time-entry description format for GitHub pull request variables.
@@ -28,7 +31,7 @@ The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults 
 - `linearTicketSyncInterval`: how often assigned Linear tickets sync in the background. Default is `30m`.
 - `linearTicketSyncOrderBy`: Linear pagination ordering field for ticket sync. Values mirror Linear `PaginationOrderBy` support currently exposed by the app: `createdAt`, `updatedAt`.
 - `linearTicketSortOrder`: client-side ticket ordering mode. Values are `custom`, `status`, `created`, `updated`, and `alphabetical`.
-- `quickTimersColumns`: number of Quick Timer columns to show in the dashboard grid. Default is `6`.
+- `quickTimersColumns`: number of Quick Timer columns to show in the dashboard grid. Default is `5`.
 - `quickTimersEnabled`: whether the Quick Timers dashboard feature is enabled. Default is `true`.
 - `quickTimers`: saved ad hoc Quick Timer presets.
 - `quickTimersCache`: last submitted template variable values per Quick Timer preset.
@@ -46,3 +49,7 @@ Recent Clockify time entries are persisted by TanStack DB through browser localS
 ## Local Linear ticket cache
 
 Assigned Linear ticket rows are persisted by TanStack DB through browser localStorage under `clockalong.linear.tickets.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for compact ticket-list UI, rebuilt by `LinearSyncProvider` from Linear's API.
+
+## Local GitHub work-item cache
+
+GitHub issue and pull request rows are persisted by TanStack DB through browser localStorage under `clockalong.github.workItems.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for GitHub dashboard surfaces, rebuilt by `GithubSyncProvider` from GitHub's API according to the selected repositories, enabled work-item types, and fetch limit. Authored-only and closed-item filtering are dashboard display preferences, not sync filters.

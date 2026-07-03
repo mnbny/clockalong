@@ -40,7 +40,7 @@ Frontend providers are composed in `src/main.tsx` through `ProviderRegistry`. Ke
 
 `ClockifySyncProvider` depends on TanStack Query and therefore mounts inside `QueryClientProvider`. It owns the background sync into the local Clockify entry collection; routes and widgets should consume the collection instead of starting their own broad Clockify entry pagination.
 
-Work-source sync providers also mount inside `QueryClientProvider`. `LinearSyncProvider` owns the background sync into the local Linear assigned-ticket collection; routes should consume the collection instead of starting their own Linear assigned-issue pagination.
+Work-source sync providers also mount inside `QueryClientProvider`. `LinearSyncProvider` owns the background sync into the local Linear assigned-ticket collection, and `GithubSyncProvider` owns the background sync into the local GitHub work-item collection. Routes should consume those collections instead of starting provider pagination.
 
 ## Frontend surfaces
 
@@ -50,7 +50,10 @@ Current dashboard widget boundaries:
 
 - `src/components/ClockifyWidget.tsx`: Clockify summary, running timer, overlap repair, and Clockify-centric dashboard controls.
 - `src/components/QuickTimersWidget.tsx`: Quick Timer visibility, active preset lookup, preset CRUD, and preset start forms. It returns `null` when Quick Timers are disabled.
+- `src/components/GitHubWidget.tsx`: GitHub auth gate, synced work-item live query, Clockify summary merge, issue and pull request table, GitHub work-item refresh, and GitHub timer start/stop controls. It returns `null` when GitHub is unauthenticated.
 - `src/components/LinearWidget.tsx`: Linear auth gate, assigned-ticket live query, Clockify summary merge, Linear ticket table, ticket ordering, and Linear timer start/stop controls. It returns `null` when Linear is unauthenticated.
+
+Dashboard widget shells use `card card-border bg-base-200/10 dark:bg-base-200/40`. Use a `card-body` with `p-0` when the widget manages its own header, tables, or row dividers.
 
 Settings routes should follow the same composition pattern. `src/routes/_app.settings.tsx` owns the settings page header and renders scoped settings sections:
 
@@ -61,6 +64,10 @@ Settings routes should follow the same composition pattern. `src/routes/_app.set
 - `src/components/AppSettings.tsx`
 
 Shared settings row/section layout lives in `src/components/settings/SettingsSection.tsx`. Keep section-specific hooks and service calls inside the scoped settings component that renders that section.
+
+Settings groups use the same card treatment through `SettingsSection`; do not wrap individual rows in extra cards.
+
+The Clockify description template for Linear issues is rendered from `src/components/LinearSettings.tsx`, not Clockify settings, because the template variables are Linear-specific even though the created entry belongs to Clockify.
 
 ## Frontend query keys
 

@@ -55,11 +55,12 @@ Clockify permissions follow the authenticated user's Clockify role and workspace
 
 Clockalong builds Clockify time-entry descriptions from the user-configured Linear issue template in `src/services/clockify/description-template.ts`.
 
-- Default template: `{identifier}: {title}`.
+- Default template: `{identifier}: {title} [{internal-ref}]`.
 - Template variables use single braces and must be explicitly listed by `ClockifyDescriptionTemplateToken`.
-- The settings UI should expose only values available from the synced assigned-ticket row: `{identifier}`, `{title}`, `{number}`, `{url}`, `{teamKey}`, `{stateName}`, and `{assigneeName}`.
+- The settings UI should expose only values available from the synced assigned-ticket row: `{identifier}`, `{title}`, `{number}`, `{url}`, `{teamKey}`, `{stateName}`, `{assigneeName}`, and `{internal-ref}`.
 - Missing, `null`, `undefined`, and empty string values use the configured fallback.
 - The default fallback is `n/a`; numeric `0` remains a real value.
+- `{internal-ref}` is a stable Clockalong marker used to match Clockify entries back to provider work items. For Linear it renders as `ref:linear:{workspaceSlug}:{issueIdentifier}`.
 - Template and fallback preferences are stored through `useStorage` as `clockifyDescriptionTemplate` and `clockifyDescriptionTemplateFallback`.
 - Timer creation should format from the assigned-issue list DTO when possible. Do not fetch full issue details only to build the Clockify description.
 - New time entries should use the `clockifyBillable` storage preference for their initial billable flag. The default is billable.
@@ -95,7 +96,8 @@ The Clockalong setup lives under `src/services/clockify/`:
 - `client.ts`: app-facing client factories and default client instances.
 - `projects.ts`: project-list helpers for selecting the default Clockify project.
 - `sync.ts`: TanStack DB localStorage-backed entry collection plus the `ClockifySyncProvider` that periodically reconciles recent Clockify entries.
-- `ticket-summaries.ts`: dashboard aggregation of Clockify time entries whose descriptions contain synced Linear ticket identifiers.
+- `work-item-summaries.ts`: provider-neutral dashboard aggregation of Clockify time entries whose descriptions contain a supported `ref:*` internal marker.
+- `ticket-summaries.ts`: Linear wrapper around provider-neutral work-item summaries.
 
 Polybot reference points:
 

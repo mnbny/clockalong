@@ -6,13 +6,13 @@ Clockalong's primary app surface should optimize for quickly finding work that i
 
 Clockify is the core time-tracking provider. Other sources provide context for trackable work items.
 
-Current and planned work sources:
+Current work sources:
 
 - Linear: external provider for assigned issues.
 - Quick Timers: local source for reusable ad hoc timer presets.
-- GitHub: planned external provider for pull-request-centered tracking and billing review.
+- GitHub: external provider for repository-scoped issues and pull requests.
 
-Keep source-specific behavior in source-specific docs and modules until multiple implemented sources prove a useful shared abstraction. Shared language is useful in docs, but code should not over-generalize before GitHub exists.
+Keep source-specific behavior in source-specific docs and modules unless a shared abstraction already has more than one real caller. The shared Clockify work-item summary path exists because Linear and GitHub both use internal refs for tracked totals. Provider auth, sync, settings, and table-specific behavior should stay in provider modules.
 
 ## Linear ticket scope
 
@@ -59,7 +59,7 @@ Recency should stay functional and restrained. The data that matters:
 - total tracked duration for the item
 - source status
 
-Use Day.js relative time for last-tracked values, `humanize-duration` for total tracked duration, and formatted currency for tracked value. Clockify entry aggregation is derived from synced Clockify descriptions or local metadata that can be matched to a source item. Rows without matching Clockify entries show a restrained placeholder.
+Use Day.js relative time for last-tracked values, `humanize-duration` for total tracked duration, and formatted currency for tracked value. Clockify entry aggregation is derived from synced Clockify descriptions that contain Clockalong's `ref:*` internal marker. Rows without matching Clockify entries show a restrained placeholder.
 
 ## Linear dashboard table
 
@@ -76,6 +76,7 @@ Current columns:
 - `Tracked`: relative last tracked time.
 - `Total`: total tracked duration.
 - `Value`: rate-derived tracked value when Clockify returns a usable hourly rate and currency.
+- external link: no visible heading. Opens the source item in Linear.
 
 Make the active tracked row visible without changing table density. Use a subtle accent background animation on the row and switch that row's action button to stop. Keep the stop control visually consistent with the start control; use DaisyUI's error color for the icon/hover treatment rather than a filled destructive button.
 
@@ -113,28 +114,51 @@ Do not add separate loading or unavailable labels to this badge. The fallback vi
 
 Clockify is the system of record for time entries, but it does not provide first-class links to most external work-source items. Clockalong derives source ownership from provider-specific matching rules and, where available, small local registries.
 
-For Linear, matching is intentionally based on Linear-provided identifiers rather than an invented parser. Build the local candidate list from synced Linear tickets, normalize identifiers and descriptions case-insensitively, and match by exact containment. Check longer identifiers first so a longer ticket ID wins before a shorter overlapping one.
+Provider-backed templates should include `{internal-ref}`. It renders to a stable, human-debuggable marker in the Clockify description:
 
-Clockify entries without a matching synced Linear identifier are treated as unlinked. This is deliberate: manually created Clockify web entries become visible to Clockalong once the user includes the Linear issue ID in the description, and app resets can recover links from Clockify data without a local map.
+- Linear: `ref:linear:{workspaceSlug}:{issueIdentifier}`
+- GitHub: `ref:github:{owner}/{repo}:{issue|pr}:{number}`
+
+Use the shared parser and formatter in `src/utils/templates.ts`; do not hand-roll provider regexes in widgets. Entries without a supported internal ref are treated as unlinked.
 
 For Quick Timers, `clockifyQuickTimerEntryLinks` is the local registry that records which preset created a Clockify entry. It should stay small and should not duplicate Clockify-owned entry data.
 
-GitHub matching has not been researched yet. Do not assume whether matching should use pull-request numbers, URLs, branch names, commit SHAs, or explicit local metadata.
+Do not reintroduce a local Clockify-entry-to-source-item registry as the normal source of truth. If Clockify custom-field metadata is added later, it can become a stronger match source, but Clockify-side description markers remain the portable fallback.
 
-## Per-ticket Clockify summaries
+## Work-item Clockify summaries
 
-`src/services/clockify/ticket-summaries.ts` owns the Clockify aggregation used by the dashboard's `Tracked`, `Total`, and `Value` columns.
+`src/services/clockify/work-item-summaries.ts` owns the provider-neutral Clockify aggregation used by dashboard `Tracked`, `Total`, and `Value` columns. Provider wrappers such as `ticket-summaries.ts` and GitHub work-item summaries provide item IDs and internal refs.
 
 Current behavior:
 
 - Reads synced local Clockify entries for the selected Clockify user/workspace, plus the current running entry.
-- Matches entries whose descriptions contain a synced Linear ticket identifier.
-- Produces summaries keyed by Linear issue ID: `{ lastTrackedAt, totalTrackedSeconds, totalTrackedAmount, totalTrackedAmountCurrency }`.
-- `LinearWidget` merges those summaries into the compact Linear ticket DTO before sorting and rendering.
+- Matches entries whose descriptions contain a supported internal ref.
+- Produces summaries keyed by source item ID: `{ lastTrackedAt, totalTrackedSeconds, totalTrackedAmount, totalTrackedAmountCurrency }`.
+- Provider widgets merge those summaries into compact table rows before sorting and rendering.
 
-Do not reintroduce a local Clockify-entry-to-Linear-ticket registry as the normal source of truth. If Clockify custom-field metadata is added later, it can become a stronger match source, but description identifiers remain the portable fallback.
+Provider table refresh buttons should refresh the provider sync, Clockify entry sync, and running timer state. Refreshing only the provider leaves `Tracked` and `Total` stale.
 
-The Linear table refresh button should refresh assigned Linear tickets, the Clockify entry sync, running timer state, and relevant summary reports. Refreshing only Linear leaves `Tracked` and `Total` stale.
+Existing Clockify entries that have been backfilled for Clockalong should contain the same `ref:*` markers as newly created entries. Do not reintroduce old description-shape matching for unmarked entries; unmarked entries are intentionally treated as unlinked until their descriptions carry an internal ref.
+
+## GitHub dashboard table
+
+The dashboard GitHub section is a repository-scoped work-item table for issues and pull requests, not a broad GitHub browser.
+
+GitHub work items should come from the local synced collection in `src/services/github/sync.ts`, not from component-level GitHub pagination. The background sync stores rows for selected repositories according to `githubSelectedRepositories`, `githubVisibleWorkItemTypes`, and `githubWorkItemSyncLimit`, and `GitHubWidget` subscribes with TanStack DB live queries.
+
+Current columns:
+
+- action: no visible heading. Shows a start button for inactive rows and a stop button for the row linked to the current running Clockify timer.
+- `ID`: `PR#{number}` or `Issue#{number}`, bold monospace.
+- `Repository`: compact repository name.
+- author avatar: no visible heading.
+- `Item`: issue or pull-request title.
+- `Tracked`: relative last tracked time.
+- `Total`: total tracked duration.
+- `Value`: rate-derived tracked value when Clockify returns a usable hourly rate and currency.
+- external link: no visible heading. Opens the source item in GitHub.
+
+The GitHub widget exposes header controls for explicit refresh, authored-only display filtering, and closed-item display filtering. Authored-only is a dashboard filter, not a sync filter.
 
 ## Controls
 
@@ -156,4 +180,4 @@ Initial Linear integration can assume one connected authorization. Loading assig
 
 When multi-workspace support exists, the dashboard should be able to aggregate assigned issues across connected workspaces while still making the workspace/team visible on each row.
 
-GitHub should follow the same source discipline once researched: start narrow, show only work items that improve Clockify tracking and billing review, and avoid broad repository browsing until a concrete time-tracking workflow needs it.
+GitHub should stay narrow: show only selected repositories and configured work-item types that improve Clockify tracking and billing review. Avoid broad repository browsing until a concrete time-tracking workflow needs it.
