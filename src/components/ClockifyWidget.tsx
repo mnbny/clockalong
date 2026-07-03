@@ -9,6 +9,7 @@ import {
   IconClockPlay,
   IconEye,
   IconEyeOff,
+  IconPencil,
   IconPlayerStop,
   IconRefresh,
   IconWand,
@@ -17,6 +18,7 @@ import { and, eq, gte, lt, useLiveQuery } from '@tanstack/react-db'
 import { useIsFetching, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import humanizeDuration from 'humanize-duration'
 import { useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useStopwatch } from 'react-timer-hook'
 
 import { queryKeys } from '../lib/query-client'
@@ -46,6 +48,12 @@ type ClockifyReportPeriodId = (typeof clockifyReportPeriods)[number]['id']
 type ClockifyOverlapDialogState = {
   fixes: ClockifyTimeEntryOverlapFix[]
   label: string
+}
+type ClockifyEntryEditDialogState = {
+  durationMinutes: string
+  entry: TimeEntryWithRatesDtoV1
+  end: string
+  start: string
 }
 
 function ClockifyRefreshButton({ fetching }: { fetching: boolean }) {
@@ -88,8 +96,10 @@ const formatShortDuration = humanizeDuration.humanizer({
 export function ClockifyWidget() {
   const queryClient = useQueryClient()
   const fixOverlapDialogRef = useRef<HTMLDialogElement>(null)
+  const editEntryDialogRef = useRef<HTMLDialogElement>(null)
   const [entriesVisible, setEntriesVisible] = useState(false)
   const [overlapDialogState, setOverlapDialogState] = useState<ClockifyOverlapDialogState | null>(null)
+  const [editDialogState, setEditDialogState] = useState<ClockifyEntryEditDialogState | null>(null)
   const userQuery = useQuery({
     queryKey: queryKeys.clockify.loggedUser,
     queryFn: () => clockify.getLoggedUser(),
@@ -236,6 +246,32 @@ export function ClockifyWidget() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
     },
   })
+  const editEntryMutation = useMutation({
+    mutationFn: async (state: ClockifyEntryEditDialogState) => {
+      const start = parseLocalDateTime(state.start)
+      const end = parseLocalDateTime(state.end)
+
+      if (!state.entry.id || !state.entry.workspaceId || !start || !end || end.getTime() < start.getTime()) {
+        throw new Error('Use a valid start and end time.')
+      }
+
+      return clockify.updateTimeEntry(getClockifyTimeEntryUpdateBody(state.entry, start, end), {
+        params: { id: state.entry.id, workspaceId: state.entry.workspaceId },
+      })
+    },
+    onError: error => {
+      appToast.error('Could not update Clockify entry', {
+        description: getErrorMessage(error),
+      })
+    },
+    onSuccess: () => {
+      editEntryDialogRef.current?.close()
+      setEditDialogState(null)
+      appToast.success('Clockify entry updated')
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.entrySync() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
+    },
+  })
   const stopRunningEntryMutation = useMutation({
     mutationFn: (entry: TimeEntryWithRatesDtoV1) =>
       clockify.stopRunningTimeEntry(
@@ -343,9 +379,110 @@ export function ClockifyWidget() {
             </div>
           </div>
 
-          {entriesVisible ? <TodayClockifyEntriesTable entries={todaySyncedEntries} /> : null}
+          {entriesVisible ? (
+            <TodayClockifyEntriesTable
+              entries={todaySyncedEntries}
+              onEdit={entry => {
+                flushSync(() => {
+                  setEditDialogState(getClockifyEntryEditDialogState(entry))
+                })
+                editEntryDialogRef.current?.showModal()
+              }}
+            />
+          ) : null}
         </div>
       </section>
+
+      <dialog ref={editEntryDialogRef} className="modal" onClose={() => setEditDialogState(null)}>
+        <div className="modal-box max-w-2xl rounded-lg">
+          <form
+            className="grid gap-5"
+            onSubmit={event => {
+              event.preventDefault()
+
+              if (editDialogState) {
+                editEntryMutation.mutate(editDialogState)
+              }
+            }}>
+            <div className="grid gap-1">
+              <h3 className="text-lg leading-7 font-semibold">Edit Entry</h3>
+              <p className="text-base-content/60 truncate text-sm">
+                {editDialogState ? getEntryTitle(editDialogState.entry) : 'Clockify time entry'}
+              </p>
+            </div>
+
+            {editDialogState ? (
+              <div className="grid gap-4 sm:grid-cols-3">
+                <label className="fieldset">
+                  <span className="fieldset-legend">Start</span>
+                  <input
+                    className="input input-primary w-full"
+                    type="datetime-local"
+                    value={editDialogState.start}
+                    onChange={event =>
+                      setEditDialogState(current =>
+                        current ? getClockifyEntryEditStateFromStart(current, event.currentTarget.value) : current,
+                      )
+                    }
+                  />
+                </label>
+
+                <label className="fieldset">
+                  <span className="fieldset-legend">End</span>
+                  <input
+                    className="input input-primary w-full"
+                    type="datetime-local"
+                    value={editDialogState.end}
+                    onChange={event =>
+                      setEditDialogState(current =>
+                        current ? getClockifyEntryEditStateFromEnd(current, event.currentTarget.value) : current,
+                      )
+                    }
+                  />
+                </label>
+
+                <div className="fieldset">
+                  <span className="fieldset-legend">Duration</span>
+                  <label className="input input-primary w-full">
+                    <input
+                      aria-label="Clockify entry duration in minutes"
+                      className="min-w-0 grow"
+                      min={0}
+                      step={1}
+                      type="number"
+                      value={editDialogState.durationMinutes}
+                      onChange={event =>
+                        setEditDialogState(current =>
+                          current ? getClockifyEntryEditStateFromDuration(current, event.currentTarget.value) : current,
+                        )
+                      }
+                    />
+                    <span className="label">min</span>
+                  </label>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="modal-action mt-0">
+              <button
+                className="btn btn-ghost"
+                type="button"
+                disabled={editEntryMutation.isPending}
+                onClick={() => editEntryDialogRef.current?.close()}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" type="submit" disabled={editEntryMutation.isPending}>
+                {editEntryMutation.isPending ? <span className="loading loading-spinner loading-sm" /> : null}
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <form className="modal-backdrop" method="dialog">
+          <button type="submit">close</button>
+        </form>
+      </dialog>
 
       <dialog ref={fixOverlapDialogRef} className="modal">
         <div className="modal-box max-w-4xl rounded-lg">
@@ -480,32 +617,60 @@ function useClockifyOverlapFixes(entries: SyncedClockifyTimeEntry[]) {
   )
 }
 
-function TodayClockifyEntriesTable({ entries }: { entries: SyncedClockifyTimeEntry[] }) {
+function TodayClockifyEntriesTable({
+  entries,
+  onEdit,
+}: {
+  entries: SyncedClockifyTimeEntry[]
+  onEdit: (entry: TimeEntryWithRatesDtoV1) => void
+}) {
   return (
     <div className="border-base-content/5 border-t px-4 py-3">
       <div className="overflow-x-auto">
-        <table className="table-zebra table-sm table">
+        <table className="table-zebra table-sm table table-fixed">
+          <colgroup>
+            <col className="w-full" />
+            <col className="w-1" />
+            <col className="w-1" />
+            <col className="w-12" />
+          </colgroup>
           <thead>
             <tr>
-              <th>Entry</th>
-              <th>Time</th>
-              <th>Duration</th>
+              <th className="w-full">Entry</th>
+              <th className="w-1 whitespace-nowrap">Time</th>
+              <th className="w-1 whitespace-nowrap">Duration</th>
+              <th className="w-12 min-w-12 text-center">
+                <span className="sr-only">Edit</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {entries.length ? (
               entries.map(syncedEntry => (
                 <tr key={syncedEntry.id}>
-                  <td className="max-w-80 truncate">{getEntryTitle(syncedEntry.entry)}</td>
-                  <td className="whitespace-nowrap tabular-nums">
+                  <td className="w-full min-w-0" title={getEntryTitle(syncedEntry.entry)}>
+                    <div className="truncate">{getEntryTitle(syncedEntry.entry)}</div>
+                  </td>
+                  <td className="w-1 whitespace-nowrap tabular-nums">
                     {formatTimeRange(syncedEntry.entry.timeInterval?.start, syncedEntry.entry.timeInterval?.end)}
                   </td>
-                  <td className="whitespace-nowrap tabular-nums">{formatEntryDuration(syncedEntry.entry)}</td>
+                  <td className="w-1 whitespace-nowrap tabular-nums">{formatEntryDuration(syncedEntry.entry)}</td>
+                  <td className="w-12 min-w-12 text-center">
+                    <button
+                      className="btn btn-square btn-ghost text-primary hover:bg-primary/10 btn-xs"
+                      type="button"
+                      aria-label={`Edit ${getEntryTitle(syncedEntry.entry)}`}
+                      title="Edit entry"
+                      disabled={!syncedEntry.entry.id || !syncedEntry.entry.workspaceId}
+                      onClick={() => onEdit(syncedEntry.entry)}>
+                      <IconPencil className="size-3.5" />
+                    </button>
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td className="text-base-content/60" colSpan={3}>
+                <td className="text-base-content/60" colSpan={4}>
                   No synced Clockify entries for today.
                 </td>
               </tr>
@@ -610,8 +775,22 @@ function parseDate(value: string | undefined) {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
+function parseLocalDateTime(value: string) {
+  if (!value) {
+    return null
+  }
+
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
 function toClockifyReportDate(date: Date) {
   return date.toISOString().replace(/Z$/, '')
+}
+
+function toLocalDateTimeInputValue(date: Date) {
+  const offsetMilliseconds = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offsetMilliseconds).toISOString().slice(0, 16)
 }
 
 function formatTimeRange(startValue: string | undefined, endValue: string | undefined) {
@@ -631,6 +810,17 @@ function formatEntryDuration(entry: TimeEntryWithRatesDtoV1) {
   }
 
   return formatShortDuration(Math.max(0, (end?.getTime() ?? Date.now()) - start.getTime()))
+}
+
+function getEntryDurationMinutes(entry: TimeEntryWithRatesDtoV1) {
+  const start = parseDate(entry.timeInterval?.start)
+  const end = parseDate(entry.timeInterval?.end) ?? new Date()
+
+  if (!start) {
+    return 0
+  }
+
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000))
 }
 
 function formatDatedTime(value: string | undefined) {
@@ -661,12 +851,72 @@ function formatTime(value: string | undefined) {
   }).format(date)
 }
 
+function getClockifyEntryEditDialogState(entry: TimeEntryWithRatesDtoV1) {
+  const start = parseDate(entry.timeInterval?.start) ?? new Date()
+  const end = parseDate(entry.timeInterval?.end) ?? new Date()
+
+  return {
+    durationMinutes: String(getEntryDurationMinutes(entry)),
+    end: toLocalDateTimeInputValue(end),
+    entry,
+    start: toLocalDateTimeInputValue(start),
+  }
+}
+
+function getClockifyEntryEditStateFromStart(state: ClockifyEntryEditDialogState, start: string) {
+  const startDate = parseLocalDateTime(start)
+  const endDate = parseLocalDateTime(state.end)
+
+  return {
+    ...state,
+    durationMinutes: startDate && endDate ? String(getDurationMinutes(startDate, endDate)) : state.durationMinutes,
+    start,
+  }
+}
+
+function getClockifyEntryEditStateFromEnd(state: ClockifyEntryEditDialogState, end: string) {
+  const startDate = parseLocalDateTime(state.start)
+  const endDate = parseLocalDateTime(end)
+
+  return {
+    ...state,
+    durationMinutes: startDate && endDate ? String(getDurationMinutes(startDate, endDate)) : state.durationMinutes,
+    end,
+  }
+}
+
+function getClockifyEntryEditStateFromDuration(state: ClockifyEntryEditDialogState, durationMinutes: string) {
+  const startDate = parseLocalDateTime(state.start)
+  const parsedDurationMinutes = Number(durationMinutes)
+
+  if (!startDate || !Number.isFinite(parsedDurationMinutes)) {
+    return { ...state, durationMinutes }
+  }
+
+  return {
+    ...state,
+    durationMinutes,
+    end: toLocalDateTimeInputValue(new Date(startDate.getTime() + Math.max(0, parsedDurationMinutes) * 60_000)),
+  }
+}
+
+function getDurationMinutes(start: Date, end: Date) {
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000))
+}
+
 function getClockifyTimeEntryOverlapFixBody(fix: ClockifyTimeEntryOverlapFix): UpdateTimeEntryRequest {
-  const { entry } = fix
+  return getClockifyTimeEntryUpdateBody(fix.entry, fix.start, fix.end)
+}
+
+function getClockifyTimeEntryUpdateBody(
+  entry: TimeEntryWithRatesDtoV1,
+  start: Date,
+  end: Date,
+): UpdateTimeEntryRequest {
   const body: UpdateTimeEntryRequest = {
     billable: entry.billable ?? false,
-    end: fix.end.toISOString(),
-    start: fix.start.toISOString(),
+    end: end.toISOString(),
+    start: start.toISOString(),
   }
 
   if (entry.description !== undefined) {
