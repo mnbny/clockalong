@@ -419,11 +419,12 @@ export function ClockifyWidget() {
                     className="input input-primary w-full"
                     type="datetime-local"
                     value={editDialogState.start}
-                    onChange={event =>
+                    onChange={event => {
+                      const value = event.currentTarget.value
                       setEditDialogState(current =>
-                        current ? getClockifyEntryEditStateFromStart(current, event.currentTarget.value) : current,
+                        current ? getClockifyEntryEditStateFromStart(current, value) : current,
                       )
-                    }
+                    }}
                   />
                 </label>
 
@@ -433,11 +434,12 @@ export function ClockifyWidget() {
                     className="input input-primary w-full"
                     type="datetime-local"
                     value={editDialogState.end}
-                    onChange={event =>
+                    onChange={event => {
+                      const value = event.currentTarget.value
                       setEditDialogState(current =>
-                        current ? getClockifyEntryEditStateFromEnd(current, event.currentTarget.value) : current,
+                        current ? getClockifyEntryEditStateFromEnd(current, value) : current,
                       )
-                    }
+                    }}
                   />
                 </label>
 
@@ -451,11 +453,12 @@ export function ClockifyWidget() {
                       step={1}
                       type="number"
                       value={editDialogState.durationMinutes}
-                      onChange={event =>
+                      onChange={event => {
+                        const value = event.currentTarget.value
                         setEditDialogState(current =>
-                          current ? getClockifyEntryEditStateFromDuration(current, event.currentTarget.value) : current,
+                          current ? getClockifyEntryEditStateFromDuration(current, value) : current,
                         )
-                      }
+                      }}
                     />
                     <span className="label">min</span>
                   </label>
@@ -627,7 +630,7 @@ function TodayClockifyEntriesTable({
   return (
     <div className="border-base-content/5 border-t px-4 py-3">
       <div className="overflow-x-auto">
-        <table className="table-zebra table-sm table table-fixed w-full">
+        <table className="table-zebra table-sm table w-full table-fixed">
           <colgroup>
             <col className="w-full" />
             <col className="w-36" />
