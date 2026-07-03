@@ -9,6 +9,7 @@ import {
   defaultGithubPullRequestDescriptionTemplate,
   defaultGithubPullRequestDescriptionTemplateFallback,
 } from '../github/description-template'
+import { defaultGithubWorkItemSyncInterval } from '../github/sync-settings'
 import {
   defaultLinearTicketSortOrder,
   defaultLinearTicketSyncInterval,
@@ -178,6 +179,11 @@ const storageConfig = {
   githubWorkItemSyncLimit: {
     type: 'number',
     default: defaultGithubWorkItemSyncLimit,
+    version: 1,
+  },
+  githubWorkItemSyncInterval: {
+    type: 'string',
+    default: defaultGithubWorkItemSyncInterval,
     version: 1,
   },
   githubAuthoredWorkItemsOnly: {

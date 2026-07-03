@@ -15,11 +15,11 @@ import {
 } from '../storage/config'
 import { useStorage } from '../storage/useStorage'
 import { createGithubClient } from './client'
+import { getGithubWorkItemSyncIntervalMilliseconds } from './sync-settings'
 
 type GithubIssue = RestEndpointMethodTypes['issues']['listForRepo']['response']['data'][number]
 type GithubPullRequest = RestEndpointMethodTypes['pulls']['list']['response']['data'][number]
 
-const githubWorkItemSyncInterval = 30 * 60_000
 const githubWorkItemsStorageKey = 'clockalong.github.workItems.v1'
 
 export type GithubWorkItemType = 'issue' | 'pullRequest'
@@ -89,6 +89,7 @@ function useGithubSyncData() {
   const [githubSelectedRepositories] = useStorage('githubSelectedRepositories')
   const [githubVisibleWorkItemTypes] = useStorage('githubVisibleWorkItemTypes')
   const [githubWorkItemSyncLimit] = useStorage('githubWorkItemSyncLimit')
+  const [githubWorkItemSyncInterval] = useStorage('githubWorkItemSyncInterval')
   const githubAuthenticated = authState.value.githubAuthenticated && !authState.loading
   const normalizedSyncLimit = normalizeGithubWorkItemSyncLimit(githubWorkItemSyncLimit)
   const repositorySignature = useMemo(
@@ -115,7 +116,7 @@ function useGithubSyncData() {
         visibleWorkItemTypes: githubVisibleWorkItemTypes,
       }),
     enabled: githubAuthenticated,
-    refetchInterval: githubWorkItemSyncInterval,
+    refetchInterval: getGithubWorkItemSyncIntervalMilliseconds(githubWorkItemSyncInterval),
     staleTime: 60_000,
   })
   const syncNow = useCallback(() => syncQuery.refetch(), [syncQuery])

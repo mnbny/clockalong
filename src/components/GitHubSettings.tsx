@@ -23,6 +23,11 @@ import {
   sampleGithubPullRequestDescriptionTemplateValues,
 } from '../services/github/description-template'
 import {
+  getGithubWorkItemSyncIntervalLabel,
+  type GithubWorkItemSyncIntervalOption,
+  githubWorkItemSyncIntervalOptions,
+} from '../services/github/sync-settings'
+import {
   defaultGithubWorkItemSyncLimit,
   type GithubSelectedRepository,
   maxGithubWorkItemSyncLimit,
@@ -77,6 +82,7 @@ function ConnectedGitHubSettings() {
   const [githubSelectedRepositories, setGithubSelectedRepositories] = useStorage('githubSelectedRepositories')
   const [githubVisibleWorkItemTypes, setGithubVisibleWorkItemTypes] = useStorage('githubVisibleWorkItemTypes')
   const [githubWorkItemSyncLimit, setGithubWorkItemSyncLimit] = useStorage('githubWorkItemSyncLimit')
+  const [githubWorkItemSyncInterval, setGithubWorkItemSyncInterval] = useStorage('githubWorkItemSyncInterval')
   const [githubAuthoredWorkItemsOnly, setGithubAuthoredWorkItemsOnly] = useStorage('githubAuthoredWorkItemsOnly')
   const [githubShowClosedWorkItems, setGithubShowClosedWorkItems] = useStorage('githubShowClosedWorkItems')
   const [githubIssueDescriptionTemplate, setGithubIssueDescriptionTemplate, resetGithubIssueDescriptionTemplate] =
@@ -208,9 +214,23 @@ function ConnectedGitHubSettings() {
         </label>
       </SettingsRow>
 
-      <SettingsRow
-        label="Dashboard: Authored by me"
-        description="Show only GitHub items opened by you.">
+      <SettingsRow label="Sync: Interval" description="How often GitHub work items refresh.">
+        <select
+          aria-label="GitHub work item sync interval"
+          className="select select-primary w-full max-w-56"
+          value={githubWorkItemSyncInterval}
+          onChange={event =>
+            void setGithubWorkItemSyncInterval(event.currentTarget.value as GithubWorkItemSyncIntervalOption)
+          }>
+          {githubWorkItemSyncIntervalOptions.map(option => (
+            <option key={option} value={option}>
+              {getGithubWorkItemSyncIntervalLabel(option)}
+            </option>
+          ))}
+        </select>
+      </SettingsRow>
+
+      <SettingsRow label="Dashboard: Authored by me" description="Show only GitHub items opened by you.">
         <input
           aria-label="Only show GitHub work items authored by me"
           checked={githubAuthoredWorkItemsOnly}
