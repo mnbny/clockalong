@@ -1,9 +1,13 @@
-<p align="center">
-  <img width="360" alt="Clockalong logo" src="https://github.com/user-attachments/assets/7227bf3f-9ccb-4a81-8bd3-6ed619b94019" />
-</p>
+
+
 
 <h1 align="center">Clockalong</h1>
 <p align="center">A Clockify Companion App</p>
+
+
+<p align="center">
+  <img width="480" height="480" alt="image" src="https://github.com/user-attachments/assets/22e68535-0e6f-49fc-8782-01d5fb33eb0e" />
+</p>
 
 Clockalong is an independent desktop companion app for Clockify. It helps you start, stop, and review Clockify timers from the work sources you already use, including Linear, Quick Timers, and future providers such as GitHub.
 
