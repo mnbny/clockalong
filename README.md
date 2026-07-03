@@ -1,32 +1,52 @@
 
-
-
 <h1 align="center">Clockalong</h1>
-<p align="center">A Clockify Companion App</p>
-
+<p align="center">Track Clockify time from the work you already have open.</p>
 
 <p align="center">
   <img width="480" height="480" alt="image" src="https://github.com/user-attachments/assets/22e68535-0e6f-49fc-8782-01d5fb33eb0e" />
 </p>
 
-Clockalong is an independent desktop companion app for Clockify. It helps you start, stop, and review Clockify timers from the work sources you already use, including Linear, Quick Timers, and future providers such as GitHub.
+Clockalong is an independent macOS desktop app for people who track time in Clockify while doing work across Linear, GitHub, and ad hoc tasks.
 
-Clockify stays the system of record for time entries. Clockalong sits beside it as a focused workspace for source-linked time tracking, billable time review, and faster timer control.
+Clockify stays in charge of the time entries. Clockalong gives you a smaller, faster place to start timers, stop timers, add useful context, and review recent work without opening a full project-management app.
 
-## What Clockalong does
+## What it does
 
-- Connects to Clockify with your own API key.
-- Pulls in trackable work from optional sources such as Linear.
-- Starts and stops Clockify timers from tickets, presets, and future provider items.
-- Builds useful Clockify descriptions from source context.
-- Shows tracked time, recent activity, and rate-derived value where Clockify data supports it.
+- Connect Clockify with your own API key.
+- Start and stop Clockify timers from Linear issues, GitHub issues and pull requests, or local Quick Timer presets.
+- Build Clockify descriptions from the selected issue, pull request, or preset.
+- Match Clockify entries back to the work they came from.
+- See running timers, recent activity, totals, and estimated value where Clockify has enough data.
+- Review recent Clockify entries and repair overlapping completed entries.
+- Keep provider credentials in native secure storage instead of browser local storage.
 
-## Current integrations
+## Integrations
 
-- Clockify is the required time tracking provider and source of truth for time entries.
-- Linear is an optional work source for assigned issues and issue-based Clockify timers.
-- Quick Timers are local presets for ad hoc Clockify timers that are not tied to an external provider.
-- GitHub is a planned work source for pull request tracking, review work, and billing review.
+- Clockify is required and keeps the actual time entries.
+- Linear can show assigned issues and start issue-based timers.
+- GitHub can show selected repositories, issues, and pull requests.
+- Quick Timers are local presets for reusable timers that are not tied to another app.
+
+## Authentication
+
+Clockalong uses user-owned credentials:
+
+- Clockify connects with a Clockify API key.
+- Linear connects through OAuth with PKCE.
+- GitHub connects with a fine-grained personal access token.
+
+Clockalong stores long-lived credentials in native secure storage. It only pulls out a working credential when it needs to talk to a connected service.
+
+## Status
+
+Clockalong is currently focused on personal time tracking and billing review:
+
+- Fast timer control from the work sources you already use.
+- Descriptions that make Clockify entries easier to review later.
+- Recent-entry review and repair tools.
+- Local dashboard caches so the app can stay quick.
+
+It is not intended to replace Clockify, manage projects, generate invoices, or become a full Linear or GitHub client.
 
 Clockalong is not affiliated with or endorsed by Clockify or CAKE.com.
 
@@ -34,8 +54,8 @@ Clockalong is not affiliated with or endorsed by Clockify or CAKE.com.
 
 Requirements:
 
-- Node.js LTS
-- pnpm 11
+- Node.js 20.19 or newer
+- pnpm 11.1 or newer
 - Rust 1.93 or newer
 
 Install dependencies:
