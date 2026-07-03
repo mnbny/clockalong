@@ -67,7 +67,7 @@ const githubWorkItemColumns: Array<ColumnDef<GithubWorkItemWithTracking>> = [
     accessorKey: 'repositoryFullName',
     header: 'Repository',
     cell: info => (
-      <span className="relative -top-0.5 block max-w-56 truncate font-mono" title={info.getValue<string>()}>
+      <span className="relative -top-0.5 block min-w-0 truncate font-mono" title={info.getValue<string>()}>
         {getGithubRepositoryName(info.getValue<string>())}
       </span>
     ),
@@ -80,7 +80,11 @@ const githubWorkItemColumns: Array<ColumnDef<GithubWorkItemWithTracking>> = [
   {
     accessorKey: 'title',
     header: 'Item',
-    cell: info => <span className="block max-w-3xl truncate font-medium">{info.getValue<string>()}</span>,
+    cell: info => (
+      <span className="block min-w-0 truncate font-medium" title={info.getValue<string>()}>
+        {info.getValue<string>()}
+      </span>
+    ),
   },
   {
     accessorKey: 'lastTrackedAt',
@@ -424,7 +428,18 @@ function GitHubWidgetContent() {
         </header>
 
         <div className="overflow-x-auto">
-          <table className="table-zebra table-sm table">
+          <table className="table-zebra table-sm table table-fixed w-full">
+            <colgroup>
+              <col className="w-14" />
+              <col className="w-20" />
+              <col className="w-32" />
+              <col className="w-12" />
+              <col className="w-full" />
+              <col className="w-28" />
+              <col className="w-20" />
+              <col className="w-24" />
+              <col className="w-12" />
+            </colgroup>
             <thead>
               {table.getHeaderGroups().map(headerGroup => (
                 <tr key={headerGroup.id}>
@@ -589,16 +604,16 @@ function getGithubWorkItemTableCellClassName(columnId: string) {
     case 'trackingAction':
       return 'w-14 min-w-14 text-center'
     case 'identifier':
-      return 'w-1 whitespace-nowrap'
+      return 'whitespace-nowrap'
     case 'repositoryFullName':
-      return 'w-1 whitespace-nowrap'
+      return 'min-w-0 whitespace-nowrap'
     case 'title':
-      return 'w-full'
+      return 'w-full min-w-0'
     case 'author':
     case 'lastTrackedAt':
     case 'totalTrackedSeconds':
     case 'totalTrackedAmount':
-      return 'w-1 whitespace-nowrap'
+      return 'whitespace-nowrap'
     case 'externalLink':
       return 'w-12 min-w-12 text-center'
     default:

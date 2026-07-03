@@ -627,18 +627,18 @@ function TodayClockifyEntriesTable({
   return (
     <div className="border-base-content/5 border-t px-4 py-3">
       <div className="overflow-x-auto">
-        <table className="table-zebra table-sm table table-fixed">
+        <table className="table-zebra table-sm table table-fixed w-full">
           <colgroup>
             <col className="w-full" />
-            <col className="w-1" />
-            <col className="w-1" />
+            <col className="w-36" />
+            <col className="w-24" />
             <col className="w-12" />
           </colgroup>
           <thead>
             <tr>
-              <th className="w-full">Entry</th>
-              <th className="w-1 whitespace-nowrap">Time</th>
-              <th className="w-1 whitespace-nowrap">Duration</th>
+              <th className="w-full min-w-0">Entry</th>
+              <th className="whitespace-nowrap">Time</th>
+              <th className="whitespace-nowrap">Duration</th>
               <th className="w-12 min-w-12 text-center">
                 <span className="sr-only">Edit</span>
               </th>
@@ -651,10 +651,10 @@ function TodayClockifyEntriesTable({
                   <td className="w-full min-w-0" title={getEntryTitle(syncedEntry.entry)}>
                     <div className="truncate">{getEntryTitle(syncedEntry.entry)}</div>
                   </td>
-                  <td className="w-1 whitespace-nowrap tabular-nums">
+                  <td className="whitespace-nowrap tabular-nums">
                     {formatTimeRange(syncedEntry.entry.timeInterval?.start, syncedEntry.entry.timeInterval?.end)}
                   </td>
-                  <td className="w-1 whitespace-nowrap tabular-nums">{formatEntryDuration(syncedEntry.entry)}</td>
+                  <td className="whitespace-nowrap tabular-nums">{formatEntryDuration(syncedEntry.entry)}</td>
                   <td className="w-12 min-w-12 text-center">
                     <button
                       className="btn btn-square btn-ghost text-primary hover:bg-primary/10 btn-xs"
