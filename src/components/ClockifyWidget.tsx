@@ -257,92 +257,94 @@ export function ClockifyWidget() {
 
   return (
     <>
-      <section className="border-base-content/5 bg-base-100 rounded-box overflow-hidden border">
-        <header className="border-base-content/5 flex min-w-0 items-center justify-between gap-3 border-b px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            {fetching ? (
-              <span className="text-primary grid size-6 place-items-center">
-                <span className="loading loading-spinner size-6" />
-              </span>
-            ) : (
-              <ClockifyIcon className="text-primary size-6" />
-            )}
-            <div className="min-w-0">
-              <h2 className="text-base leading-6 font-semibold">Clockify</h2>
-              <p className="text-base-content/60 truncate text-sm">Time tracker</p>
+      <section className="card card-border bg-base-200/10 dark:bg-base-200/40">
+        <div className="card-body gap-0 p-0">
+          <header className="border-base-content/5 flex min-w-0 items-center justify-between gap-3 border-b px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              {fetching ? (
+                <span className="text-primary grid size-6 place-items-center">
+                  <span className="loading loading-spinner size-6" />
+                </span>
+              ) : (
+                <ClockifyIcon className="text-primary size-6" />
+              )}
+              <div className="min-w-0">
+                <h2 className="text-base leading-6 font-semibold">Clockify</h2>
+                <p className="text-base-content/60 truncate text-sm">Time tracker</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <ClockifyRefreshButton fetching={fetching} />
+              <button
+                className="btn btn-square btn-ghost btn-sm"
+                type="button"
+                aria-label={entriesVisible ? 'Hide Clockify entries' : 'Show Clockify entries'}
+                title={entriesVisible ? 'Hide Clockify entries' : 'Show Clockify entries'}
+                onClick={() => setEntriesVisible(current => !current)}>
+                {entriesVisible ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
+              </button>
+              <ClockifyStatusBadge running={Boolean(runningEntry)} />
+            </div>
+          </header>
+
+          <div className="divide-base-content/5 grid divide-y lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] lg:divide-x lg:divide-y-0">
+            <div className="grid min-h-44 content-center gap-2 px-4 py-3">
+              {runningEntry ? (
+                <RunningTimerView
+                  key={runningEntry.id ?? runningEntry.timeInterval?.start ?? 'running-entry'}
+                  entry={runningEntry}
+                  stopping={stopRunningEntryMutation.isPending}
+                  onStop={entry => stopRunningEntryMutation.mutate(entry)}
+                />
+              ) : (
+                <>
+                  <div className="text-base-content/60 flex items-center gap-2 text-xs font-medium tracking-wide uppercase">
+                    <IconClockPlay className="size-4" />
+                    Timer
+                  </div>
+                  <div className="text-3xl leading-none font-semibold tabular-nums">0s</div>
+                  <div className="text-base-content/60 text-sm">No timer running</div>
+                </>
+              )}
+            </div>
+
+            <div className="divide-base-content/5 grid grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+              {periodStats.map(stat => (
+                <div key={stat.label} className="grid min-h-44 content-center gap-2 px-4 py-3">
+                  <div className="text-base-content/60 flex min-w-0 items-center gap-2 text-xs font-medium tracking-wide uppercase">
+                    <PeriodStatIcon label={stat.label} />
+                    {stat.label}
+                  </div>
+                  <div className="text-xl leading-7 font-semibold tabular-nums">{stat.time}</div>
+                  <div className="text-base-content/60 text-sm tabular-nums">{stat.amount}</div>
+                  {periodOverlapFixes[stat.id].length ? (
+                    <div>
+                      <button
+                        className="badge badge-error badge-sm cursor-pointer gap-1 border-0 tracking-normal normal-case disabled:cursor-not-allowed"
+                        type="button"
+                        aria-label="Fix Clockify overlap"
+                        title="Fix Clockify overlap"
+                        disabled={fixOverlapMutation.isPending}
+                        onClick={() => {
+                          setOverlapDialogState({ fixes: periodOverlapFixes[stat.id], label: stat.label })
+                          fixOverlapDialogRef.current?.showModal()
+                        }}>
+                        {fixOverlapMutation.isPending ? (
+                          <span className="loading loading-spinner loading-xs" />
+                        ) : (
+                          <IconWand className="size-3" />
+                        )}
+                        Overlap detected
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <ClockifyRefreshButton fetching={fetching} />
-            <button
-              className="btn btn-square btn-ghost btn-sm"
-              type="button"
-              aria-label={entriesVisible ? 'Hide Clockify entries' : 'Show Clockify entries'}
-              title={entriesVisible ? 'Hide Clockify entries' : 'Show Clockify entries'}
-              onClick={() => setEntriesVisible(current => !current)}>
-              {entriesVisible ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
-            </button>
-            <ClockifyStatusBadge running={Boolean(runningEntry)} />
-          </div>
-        </header>
 
-        <div className="divide-base-content/5 grid divide-y lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] lg:divide-x lg:divide-y-0">
-          <div className="grid min-h-44 content-center gap-2 px-4 py-3">
-            {runningEntry ? (
-              <RunningTimerView
-                key={runningEntry.id ?? runningEntry.timeInterval?.start ?? 'running-entry'}
-                entry={runningEntry}
-                stopping={stopRunningEntryMutation.isPending}
-                onStop={entry => stopRunningEntryMutation.mutate(entry)}
-              />
-            ) : (
-              <>
-                <div className="text-base-content/60 flex items-center gap-2 text-xs font-medium tracking-wide uppercase">
-                  <IconClockPlay className="size-4" />
-                  Timer
-                </div>
-                <div className="text-3xl leading-none font-semibold tabular-nums">0s</div>
-                <div className="text-base-content/60 text-sm">No timer running</div>
-              </>
-            )}
-          </div>
-
-          <div className="divide-base-content/5 grid grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-            {periodStats.map(stat => (
-              <div key={stat.label} className="grid min-h-44 content-center gap-2 px-4 py-3">
-                <div className="text-base-content/60 flex min-w-0 items-center gap-2 text-xs font-medium tracking-wide uppercase">
-                  <PeriodStatIcon label={stat.label} />
-                  {stat.label}
-                </div>
-                <div className="text-xl leading-7 font-semibold tabular-nums">{stat.time}</div>
-                <div className="text-base-content/60 text-sm tabular-nums">{stat.amount}</div>
-                {periodOverlapFixes[stat.id].length ? (
-                  <div>
-                    <button
-                      className="badge badge-error badge-sm cursor-pointer gap-1 border-0 tracking-normal normal-case disabled:cursor-not-allowed"
-                      type="button"
-                      aria-label="Fix Clockify overlap"
-                      title="Fix Clockify overlap"
-                      disabled={fixOverlapMutation.isPending}
-                      onClick={() => {
-                        setOverlapDialogState({ fixes: periodOverlapFixes[stat.id], label: stat.label })
-                        fixOverlapDialogRef.current?.showModal()
-                      }}>
-                      {fixOverlapMutation.isPending ? (
-                        <span className="loading loading-spinner loading-xs" />
-                      ) : (
-                        <IconWand className="size-3" />
-                      )}
-                      Overlap detected
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
+          {entriesVisible ? <TodayClockifyEntriesTable entries={todaySyncedEntries} /> : null}
         </div>
-
-        {entriesVisible ? <TodayClockifyEntriesTable entries={todaySyncedEntries} /> : null}
       </section>
 
       <dialog ref={fixOverlapDialogRef} className="modal">

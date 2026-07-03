@@ -170,75 +170,77 @@ export function QuickTimersWidget() {
 
   return (
     <>
-      <section className="border-base-content/5 bg-base-100 rounded-box overflow-hidden border">
-        <header className="border-base-content/5 flex min-w-0 items-center justify-between gap-3 border-b px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <IconTimeDuration15 className="text-primary size-6" />
-            <div className="min-w-0">
-              <h2 className="text-base leading-6 font-semibold">Quick Timers</h2>
-              <p className="text-base-content/60 truncate text-sm">Reusable time presets</p>
+      <section className="card card-border bg-base-200/10 dark:bg-base-200/40">
+        <div className="card-body gap-0 p-0">
+          <header className="border-base-content/5 flex min-w-0 items-center justify-between gap-3 border-b px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <IconTimeDuration15 className="text-primary size-6" />
+              <div className="min-w-0">
+                <h2 className="text-base leading-6 font-semibold">Quick Timers</h2>
+                <p className="text-base-content/60 truncate text-sm">Reusable time presets</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-1">
-            {quickTimers.length > 0 ? (
+            <div className="flex items-center gap-1">
+              {quickTimers.length > 0 ? (
+                <button
+                  className="btn btn-square btn-ghost btn-sm"
+                  type="button"
+                  aria-label="Edit Quick Timers"
+                  aria-pressed={editingQuickTimers}
+                  onClick={toggleQuickTimersEditing}>
+                  <IconPencil className="size-4" />
+                </button>
+              ) : null}
               <button
                 className="btn btn-square btn-ghost btn-sm"
                 type="button"
-                aria-label="Edit Quick Timers"
-                aria-pressed={editingQuickTimers}
-                onClick={toggleQuickTimersEditing}>
-                <IconPencil className="size-4" />
+                aria-label="Add Quick Timer"
+                onClick={openNewQuickTimerDialog}>
+                <IconPlus className="size-4" />
               </button>
-            ) : null}
-            <button
-              className="btn btn-square btn-ghost btn-sm"
-              type="button"
-              aria-label="Add Quick Timer"
-              onClick={openNewQuickTimerDialog}>
-              <IconPlus className="size-4" />
-            </button>
-          </div>
-        </header>
+            </div>
+          </header>
 
-        {quickTimers.length > 0 ? (
-          <div
-            className="grid gap-4 p-4"
-            style={{ gridTemplateColumns: `repeat(${normalizedColumns}, minmax(0, 1fr))` }}>
-            {quickTimers.map(quickTimer => (
-              <button
-                key={quickTimer.id}
-                className={cx(
-                  'group flex min-w-0 cursor-pointer flex-col items-center gap-1 text-center',
-                  editingQuickTimers && 'animate-pulse',
-                )}
-                type="button"
-                aria-label={
-                  editingQuickTimers ? `Edit ${quickTimer.name} Quick Timer` : `Start ${quickTimer.name} Quick Timer`
-                }
-                onClick={() => {
-                  if (editingQuickTimers) {
-                    editQuickTimer(quickTimer.id)
-                    return
-                  }
-
-                  startQuickTimer(quickTimer.id)
-                }}>
-                <span
+          {quickTimers.length > 0 ? (
+            <div
+              className="grid gap-4 p-4"
+              style={{ gridTemplateColumns: `repeat(${normalizedColumns}, minmax(0, 1fr))` }}>
+              {quickTimers.map(quickTimer => (
+                <button
+                  key={quickTimer.id}
                   className={cx(
-                    'border-base-content/10 group-focus-visible:outline-primary grid h-[60px] w-full place-items-center rounded-md border transition-colors group-focus-visible:outline-2 group-focus-visible:outline-offset-2',
-                    editingQuickTimers
-                      ? 'bg-warning text-warning-content group-hover:bg-warning/80'
-                      : activeQuickTimerId === quickTimer.id
-                        ? 'tracking-active-surface group-hover:bg-accent/40'
-                        : 'bg-base-200 group-hover:bg-primary group-hover:text-primary-content',
-                  )}>
-                  <QuickTimerIcon icon={quickTimer.icon} />
-                </span>
-                <span className="w-full truncate text-xs leading-4 font-medium">{quickTimer.name}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
+                    'group flex min-w-0 cursor-pointer flex-col items-center gap-1 text-center',
+                    editingQuickTimers && 'animate-pulse',
+                  )}
+                  type="button"
+                  aria-label={
+                    editingQuickTimers ? `Edit ${quickTimer.name} Quick Timer` : `Start ${quickTimer.name} Quick Timer`
+                  }
+                  onClick={() => {
+                    if (editingQuickTimers) {
+                      editQuickTimer(quickTimer.id)
+                      return
+                    }
+
+                    startQuickTimer(quickTimer.id)
+                  }}>
+                  <span
+                    className={cx(
+                      'border-base-content/10 group-focus-visible:outline-primary grid h-[60px] w-full place-items-center rounded-md border transition-colors group-focus-visible:outline-2 group-focus-visible:outline-offset-2',
+                      editingQuickTimers
+                        ? 'bg-warning text-warning-content group-hover:bg-warning/80'
+                        : activeQuickTimerId === quickTimer.id
+                          ? 'tracking-active-surface group-hover:bg-accent/40'
+                          : 'bg-base-200 group-hover:bg-primary group-hover:text-primary-content',
+                    )}>
+                    <QuickTimerIcon icon={quickTimer.icon} />
+                  </span>
+                  <span className="w-full truncate text-xs leading-4 font-medium">{quickTimer.name}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </section>
 
       <dialog ref={dialogRef} className="modal" onClose={resetNewQuickTimerForm}>
@@ -592,7 +594,7 @@ function QuickTimerIcon({ icon }: { icon?: string }) {
 
 function normalizeQuickTimerColumns(columns: number) {
   if (!Number.isFinite(columns)) {
-    return 6
+    return 5
   }
 
   return Math.min(12, Math.max(1, Math.floor(columns)))
