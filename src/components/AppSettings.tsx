@@ -58,7 +58,7 @@ export function AppSettings() {
 
       <div className="drawer-content">
         <SettingsSection title="App">
-          <SettingsRow label="Theme" description="Controls the app appearance.">
+          <SettingsRow label="Theme" description="App color theme.">
             <fieldset className="flex flex-wrap items-center gap-4" aria-label="Theme">
               {themeOptions.map(option => (
                 <label key={option.theme} className="flex cursor-pointer items-center gap-2">
@@ -75,11 +75,11 @@ export function AppSettings() {
             </fieldset>
           </SettingsRow>
 
-          <SettingsRow label="Updates" description="Check for new Clockalong releases.">
+          <SettingsRow label="Updates" description="Check for app updates.">
             <AppUpdatesControl />
           </SettingsRow>
 
-          <SettingsRow label="App logs" description="View Rust and browser console logs from this app.">
+          <SettingsRow label="App logs" description="View app diagnostic logs.">
             <button className="btn btn-primary btn-sm" type="button" onClick={() => setAppLogsDrawerOpen(true)}>
               <IconFileText className="size-4" />
               View logs

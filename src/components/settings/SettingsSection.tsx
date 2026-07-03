@@ -9,8 +9,10 @@ export function SettingsSection({ title, children }: SettingsSectionProps) {
   return (
     <section className="mx-auto flex w-full max-w-5xl flex-col gap-2">
       <h2 className="text-sm leading-6 font-semibold tracking-normal">{title}</h2>
-      <div className="rounded-box divide-base-content/5 bg-base-100 border-base-content/5 divide-y overflow-hidden border">
-        {children}
+      <div className="card card-border bg-base-200/10 dark:bg-base-200/40">
+        <div className="card-body divide-base-content/5 divide-y overflow-hidden p-0">
+          {children}
+        </div>
       </div>
     </section>
   )

@@ -7,7 +7,7 @@ export function QuickTimersSettings() {
 
   return (
     <SettingsSection title="Quick Timers">
-      <SettingsRow label="Enabled" description="Show Quick Timers for starting reusable Clockify timers.">
+      <SettingsRow label="Enabled" description="Show Quick Timers on the dashboard.">
         <input
           aria-label="Enable Quick Timers"
           checked={quickTimersEnabled}
@@ -17,7 +17,7 @@ export function QuickTimersSettings() {
         />
       </SettingsRow>
 
-      <SettingsRow label="Columns" description="Number of Quick Timer columns shown on the dashboard.">
+      <SettingsRow label="Columns" description="Quick Timer columns on the dashboard.">
         <label className="input input-primary w-full max-w-32">
           <input
             aria-label="Quick Timer columns"
@@ -27,7 +27,7 @@ export function QuickTimersSettings() {
             step={1}
             type="number"
             value={quickTimersColumns}
-            onChange={event => void setQuickTimersColumns(normalizeBoundedInteger(event.currentTarget.value, 6, 1, 12))}
+            onChange={event => void setQuickTimersColumns(normalizeBoundedInteger(event.currentTarget.value, 5, 1, 12))}
           />
         </label>
       </SettingsRow>
