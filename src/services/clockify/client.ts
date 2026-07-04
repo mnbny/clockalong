@@ -1,6 +1,7 @@
 import { type ZodiosOptions } from '@zodios/core'
-import axios, { AxiosHeaders, type AxiosRequestConfig } from 'axios'
+import axios, { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse } from 'axios'
 
+import { parseInternalRefs } from '../../utils/templates'
 import { getTauriClockifyApiKey } from './auth'
 import { createApiClient } from './generated/clockify'
 import { createApiClient as createReportsApiClient } from './generated/reports'
@@ -46,6 +47,28 @@ const authenticatedClockifyReportsAxios = axios.create(clockifyClientOptions.axi
     config.headers = headers
     return config
   })
+
+  axiosInstance.interceptors.response.use(
+    response => {
+      clockifyApiLog('response', getClockifyResponseLog(response))
+      return response
+    },
+    error => {
+      if (axios.isAxiosError(error)) {
+        clockifyApiLog('response error', {
+          baseURL: error.config?.baseURL,
+          data: getClockifyResponseDataLog(error.response?.data),
+          method: error.config?.method?.toUpperCase(),
+          params: error.config?.params,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          url: error.config?.url,
+        })
+      }
+
+      return Promise.reject(error)
+    },
+  )
 })
 
 export function createClockifyClient(
@@ -135,6 +158,102 @@ function getClockifyRequestBodyLog(data: unknown) {
     userCount: getNestedArrayLength(body, 'users', 'ids'),
     weekStart: getRecordValue(body, 'weekStart'),
   }
+}
+
+function getClockifyResponseLog(response: AxiosResponse) {
+  return {
+    baseURL: response.config.baseURL,
+    data: getClockifyResponseDataLog(response.data),
+    method: response.config.method?.toUpperCase(),
+    params: response.config.params,
+    status: response.status,
+    statusText: response.statusText,
+    url: response.config.url,
+  }
+}
+
+function getClockifyResponseDataLog(data: unknown): unknown {
+  if (Array.isArray(data)) {
+    return {
+      count: data.length,
+      refCounts: getClockifyEntryRefCounts(data),
+      sample: data.slice(0, 5).map(getClockifyEntryResponseLog),
+      type: 'array',
+    }
+  }
+
+  if (!data || typeof data !== 'object') {
+    return data
+  }
+
+  if (isClockifyTimeEntryLike(data)) {
+    return getClockifyEntryResponseLog(data)
+  }
+
+  return {
+    keys: Object.keys(data).slice(0, 20),
+    type: 'object',
+  }
+}
+
+function getClockifyEntryResponseLog(entry: unknown) {
+  if (!entry || typeof entry !== 'object') {
+    return entry
+  }
+
+  const record = entry as Record<string, unknown>
+  const timeInterval = getRecordValue(record, 'timeInterval')
+  const timeIntervalRecord =
+    timeInterval && typeof timeInterval === 'object' ? (timeInterval as Record<string, unknown>) : {}
+  const description = getRecordValue(record, 'description')
+  const refs = parseInternalRefs(typeof description === 'string' ? description : undefined)
+
+  return {
+    description: truncateLogText(typeof description === 'string' ? description : undefined),
+    hasEnd: Boolean(timeIntervalRecord.end),
+    id: getRecordValue(record, 'id'),
+    internalRefs: refs.map(ref => ref.provider),
+    start: timeIntervalRecord.start,
+    end: timeIntervalRecord.end,
+    userId: getRecordValue(record, 'userId'),
+    workspaceId: getRecordValue(record, 'workspaceId'),
+  }
+}
+
+function getClockifyEntryRefCounts(entries: unknown[]) {
+  let github = 0
+  let linear = 0
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') {
+      continue
+    }
+
+    const description = getRecordValue(entry, 'description')
+    const refs = parseInternalRefs(typeof description === 'string' ? description : undefined)
+
+    if (refs.some(ref => ref.provider === 'github')) {
+      github += 1
+    }
+
+    if (refs.some(ref => ref.provider === 'linear')) {
+      linear += 1
+    }
+  }
+
+  return { github, linear }
+}
+
+function isClockifyTimeEntryLike(data: object) {
+  return Boolean(getRecordValue(data, 'id') && getRecordValue(data, 'timeInterval'))
+}
+
+function truncateLogText(value: string | undefined, maxLength = 180) {
+  if (!value) {
+    return value
+  }
+
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
 }
 
 function parseClockifyRequestBody(data: unknown) {

@@ -24,7 +24,7 @@ pub fn run() {
             tauri_plugin_log::Builder::new()
                 .clear_targets()
                 .level(log::LevelFilter::Debug)
-                .max_file_size(1_000_000)
+                .max_file_size(5_000_000)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(4))
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::LogDir {

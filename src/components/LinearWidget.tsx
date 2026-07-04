@@ -6,7 +6,7 @@ import { IconExternalLink, IconPlayerPlay, IconPlayerStop, IconRefresh } from '@
 import { and, eq, useLiveQuery } from '@tanstack/react-db'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
 import { queryKeys } from '../lib/query-client'
@@ -34,7 +34,7 @@ import { sortLinearTickets } from '../services/linear/tickets-sorting'
 import { useStorage } from '../services/storage/useStorage'
 import { getContrastingColor } from '../utils/colors'
 import { getErrorMessage } from '../utils/errors'
-import { internalRefTemplateToken, parseTemplateTokens } from '../utils/templates'
+import { internalRefTemplateToken, parseInternalRefs, parseTemplateTokens } from '../utils/templates'
 import { appToast } from './AppToaster'
 import { LinearIcon } from './icons/LinearIcon'
 import { LastTrackedCell, TotalTrackedAmountCell, TotalTrackedCell } from './TrackingSummaryCells'
@@ -252,6 +252,24 @@ function LinearWidgetContent() {
       tickets: linearTickets,
     })
   }, [linearTickets, runningEntryQuery.data, syncedTimeEntriesQuery.data])
+  useEffect(() => {
+    linearWidgetLog('clockify summary inputs', {
+      linearTicketCount: linearTickets.length,
+      runningEntryCount: runningEntryQuery.data?.length ?? 0,
+      sampleSyncedEntries: summarizeLinearWidgetSyncedEntries(syncedTimeEntriesQuery.data ?? []),
+      summaryCount: Object.keys(ticketTimeSummaries).length,
+      syncedEntryCount: syncedTimeEntriesQuery.data?.length ?? 0,
+      userId: clockifyUserQuery.data?.id,
+      workspaceId: selectedClockifyWorkspace?.id,
+    })
+  }, [
+    clockifyUserQuery.data?.id,
+    linearTickets.length,
+    runningEntryQuery.data,
+    selectedClockifyWorkspace?.id,
+    syncedTimeEntriesQuery.data,
+    ticketTimeSummaries,
+  ])
   const ticketsWithTracking = useMemo(
     () => mergeTicketTimeSummaries(linearTickets, ticketTimeSummaries),
     [linearTickets, ticketTimeSummaries],
@@ -457,7 +475,7 @@ function LinearWidgetContent() {
         </header>
 
         <div className="overflow-x-auto">
-          <table className="table-zebra table-sm table table-fixed w-full">
+          <table className="table-zebra table-sm table w-full table-fixed">
             <colgroup>
               <col className="w-14" />
               <col className="w-24" />
@@ -784,4 +802,33 @@ function clockifyTimerLog(message: string, details?: unknown) {
   }
 
   console.info(`[clockify api] timer ${message}`, details)
+}
+
+function summarizeLinearWidgetSyncedEntries(
+  entries: Array<{ entry: TimeEntryDtoImplV1; id: string; startedAt: string }>,
+) {
+  return entries.slice(0, 5).map(entry => ({
+    description: truncateLinearWidgetLogText(entry.entry.description),
+    end: entry.entry.timeInterval?.end,
+    id: entry.id,
+    refs: parseInternalRefs(entry.entry.description).map(ref => ref.provider),
+    startedAt: entry.startedAt,
+  }))
+}
+
+function truncateLinearWidgetLogText(value: string | undefined, maxLength = 140) {
+  if (!value) {
+    return value
+  }
+
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
+}
+
+function linearWidgetLog(message: string, details?: unknown) {
+  if (details === undefined) {
+    console.info(`[linear widget] ${message}`)
+    return
+  }
+
+  console.info(`[linear widget] ${message}`, details)
 }

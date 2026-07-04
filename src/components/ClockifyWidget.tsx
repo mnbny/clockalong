@@ -17,7 +17,7 @@ import {
 import { and, eq, gte, lt, useLiveQuery } from '@tanstack/react-db'
 import { useIsFetching, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import humanizeDuration from 'humanize-duration'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { useStopwatch } from 'react-timer-hook'
 
@@ -65,13 +65,14 @@ function ClockifyRefreshButton({ fetching }: { fetching: boolean }) {
       type="button"
       aria-label="Refresh Clockify"
       disabled={fetching}
-      onClick={() =>
+      onClick={() => {
+        clockifyWidgetLog('manual refresh requested')
         void Promise.all([
           queryClient.refetchQueries({ queryKey: queryKeys.clockify.runningEntry() }),
           queryClient.refetchQueries({ queryKey: queryKeys.clockify.summaryReport() }),
           queryClient.refetchQueries({ queryKey: queryKeys.clockify.entrySync() }),
         ])
-      }>
+      }}>
       <IconRefresh className="size-4" />
     </button>
   )
@@ -214,6 +215,15 @@ export function ClockifyWidget() {
       ),
     [monthReport, todayReport, weekReport],
   )
+  useEffect(() => {
+    clockifyWidgetLog('synced entries live query', {
+      month: summarizeSyncedEntryLog(monthSyncedEntries),
+      today: summarizeSyncedEntryLog(todaySyncedEntries),
+      userId: userQuery.data?.id,
+      week: summarizeSyncedEntryLog(weekSyncedEntries),
+      workspaceId: selectedWorkspace?.id,
+    })
+  }, [monthSyncedEntries, selectedWorkspace?.id, todaySyncedEntries, userQuery.data?.id, weekSyncedEntries])
   const fetching =
     userQuery.isFetching ||
     workspacesQuery.isFetching ||
@@ -316,7 +326,15 @@ export function ClockifyWidget() {
                 type="button"
                 aria-label={entriesVisible ? 'Hide Clockify entries' : 'Show Clockify entries'}
                 title={entriesVisible ? 'Hide Clockify entries' : 'Show Clockify entries'}
-                onClick={() => setEntriesVisible(current => !current)}>
+                onClick={() => {
+                  clockifyWidgetLog('entries visibility toggled', {
+                    nextVisible: !entriesVisible,
+                    today: summarizeSyncedEntryLog(todaySyncedEntries),
+                    userId: userQuery.data?.id,
+                    workspaceId: selectedWorkspace?.id,
+                  })
+                  setEntriesVisible(current => !current)
+                }}>
                 {entriesVisible ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
               </button>
               <ClockifyStatusBadge running={Boolean(runningEntry)} />
@@ -608,6 +626,29 @@ function useSyncedClockifyEntriesForPeriod(
   )
 
   return syncedEntriesQuery.data ?? []
+}
+
+function summarizeSyncedEntryLog(entries: SyncedClockifyTimeEntry[]) {
+  return {
+    count: entries.length,
+    sample: entries.slice(0, 5).map(entry => ({
+      description: truncateLogText(entry.entry.description),
+      end: entry.entry.timeInterval?.end,
+      id: entry.id,
+      startedAt: entry.startedAt,
+      syncedAt: entry.syncedAt,
+      userId: entry.userId,
+      workspaceId: entry.workspaceId,
+    })),
+  }
+}
+
+function truncateLogText(value: string | undefined, maxLength = 140) {
+  if (!value) {
+    return value
+  }
+
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
 }
 
 function useClockifyOverlapFixes(entries: SyncedClockifyTimeEntry[]) {
@@ -986,4 +1027,13 @@ function getClockifyPeriodRange(period: ClockifyReportPeriodId, now: Date) {
 
 function getDayStart(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function clockifyWidgetLog(message: string, details?: unknown) {
+  if (details === undefined) {
+    console.info(`[clockify widget] ${message}`)
+    return
+  }
+
+  console.info(`[clockify widget] ${message}`, details)
 }

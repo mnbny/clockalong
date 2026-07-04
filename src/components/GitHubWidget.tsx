@@ -2,7 +2,7 @@ import { IconBrandGithub, IconExternalLink, IconPlayerPlay, IconPlayerStop, Icon
 import { and, eq, useLiveQuery } from '@tanstack/react-db'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
-import { type KeyboardEvent, type MouseEvent, useCallback, useMemo } from 'react'
+import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useMemo } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
 import { queryKeys } from '../lib/query-client'
@@ -26,7 +26,7 @@ import {
 } from '../services/github/work-item-summaries'
 import { useStorage } from '../services/storage/useStorage'
 import { getErrorMessage } from '../utils/errors'
-import { internalRefTemplateToken } from '../utils/templates'
+import { internalRefTemplateToken, parseInternalRefs } from '../utils/templates'
 import { appToast } from './AppToaster'
 import { LastTrackedCell, TotalTrackedAmountCell, TotalTrackedCell } from './TrackingSummaryCells'
 
@@ -256,6 +256,24 @@ function GitHubWidgetContent() {
       workItems,
     })
   }, [runningEntryQuery.data, syncedTimeEntriesQuery.data, workItems])
+  useEffect(() => {
+    githubWidgetLog('clockify summary inputs', {
+      githubWorkItemCount: workItems.length,
+      runningEntryCount: runningEntryQuery.data?.length ?? 0,
+      sampleSyncedEntries: summarizeGithubWidgetSyncedEntries(syncedTimeEntriesQuery.data ?? []),
+      summaryCount: Object.keys(workItemTimeSummaries).length,
+      syncedEntryCount: syncedTimeEntriesQuery.data?.length ?? 0,
+      userId: clockifyUserQuery.data?.id,
+      workspaceId: selectedClockifyWorkspace?.id,
+    })
+  }, [
+    clockifyUserQuery.data?.id,
+    runningEntryQuery.data,
+    selectedClockifyWorkspace?.id,
+    syncedTimeEntriesQuery.data,
+    workItemTimeSummaries,
+    workItems.length,
+  ])
   const workItemsWithTracking = useMemo(
     () => mergeGithubWorkItemTimeSummaries(workItems, workItemTimeSummaries),
     [workItemTimeSummaries, workItems],
@@ -428,7 +446,7 @@ function GitHubWidgetContent() {
         </header>
 
         <div className="overflow-x-auto">
-          <table className="table-zebra table-sm table table-fixed w-full">
+          <table className="table-zebra table-sm table w-full table-fixed">
             <colgroup>
               <col className="w-14" />
               <col className="w-20" />
@@ -751,4 +769,33 @@ function githubTimerLog(message: string, details?: unknown) {
   }
 
   console.info(`[github api] timer ${message}`, details)
+}
+
+function summarizeGithubWidgetSyncedEntries(
+  entries: Array<{ entry: TimeEntryDtoImplV1; id: string; startedAt: string }>,
+) {
+  return entries.slice(0, 5).map(entry => ({
+    description: truncateGithubWidgetLogText(entry.entry.description),
+    end: entry.entry.timeInterval?.end,
+    id: entry.id,
+    refs: parseInternalRefs(entry.entry.description).map(ref => ref.provider),
+    startedAt: entry.startedAt,
+  }))
+}
+
+function truncateGithubWidgetLogText(value: string | undefined, maxLength = 140) {
+  if (!value) {
+    return value
+  }
+
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
+}
+
+function githubWidgetLog(message: string, details?: unknown) {
+  if (details === undefined) {
+    console.info(`[github widget] ${message}`)
+    return
+  }
+
+  console.info(`[github widget] ${message}`, details)
 }
