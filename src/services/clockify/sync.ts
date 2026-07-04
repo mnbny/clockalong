@@ -123,6 +123,19 @@ export function useClockifySync() {
   return context
 }
 
+export async function clearSyncedClockifyTimeEntries() {
+  await clockifyTimeEntriesCollection.preload()
+  const entryIds = clockifyTimeEntriesCollection.toArray.map(syncedEntry => syncedEntry.id)
+
+  if (!entryIds.length) {
+    return 0
+  }
+
+  const transaction = clockifyTimeEntriesCollection.delete(entryIds)
+  await transaction.isPersisted.promise
+  return entryIds.length
+}
+
 async function syncClockifyEntries({
   userId,
   workspaceId,

@@ -22,6 +22,7 @@ Rust owns Clockify credential storage and auth state. Clockify API calls stay in
 - Validate a saved key by calling `GET /v1/user`.
 - Startup validation should mark Clockify disconnected whenever validation does not succeed; Clockalong does not support offline authenticated Clockify mode.
 - Clear the saved key only when validation clearly fails because the credential is invalid or revoked. Keep the saved key after network or provider failures so the app can retry without asking the user to paste it again.
+- Clockify disconnect should clear the saved key, reset all Clockify TanStack Query cache, clear the local synced Clockify entry collection, and remove workspace-bound Clockify defaults such as the selected default project and Quick Timer entry links. This keeps API-key rotation from showing the previous user's workspace, entries, or running timer.
 - Subdomain and regional workspaces may require a workspace-specific key or alternate base URL. Keep base URL handling configurable instead of hard-coding every request to the global host.
 
 Clockify also has a CAKE.com Marketplace add-on model that uses `X-Addon-Token` and add-on scopes. That path is for marketplace add-ons embedded in or installed into Clockify workspaces. It is not the right auth model for Clockalong's local Tauri desktop app.

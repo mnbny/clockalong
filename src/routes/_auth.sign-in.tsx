@@ -8,8 +8,11 @@ import { GitHubAuthDialog } from '../components/GitHubAuthDialog'
 import { ClockifyIcon } from '../components/icons/ClockifyIcon'
 import { LinearIcon } from '../components/icons/LinearIcon'
 import { useAppAuth } from '../hooks/useAppAuth'
+import { queryClient, queryKeys } from '../lib/query-client'
+import { clearSyncedClockifyTimeEntries } from '../services/clockify/sync'
 import { clearSyncedGithubWorkItems } from '../services/github/sync'
 import { clearSyncedLinearTickets } from '../services/linear/sync'
+import { storage } from '../services/storage/config'
 import { auth, type ClockalongAuthProvider } from '../services/tauri/auth-client'
 import { getErrorMessage } from '../utils/errors'
 
@@ -60,7 +63,9 @@ function SignInScreen() {
     try {
       if (provider === 'clockify') {
         await auth.disconnectClockify()
+        const clearedTimeEntries = await clearClockifySessionState()
         signInLog('disconnectProvider: clockify disconnected')
+        signInLog(`disconnectProvider: cleared_clockify_time_entries=${clearedTimeEntries}`)
         appToast.success('Clockify disconnected.')
         return
       }
@@ -135,6 +140,9 @@ function SignInScreen() {
 
       <ClockifyAuthDialog
         ref={clockifyDialogRef}
+        onConnected={() => {
+          void resetClockifyQueryCache()
+        }}
         onPendingChange={pending => setPendingProvider(pending ? 'clockify' : null)}
       />
       <GitHubAuthDialog
@@ -197,6 +205,19 @@ function AuthenticationButton({ connected, icon, label, loading, onClick, onDisc
 
 function signInLog(message: string) {
   console.info(`[sign in] ${message}`)
+}
+
+async function clearClockifySessionState() {
+  await resetClockifyQueryCache()
+  const clearedTimeEntries = await clearSyncedClockifyTimeEntries()
+  await Promise.all([storage.remove('clockifyDefaultProject'), storage.remove('clockifyQuickTimerEntryLinks')])
+
+  return clearedTimeEntries
+}
+
+async function resetClockifyQueryCache() {
+  await queryClient.cancelQueries({ queryKey: queryKeys.clockify.all })
+  queryClient.removeQueries({ queryKey: queryKeys.clockify.all })
 }
 
 function getProviderLabel(provider: ClockalongAuthProvider) {

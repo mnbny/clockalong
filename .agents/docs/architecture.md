@@ -78,7 +78,7 @@ Use `QueryKeySegments<T>` when a key needs inputs:
 - `params` is for request parameters, usually a small object whose fields mirror the query function options.
 - `other` is for cache identity values that are not API params, such as local registries or objects used to derive merged client state.
 
-For reads, import `queryKeys` and pass the returned key directly to `useQuery`. For invalidation or broad refetch, use the namespace root helper without input segments, for example `queryKeys.clockify.entrySync()` or `queryKeys.clockify.summaryReport()`, so all segmented variants under that prefix are matched.
+For reads, import `queryKeys` and pass the returned key directly to `useQuery`. For invalidation or broad refetch, use the namespace root helper without input segments, for example `queryKeys.clockify.entrySync()` or `queryKeys.clockify.summaryReport()`, so all segmented variants under that prefix are matched. For full provider-session resets, use an explicit provider root such as `queryKeys.clockify.all`.
 
 Provider service files should export fetch functions and DTO types, not query key constants. Cache identity belongs in one place; service modules stay focused on API behavior.
 
