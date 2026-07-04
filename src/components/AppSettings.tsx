@@ -45,6 +45,24 @@ export function AppSettings() {
     }
   }
 
+  const downloadAppLogs = () => {
+    if (!displayedAppLogs) {
+      return
+    }
+
+    const blob = new Blob([displayedAppLogs], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    link.href = url
+    link.download = `clockalong-logs-${getLogDownloadTimestamp(new Date())}.txt`
+    document.body.append(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+    appToast.success('Logs downloaded')
+  }
+
   return (
     <div className="drawer drawer-end">
       <input
@@ -110,6 +128,14 @@ export function AppSettings() {
                     disabled={appLogs.loading || !displayedAppLogs}
                     onClick={() => void copyAppLogs()}>
                     <IconCopy className="size-4" />
+                  </button>
+                  <button
+                    className="btn btn-square btn-ghost btn-sm"
+                    type="button"
+                    aria-label="Download logs"
+                    disabled={appLogs.loading || !displayedAppLogs}
+                    onClick={downloadAppLogs}>
+                    <IconDownload className="size-4" />
                   </button>
                   <button
                     className="btn btn-square btn-ghost btn-sm"
@@ -312,6 +338,13 @@ function formatBytes(bytes: number) {
   return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`
 }
 
+function getLogDownloadTimestamp(date: Date) {
+  return date
+    .toISOString()
+    .replace(/\.\d{3}Z$/, 'Z')
+    .replace(/[:.]/g, '-')
+}
+
 function filterDisplayedAppLogs(contents: string) {
   return contents.split('\n').filter(isDisplayedAppLogLine).join('\n')
 }
@@ -334,11 +367,15 @@ const customFrontendLogPrefixes = [
   '[app logs]',
   '[clockify api]',
   '[clockify auth]',
+  '[clockify sync]',
+  '[clockify widget]',
   '[console logging]',
   '[clockalong auth]',
   '[dev tools]',
+  '[github widget]',
   '[linear auth]',
   '[linear tickets]',
+  '[linear widget]',
   '[quick timers]',
   '[sign in]',
   '[storage]',

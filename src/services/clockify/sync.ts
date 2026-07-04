@@ -7,6 +7,8 @@ import { createContext, createElement, useCallback, useContext, useMemo } from '
 
 import { useAppAuth } from '../../hooks/useAppAuth'
 import { queryKeys } from '../../lib/query-client'
+import { getErrorMessage } from '../../utils/errors'
+import { parseInternalRefs } from '../../utils/templates'
 import { storage } from '../storage/config'
 import { useStorage } from '../storage/useStorage'
 import { clockify } from './client'
@@ -33,6 +35,10 @@ type ClockifyEntrySyncResult = {
   end: string
   entriesFetched: number
   entriesStored: number
+  entriesInserted: number
+  entriesUpdated: number
+  githubRefEntriesFetched: number
+  linearRefEntriesFetched: number
   pagesFetched: number
   skippedEntries: number
   start: string
@@ -126,47 +132,100 @@ async function syncClockifyEntries({
   const end = now.toISOString()
   const start = getClockifyEntrySyncStart(syncDays, now).toISOString()
   const syncedAt = new Date().toISOString()
+  const refCounts = {
+    github: 0,
+    linear: 0,
+  }
   let page = 1
   let entriesFetched = 0
+  let entriesInserted = 0
   let entriesStored = 0
+  let entriesUpdated = 0
   let pagesFetched = 0
   let skippedEntries = 0
 
+  clockifySyncLog('entry sync start', {
+    end,
+    start,
+    syncDays,
+    userId,
+    workspaceId,
+  })
   await clockifyTimeEntriesCollection.preload()
+  clockifySyncLog('entry sync collection preloaded', {
+    storageKey: clockifyEntrySyncStorageKey,
+  })
 
-  while (true) {
-    const entries = await clockify.getTimeEntries({
-      params: { workspaceId, userId },
-      queries: {
-        end,
-        hydrated: true,
+  try {
+    while (true) {
+      const entries = await clockify.getTimeEntries({
+        params: { workspaceId, userId },
+        queries: {
+          end,
+          hydrated: true,
+          page,
+          'page-size': clockifyEntrySyncPageSize,
+          start,
+        },
+      })
+      const pageRefCounts = getClockifyEntryRefCounts(entries)
+
+      pagesFetched += 1
+      entriesFetched += entries.length
+      refCounts.github += pageRefCounts.github
+      refCounts.linear += pageRefCounts.linear
+
+      clockifySyncLog('entry sync page fetched', {
+        entriesFetched: entries.length,
         page,
-        'page-size': clockifyEntrySyncPageSize,
-        start,
-      },
-    })
+        refCounts: pageRefCounts,
+        sample: entries.slice(0, 5).map(getClockifyEntrySyncLog),
+      })
 
-    pagesFetched += 1
-    entriesFetched += entries.length
+      const upsertResult = await upsertSyncedClockifyEntries({ entries, syncedAt, userId, workspaceId })
+      entriesInserted += upsertResult.inserted
+      entriesStored += upsertResult.stored
+      entriesUpdated += upsertResult.updated
+      skippedEntries += upsertResult.skipped
 
-    const upsertResult = await upsertSyncedClockifyEntries({ entries, syncedAt, userId, workspaceId })
-    entriesStored += upsertResult.stored
-    skippedEntries += upsertResult.skipped
+      clockifySyncLog('entry sync page stored', {
+        page,
+        ...upsertResult,
+      })
 
-    if (entries.length < clockifyEntrySyncPageSize) {
-      break
+      if (entries.length < clockifyEntrySyncPageSize) {
+        break
+      }
+
+      page += 1
     }
 
-    page += 1
-  }
+    const result = {
+      end,
+      entriesFetched,
+      entriesInserted,
+      entriesStored,
+      entriesUpdated,
+      githubRefEntriesFetched: refCounts.github,
+      linearRefEntriesFetched: refCounts.linear,
+      pagesFetched,
+      skippedEntries,
+      start,
+    } satisfies ClockifyEntrySyncResult
 
-  return {
-    end,
-    entriesFetched,
-    entriesStored,
-    pagesFetched,
-    skippedEntries,
-    start,
+    clockifySyncLog('entry sync complete', result)
+
+    return result
+  } catch (error) {
+    clockifySyncLog('entry sync failed', {
+      end,
+      error: getErrorMessage(error),
+      page,
+      start,
+      userId,
+      workspaceId,
+    })
+    throw error
   }
 }
 
@@ -181,8 +240,10 @@ async function upsertSyncedClockifyEntries({
   userId: string
   workspaceId: string
 }) {
+  let inserted = 0
   let stored = 0
   let skipped = 0
+  let updated = 0
 
   for (const entry of entries) {
     if (!entry.id) {
@@ -198,7 +259,8 @@ async function upsertSyncedClockifyEntries({
       userId: entry.userId ?? userId,
       workspaceId: entry.workspaceId ?? workspaceId,
     } satisfies SyncedClockifyTimeEntry
-    const transaction = clockifyTimeEntriesCollection.has(syncedEntry.id)
+    const hasEntry = clockifyTimeEntriesCollection.has(syncedEntry.id)
+    const transaction = hasEntry
       ? clockifyTimeEntriesCollection.update(syncedEntry.id, draft => {
           Object.assign(draft, syncedEntry)
         })
@@ -206,13 +268,68 @@ async function upsertSyncedClockifyEntries({
 
     await transaction.isPersisted.promise
     stored += 1
+
+    if (hasEntry) {
+      updated += 1
+    } else {
+      inserted += 1
+    }
   }
 
-  return { skipped, stored }
+  return { inserted, skipped, stored, updated }
 }
 
 function getClockifyEntrySyncStart(days: ClockifyEntrySyncDaysOption, now: Date) {
   const start = new Date(now)
   start.setDate(start.getDate() - days)
   return start
+}
+
+function getClockifyEntryRefCounts(entries: TimeEntryWithRatesDtoV1[]) {
+  let github = 0
+  let linear = 0
+
+  for (const entry of entries) {
+    const refs = parseInternalRefs(entry.description)
+
+    if (refs.some(ref => ref.provider === 'github')) {
+      github += 1
+    }
+
+    if (refs.some(ref => ref.provider === 'linear')) {
+      linear += 1
+    }
+  }
+
+  return { github, linear }
+}
+
+function getClockifyEntrySyncLog(entry: TimeEntryWithRatesDtoV1) {
+  return {
+    description: truncateLogText(entry.description),
+    end: entry.timeInterval?.end,
+    hasEnd: Boolean(entry.timeInterval?.end),
+    id: entry.id,
+    refs: parseInternalRefs(entry.description).map(ref => ref.provider),
+    start: entry.timeInterval?.start,
+    userId: entry.userId,
+    workspaceId: entry.workspaceId,
+  }
+}
+
+function truncateLogText(value: string | undefined, maxLength = 180) {
+  if (!value) {
+    return value
+  }
+
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
+}
+
+function clockifySyncLog(message: string, details?: unknown) {
+  if (details === undefined) {
+    console.info(`[clockify sync] ${message}`)
+    return
+  }
+
+  console.info(`[clockify sync] ${message}`, details)
 }
