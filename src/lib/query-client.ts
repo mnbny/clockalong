@@ -50,6 +50,7 @@ function spreadQueryKeySegments(keys?: QueryKeySegments<unknown>) {
 
 export const queryKeys = {
   clockify: {
+    all: ['clockify'] as const,
     entrySync: (keys?: QueryKeySegments<ClockifyEntrySyncQueryParams>) =>
       ['clockify', 'entry-sync', ...spreadQueryKeySegments(keys)] as const,
     loggedUser: ['clockify', 'logged-user'] as const,

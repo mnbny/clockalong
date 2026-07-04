@@ -210,10 +210,11 @@ Linear disconnect is local-first and provider revocation is best effort. Rust sh
 
 GitHub disconnect is local-only. Rust should clear the stored token and emit an auth-state change. Users revoke or rotate the PAT from GitHub settings.
 
+Clockify disconnect is local-only. Rust clears the saved API key and emits an auth-state change. The frontend must also reset Clockify's TanStack Query cache, clear the synced Clockify entry cache, and remove workspace-bound Clockify settings such as the default project and Quick Timer entry links. This prevents API-key rotation from briefly showing the previous Clockify user's workspace, entries, or running timer.
+
 ## Open implementation choices
 
 - Decide whether to keep Stronghold long term or switch to native Keychain for provider credentials.
 - Confirm the Linear OAuth app behaves correctly from packaged Tauri builds and local development.
 - Decide whether Linear needs more than the initial `read` scope.
-- Decide whether to add Clockify disconnect UI and whether provider disconnect controls belong only in authenticated app chrome or also in settings.
 - Decide whether GitHub account identity should stay native-only or become visible in the public auth snapshot.

@@ -22,6 +22,7 @@ Rust owns Clockify credential storage and auth state. Clockify API calls stay in
 - Validate a saved key by calling `GET /v1/user`.
 - Startup validation should mark Clockify disconnected whenever validation does not succeed; Clockalong does not support offline authenticated Clockify mode.
 - Clear the saved key only when validation clearly fails because the credential is invalid or revoked. Keep the saved key after network or provider failures so the app can retry without asking the user to paste it again.
+- Clockify disconnect should clear the saved key, reset all Clockify TanStack Query cache, clear the local synced Clockify entry collection, and remove workspace-bound Clockify defaults such as the selected default project and Quick Timer entry links. This keeps API-key rotation from showing the previous user's workspace, entries, or running timer.
 - Subdomain and regional workspaces may require a workspace-specific key or alternate base URL. Keep base URL handling configurable instead of hard-coding every request to the global host.
 
 Clockify also has a CAKE.com Marketplace add-on model that uses `X-Addon-Token` and add-on scopes. That path is for marketplace add-ons embedded in or installed into Clockify workspaces. It is not the right auth model for Clockalong's local Tauri desktop app.
@@ -124,6 +125,8 @@ For Clockalong, adapt that pattern to Clockify:
 The synced row shape keeps the original Clockify entry plus local query fields: entry ID, workspace ID, user ID, started-at timestamp, and synced-at timestamp. UI code should query those indexed fields with TanStack DB live queries instead of repeatedly paging Clockify from routes or widgets.
 
 `ClockifySyncProvider` mounts inside the frontend provider stack after `QueryClientProvider`. It resolves the authenticated Clockify user and active/default workspace, then runs the entry sync on the configured interval and whenever callers invalidate or refetch `queryKeys.clockify.entrySync()`.
+
+For broad entry sync, send a `start` lookback but omit `end`. Clockify's user time-entry endpoint treats explicit `end` filters in a timezone-sensitive way that can exclude a user's current local-day entries when their machine timezone differs from the workspace/user timezone. Let Clockify default the upper bound to its own "now", then let local live queries decide which entries belong to today, week, or month.
 
 The `clockifyEntrySyncDays` setting controls the lookback window. Current supported values are `5`, `15`, and `30`, with `30` as the default. Keep this setting as a UX/performance knob, not as a correctness boundary for the Clockify API client.
 
