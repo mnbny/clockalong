@@ -32,7 +32,6 @@ type ClockifyEntrySyncOptions = {
 }
 
 type ClockifyEntrySyncResult = {
-  end: string
   entriesFetched: number
   entriesStored: number
   entriesInserted: number
@@ -42,6 +41,7 @@ type ClockifyEntrySyncResult = {
   pagesFetched: number
   skippedEntries: number
   start: string
+  syncedAt: string
 }
 
 export const clockifyTimeEntriesCollection = createCollection(
@@ -129,7 +129,6 @@ async function syncClockifyEntries({
 }: ClockifyEntrySyncOptions): Promise<ClockifyEntrySyncResult> {
   const now = new Date()
   const syncDays = await storage.get('clockifyEntrySyncDays')
-  const end = now.toISOString()
   const start = getClockifyEntrySyncStart(syncDays, now).toISOString()
   const syncedAt = new Date().toISOString()
   const refCounts = {
@@ -145,9 +144,9 @@ async function syncClockifyEntries({
   let skippedEntries = 0
 
   clockifySyncLog('entry sync start', {
-    end,
     start,
     syncDays,
+    syncedAt,
     userId,
     workspaceId,
   })
@@ -161,7 +160,6 @@ async function syncClockifyEntries({
       const entries = await clockify.getTimeEntries({
         params: { workspaceId, userId },
         queries: {
-          end,
           hydrated: true,
           page,
           'page-size': clockifyEntrySyncPageSize,
@@ -201,7 +199,6 @@ async function syncClockifyEntries({
     }
 
     const result = {
-      end,
       entriesFetched,
       entriesInserted,
       entriesStored,
@@ -211,6 +208,7 @@ async function syncClockifyEntries({
       pagesFetched,
       skippedEntries,
       start,
+      syncedAt,
     } satisfies ClockifyEntrySyncResult
 
     clockifySyncLog('entry sync complete', result)
@@ -218,10 +216,10 @@ async function syncClockifyEntries({
     return result
   } catch (error) {
     clockifySyncLog('entry sync failed', {
-      end,
       error: getErrorMessage(error),
       page,
       start,
+      syncedAt,
       userId,
       workspaceId,
     })

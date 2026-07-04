@@ -125,6 +125,8 @@ The synced row shape keeps the original Clockify entry plus local query fields: 
 
 `ClockifySyncProvider` mounts inside the frontend provider stack after `QueryClientProvider`. It resolves the authenticated Clockify user and active/default workspace, then runs the entry sync on the configured interval and whenever callers invalidate or refetch `queryKeys.clockify.entrySync()`.
 
+For broad entry sync, send a `start` lookback but omit `end`. Clockify's user time-entry endpoint treats explicit `end` filters in a timezone-sensitive way that can exclude a user's current local-day entries when their machine timezone differs from the workspace/user timezone. Let Clockify default the upper bound to its own "now", then let local live queries decide which entries belong to today, week, or month.
+
 The `clockifyEntrySyncDays` setting controls the lookback window. Current supported values are `5`, `15`, and `30`, with `30` as the default. Keep this setting as a UX/performance knob, not as a correctness boundary for the Clockify API client.
 
 The `clockifyEntrySyncInterval` setting controls background sync frequency. Current supported values are `manual`, `5m`, `15m`, `30m`, and `1h`, with `30m` as the default. Manual mode still allows explicit refreshes through query refetches.
