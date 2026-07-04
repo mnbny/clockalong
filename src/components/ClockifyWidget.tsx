@@ -151,15 +151,15 @@ export function ClockifyWidget() {
       }),
       queryFn: () => {
         const now = new Date()
-        const range = getClockifyReportPeriodRange(period.id, now)
+        const settings = userQuery.data?.settings
 
         return clockifyReports.generateSummaryReport(
           {
             amountShown: 'EARNED',
             amounts: ['EARNED'],
-            dateRangeEnd: toClockifyReportDate(range.end),
-            dateRangeStart: toClockifyReportDate(range.start),
-            dateRangeType: 'ABSOLUTE',
+            dateRangeEnd: toClockifyReportDate(now),
+            dateRangeStart: toClockifyReportDate(getDayStart(now)),
+            dateRangeType: getClockifyReportDateRangeType(period.id),
             exportType: 'JSON',
             rounding: false,
             summaryFilter: {
@@ -167,11 +167,13 @@ export function ClockifyWidget() {
               sortColumn: 'GROUP',
               summaryChartType: 'BILLABILITY',
             },
+            ...(settings?.timeZone ? { timeZone: settings.timeZone } : {}),
             users: {
               contains: 'CONTAINS',
               ids: [userQuery.data!.id!],
               status: 'ACTIVE',
             },
+            ...(settings?.weekStart ? { weekStart: settings.weekStart } : {}),
           },
           { params: { workspaceId: selectedWorkspace!.id! } },
         )
@@ -986,22 +988,15 @@ function getClockifyTimeEntryUpdateBody(
   return body
 }
 
-function getClockifyReportPeriodRange(period: ClockifyReportPeriodId, now: Date) {
-  const todayStart = getDayStart(now)
-  const start = new Date(todayStart)
-
+function getClockifyReportDateRangeType(period: ClockifyReportPeriodId): 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' {
   switch (period) {
     case 'today':
-      break
+      return 'TODAY'
     case 'week':
-      start.setDate(start.getDate() - 6)
-      break
+      return 'THIS_WEEK'
     case 'month':
-      start.setDate(start.getDate() - 27)
-      break
+      return 'THIS_MONTH'
   }
-
-  return { end: now, start }
 }
 
 function getClockifyPeriodRange(period: ClockifyReportPeriodId, now: Date) {
