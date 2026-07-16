@@ -290,6 +290,27 @@ async function upsertSyncedClockifyEntries({
   return { inserted, skipped, stored, updated }
 }
 
+export async function upsertSyncedClockifyEntry({
+  entry,
+  syncedAt = new Date().toISOString(),
+  userId,
+  workspaceId,
+}: {
+  entry: TimeEntryWithRatesDtoV1
+  syncedAt?: string
+  userId: string
+  workspaceId: string
+}) {
+  await clockifyTimeEntriesCollection.preload()
+
+  return upsertSyncedClockifyEntries({
+    entries: [entry],
+    syncedAt,
+    userId,
+    workspaceId,
+  })
+}
+
 function getClockifyEntrySyncStart(days: ClockifyEntrySyncDaysOption, now: Date) {
   const start = new Date(now)
   start.setDate(start.getDate() - days)
