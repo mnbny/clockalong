@@ -2,7 +2,7 @@
 
 GitHub is an external work-source provider for Clockify tracking and review. The first workflow is pull-request-centered billing: authored pull requests, review requests, pull-request feedback, and related work that should become accurate Clockify time entries.
 
-GitHub currently supports PAT authentication, repository selection, work-item sync, settings, dashboard display, Clockify timer start/stop, and Clockify tracked-summary matching through internal refs. PR review-comment workflows are not implemented yet.
+GitHub currently supports PAT authentication, repository selection, work-item sync, settings, dashboard display, multi-author dashboard filtering, Clockify timer start/stop, and Clockify tracked-summary matching through internal refs. PR review-comment workflows are not implemented yet.
 
 ## Primary references
 
@@ -144,9 +144,9 @@ Expected native command shape:
 
 No `refreshGithubCredential` command is needed for PAT-first auth.
 
-`src/components/GitHubSettings.tsx` owns the first GitHub settings surface. When GitHub is disconnected it offers the same PAT connection flow as the sign-in screen. When connected, it uses TanStack Query plus Octokit to load repository candidates and store the dashboard allow-list in `githubSelectedRepositories`.
+`src/components/GitHubSettings.tsx` owns the first GitHub settings surface. When GitHub is disconnected it offers the same PAT connection flow as the sign-in screen. When connected, it uses TanStack Query plus Octokit to load repository candidates and store the dashboard allow-list in `githubSelectedRepositories`. The repository control is a searchable multi-select that follows the app's existing settings styles. It stages changes until the user applies them. Its width stays stable while filtering, and long names are truncated with the full name available on hover.
 
-The repository selector uses daisyUI's `filter` pattern: checkbox inputs styled as small buttons. Keep this tag-like control for repo toggles unless the list becomes too large, in which case add more filtering before changing the interaction model.
+Keep the repository selector compact and searchable. Repository selection controls what enters the local work-item cache. Author filtering only changes dashboard visibility.
 
 GitHub entry descriptions are configured separately for issues and pull requests. Keep issue templates limited to issue-safe variables and keep pull-request branch variables on the pull-request template only. Include `{internal-ref}` in provider-backed templates so Clockify entries can be matched back to GitHub rows for tracked totals.
 
@@ -154,7 +154,9 @@ GitHub entry descriptions are configured separately for issues and pull requests
 
 Closed pull requests are synced so recently completed review and build work can still show tracked totals. They stay hidden in the dashboard unless `githubShowClosedWorkItems` is enabled.
 
-`src/components/GitHubWidget.tsx` owns the first GitHub dashboard surface. It gates on GitHub authentication, subscribes to the local GitHub work-item collection, exposes a header toggle for the `githubAuthoredWorkItemsOnly` display filter, exposes a refresh action for the GitHub and Clockify syncs, merges Clockify tracked summaries into the table, and starts or stops Clockify timers with the same control pattern as Linear. Keep broad GitHub reads inside the sync provider rather than fetching GitHub directly from the widget.
+`src/components/GitHubWidget.tsx` owns the first GitHub dashboard surface. It gates on GitHub authentication, subscribes to the local GitHub work-item collection, exposes a refresh action for the GitHub and Clockify syncs, merges Clockify tracked summaries into the table, and starts or stops Clockify timers with the same control pattern as Linear. Keep broad GitHub reads inside the sync provider rather than fetching GitHub directly from the widget.
+
+The dashboard author filter only affects display. The header shows selected authors as avatars, and the user-plus button opens a searchable dialog. The dialog includes authors from the current work-item cache and persisted selections. The authenticated GitHub viewer is always selected and cannot be removed. Store additional authors in `githubSelectedAuthors` with their username and avatar metadata so a selection remains available even when that user is absent from the current cache. The inline `Show all` toggle bypasses author filtering without changing storage. Turning it off restores the selected-author filter. `githubShowClosedWorkItems` controls closed-item visibility separately.
 
 Default issue description:
 

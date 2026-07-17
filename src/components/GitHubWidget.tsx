@@ -1,8 +1,18 @@
-import { IconBrandGithub, IconExternalLink, IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react'
+import {
+  IconBrandGithub,
+  IconCheck,
+  IconExternalLink,
+  IconPlayerPlay,
+  IconPlayerStop,
+  IconRefresh,
+  IconSearch,
+  IconUserPlus,
+  IconX,
+} from '@tabler/icons-react'
 import { and, eq, useLiveQuery } from '@tanstack/react-db'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
-import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useMemo } from 'react'
+import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
 import { queryKeys } from '../lib/query-client'
@@ -24,7 +34,9 @@ import {
   mergeGithubWorkItemTimeSummaries,
   summarizeClockifyGithubWorkItemTimeEntries,
 } from '../services/github/work-item-summaries'
+import { type GithubSelectedAuthor } from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
+import { cx } from '../utils/cx'
 import { getErrorMessage } from '../utils/errors'
 import { internalRefTemplateToken, parseInternalRefs } from '../utils/templates'
 import { appToast } from './AppToaster'
@@ -151,8 +163,9 @@ function GitHubWidgetContent() {
   const [githubIssueDescriptionTemplateFallback] = useStorage('githubIssueDescriptionTemplateFallback')
   const [githubPullRequestDescriptionTemplate] = useStorage('githubPullRequestDescriptionTemplate')
   const [githubPullRequestDescriptionTemplateFallback] = useStorage('githubPullRequestDescriptionTemplateFallback')
-  const [githubAuthoredWorkItemsOnly, setGithubAuthoredWorkItemsOnly] = useStorage('githubAuthoredWorkItemsOnly')
+  const [githubSelectedAuthors, setGithubSelectedAuthors] = useStorage('githubSelectedAuthors')
   const [githubShowClosedWorkItems, setGithubShowClosedWorkItems] = useStorage('githubShowClosedWorkItems')
+  const [showAllGithubWorkItems, setShowAllGithubWorkItems] = useState(false)
   const githubSync = useGithubSync()
   const {
     queries: { syncQuery },
@@ -163,7 +176,6 @@ function GitHubWidgetContent() {
     q.from({ syncedWorkItem: githubWorkItemsCollection }).orderBy(({ syncedWorkItem }) => syncedWorkItem.updatedAt),
   )
   const githubViewerQuery = useQuery({
-    enabled: githubAuthoredWorkItemsOnly,
     queryKey: queryKeys.github.viewer,
     queryFn: async () => {
       const github = await createGithubClient()
@@ -173,15 +185,42 @@ function GitHubWidgetContent() {
     },
     staleTime: 5 * 60_000,
   })
-  const githubViewerLogin = githubAuthoredWorkItemsOnly ? githubViewerQuery.data?.login : null
+  const githubViewerAuthor = githubViewerQuery.data
+    ? {
+        avatarUrl: githubViewerQuery.data.avatar_url,
+        username: githubViewerQuery.data.login,
+      }
+    : null
+  const githubAvailableAuthors = useMemo(
+    () =>
+      mergeGithubAuthors(
+        getGithubAuthorsFromWorkItems(syncedWorkItemsQuery.data ?? []),
+        githubSelectedAuthors,
+        githubViewerAuthor ? [githubViewerAuthor] : [],
+      ),
+    [githubSelectedAuthors, githubViewerAuthor, syncedWorkItemsQuery.data],
+  )
+  const githubSelectedAuthorUsernames = useMemo(
+    () =>
+      new Set(
+        [githubViewerAuthor?.username, ...githubSelectedAuthors.map(author => author.username)]
+          .filter((username): username is string => Boolean(username))
+          .map(normalizeGithubUsername),
+      ),
+    [githubSelectedAuthors, githubViewerAuthor?.username],
+  )
   const workItems = useMemo(
     () =>
       (syncedWorkItemsQuery.data ?? [])
-        .filter(item => !githubAuthoredWorkItemsOnly || item.author === githubViewerLogin)
+        .filter(
+          item =>
+            showAllGithubWorkItems ||
+            (item.author !== null && githubSelectedAuthorUsernames.has(normalizeGithubUsername(item.author))),
+        )
         .filter(item => githubShowClosedWorkItems || item.state !== 'closed')
         .map(row => row)
         .sort(compareGithubWorkItems),
-    [githubAuthoredWorkItemsOnly, githubShowClosedWorkItems, githubViewerLogin, syncedWorkItemsQuery.data],
+    [githubSelectedAuthorUsernames, githubShowClosedWorkItems, showAllGithubWorkItems, syncedWorkItemsQuery.data],
   )
   const clockifyUserQuery = useQuery({
     queryKey: queryKeys.clockify.loggedUser,
@@ -422,15 +461,21 @@ function GitHubWidgetContent() {
               onClick={refreshWorkItems}>
               <IconRefresh className="size-4" />
             </button>
+            <GithubAuthorPicker
+              availableAuthors={githubAvailableAuthors}
+              currentAuthor={githubViewerAuthor}
+              selectedAuthors={githubSelectedAuthors}
+              onChange={authors => setGithubSelectedAuthors(authors)}
+            />
             <label className="flex h-8 cursor-pointer items-center gap-2 text-xs">
               <input
-                aria-label="Only show GitHub work items authored by me"
-                checked={githubAuthoredWorkItemsOnly}
+                aria-label="Show all GitHub work items"
+                checked={showAllGithubWorkItems}
                 className="toggle toggle-primary toggle-xs"
                 type="checkbox"
-                onChange={event => void setGithubAuthoredWorkItemsOnly(event.currentTarget.checked)}
+                onChange={event => setShowAllGithubWorkItems(event.currentTarget.checked)}
               />
-              <span className="whitespace-nowrap">Authored by me</span>
+              <span className="whitespace-nowrap">Show all</span>
             </label>
             <label className="flex h-8 cursor-pointer items-center gap-2 text-xs">
               <input
@@ -587,6 +632,253 @@ function StartTrackingButton({
   )
 }
 
+type GithubAuthorPickerProps = {
+  availableAuthors: GithubSelectedAuthor[]
+  currentAuthor: GithubSelectedAuthor | null
+  selectedAuthors: GithubSelectedAuthor[]
+  onChange: (authors: GithubSelectedAuthor[]) => Promise<void>
+}
+
+function GithubAuthorPicker({ availableAuthors, currentAuthor, onChange, selectedAuthors }: GithubAuthorPickerProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [draftSelectedAuthors, setDraftSelectedAuthors] = useState(selectedAuthors)
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
+  const draftSelectedUsernames = useMemo(
+    () => new Set(draftSelectedAuthors.map(author => normalizeGithubUsername(author.username))),
+    [draftSelectedAuthors],
+  )
+  const pickerAuthors = useMemo(() => {
+    const authors = mergeGithubAuthors(availableAuthors, selectedAuthors)
+
+    return authors.sort(
+      (left, right) =>
+        Number(isGithubUsernameEqual(right.username, currentAuthor?.username)) -
+          Number(isGithubUsernameEqual(left.username, currentAuthor?.username)) ||
+        Number(draftSelectedUsernames.has(normalizeGithubUsername(right.username))) -
+          Number(draftSelectedUsernames.has(normalizeGithubUsername(left.username))) ||
+        compareGithubAuthors(left, right),
+    )
+  }, [availableAuthors, currentAuthor?.username, draftSelectedUsernames, selectedAuthors])
+  const visibleAuthors = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase()
+
+    return pickerAuthors.filter(author => !normalizedSearch || author.username.toLowerCase().includes(normalizedSearch))
+  }, [pickerAuthors, search])
+  const displayAuthors = useMemo(() => {
+    const selectedUsernames = new Set(selectedAuthors.map(author => normalizeGithubUsername(author.username)))
+    const additionalAuthors = mergeGithubAuthors(availableAuthors, selectedAuthors).filter(
+      author =>
+        selectedUsernames.has(normalizeGithubUsername(author.username)) &&
+        !isGithubUsernameEqual(author.username, currentAuthor?.username),
+    )
+
+    return currentAuthor ? [currentAuthor, ...additionalAuthors] : additionalAuthors
+  }, [availableAuthors, currentAuthor, selectedAuthors])
+  const selectionChanged = !areGithubAuthorSelectionsEqual(draftSelectedAuthors, selectedAuthors)
+
+  useEffect(() => {
+    if (dialogOpen) {
+      searchInputRef.current?.focus()
+    }
+  }, [dialogOpen])
+
+  const openPicker = () => {
+    setDraftSelectedAuthors(selectedAuthors)
+    setSearch('')
+    setDialogOpen(true)
+    dialogRef.current?.showModal()
+  }
+
+  const closePicker = () => {
+    dialogRef.current?.close()
+  }
+
+  const handleDialogClose = () => {
+    setDraftSelectedAuthors(selectedAuthors)
+    setSearch('')
+    setDialogOpen(false)
+  }
+
+  const toggleAuthor = (author: GithubSelectedAuthor) => {
+    if (isGithubUsernameEqual(author.username, currentAuthor?.username)) {
+      return
+    }
+
+    setDraftSelectedAuthors(currentAuthors => {
+      if (currentAuthors.some(currentAuthor => isGithubUsernameEqual(currentAuthor.username, author.username))) {
+        return currentAuthors.filter(currentAuthor => !isGithubUsernameEqual(currentAuthor.username, author.username))
+      }
+
+      return [...currentAuthors, author].sort(compareGithubAuthors)
+    })
+  }
+
+  const saveSelection = async () => {
+    setSaving(true)
+
+    try {
+      await onChange(
+        draftSelectedAuthors
+          .filter(author => !isGithubUsernameEqual(author.username, currentAuthor?.username))
+          .sort(compareGithubAuthors),
+      )
+      dialogRef.current?.close()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="flex h-8 items-center gap-0">
+        {displayAuthors.length ? (
+          <div
+            aria-label={`Selected GitHub authors: ${displayAuthors.map(author => author.username).join(', ')}`}
+            className="avatar-group -space-x-1">
+            {displayAuthors.slice(0, 4).map(author => (
+              <GithubAuthorAvatar key={author.username} author={author} className="size-6" />
+            ))}
+            {displayAuthors.length > 4 ? (
+              <div className="avatar avatar-placeholder" title={`${displayAuthors.length - 4} more selected authors`}>
+                <div className="bg-base-300 text-base-content/70 size-6 text-[10px] font-semibold">
+                  <span>+{displayAuthors.length - 4}</span>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <button
+          aria-haspopup="dialog"
+          aria-label="Filter GitHub work items by author"
+          className="btn btn-square btn-ghost btn-sm"
+          title="Filter by author"
+          type="button"
+          onClick={openPicker}>
+          <IconUserPlus className="size-4" />
+        </button>
+      </div>
+
+      <dialog ref={dialogRef} className="modal" onClose={handleDialogClose}>
+        <div className="modal-box max-w-md rounded-lg">
+          <form
+            className="grid gap-5"
+            onSubmit={event => {
+              event.preventDefault()
+
+              if (!selectionChanged || saving) {
+                return
+              }
+
+              void saveSelection()
+            }}>
+            <div className="grid gap-1">
+              <h3 className="text-lg leading-7 font-semibold">Filter by author</h3>
+              <p className="text-base-content/60 text-sm">Choose which GitHub authors appear on the dashboard.</p>
+            </div>
+
+            <div className="input input-primary w-full">
+              <IconSearch className="size-4 opacity-60" />
+              <input
+                ref={searchInputRef}
+                aria-label="Search GitHub authors"
+                placeholder="Search authors"
+                type="search"
+                value={search}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                  }
+                }}
+                onChange={event => setSearch(event.currentTarget.value)}
+              />
+              {search ? (
+                <button
+                  aria-label="Clear author search"
+                  className="btn btn-ghost btn-xs btn-circle"
+                  type="button"
+                  onClick={() => setSearch('')}>
+                  <IconX className="size-3" />
+                </button>
+              ) : null}
+            </div>
+
+            <fieldset
+              className="border-base-content/10 max-h-72 overflow-y-auto border-y py-1"
+              aria-label="GitHub authors">
+              {visibleAuthors.length ? (
+                visibleAuthors.map(author => {
+                  const isCurrentAuthor = isGithubUsernameEqual(author.username, currentAuthor?.username)
+
+                  return (
+                    <label
+                      key={normalizeGithubUsername(author.username)}
+                      className={cx(
+                        'hover:bg-base-200 rounded-box flex items-center gap-3 px-2 py-2',
+                        isCurrentAuthor ? 'cursor-default' : 'cursor-pointer',
+                      )}
+                      title={author.username}>
+                      <input
+                        aria-label={`Show GitHub work items by ${author.username}`}
+                        checked={
+                          isCurrentAuthor || draftSelectedUsernames.has(normalizeGithubUsername(author.username))
+                        }
+                        className="checkbox checkbox-primary checkbox-sm"
+                        disabled={isCurrentAuthor || saving}
+                        type="checkbox"
+                        onChange={() => toggleAuthor(author)}
+                      />
+                      <GithubAuthorAvatar author={author} className="size-8" />
+                      <span className="min-w-0 flex-1 truncate text-sm">{author.username}</span>
+                      {isCurrentAuthor ? <span className="text-base-content/60 text-xs">You</span> : null}
+                    </label>
+                  )
+                })
+              ) : (
+                <div className="text-base-content/60 px-2 py-4 text-center text-sm">
+                  {availableAuthors.length ? 'No authors match your search.' : 'No authors available yet.'}
+                </div>
+              )}
+            </fieldset>
+
+            <div className="modal-action mt-0">
+              <button className="btn btn-ghost" disabled={saving} type="button" onClick={closePicker}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" disabled={!selectionChanged || saving} type="submit">
+                {saving ? <span className="loading loading-spinner loading-sm" /> : <IconCheck className="size-4" />}
+                Apply
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <form className="modal-backdrop" method="dialog">
+          <button type="submit">close</button>
+        </form>
+      </dialog>
+    </>
+  )
+}
+
+function GithubAuthorAvatar({ author, className }: { author: GithubSelectedAuthor; className: string }) {
+  const initials = author.username.slice(0, 2).toUpperCase()
+
+  return (
+    <div className="avatar tooltip shrink-0" data-tip={author.username}>
+      <div
+        className={cx(
+          'bg-base-300 text-base-content/70 grid place-items-center rounded-full text-xs font-semibold',
+          className,
+        )}>
+        {author.avatarUrl ? <img alt={author.username} src={author.avatarUrl} /> : initials}
+      </div>
+    </div>
+  )
+}
+
 function AuthorAvatar({ item }: { item: SyncedGithubWorkItem }) {
   const initials = item.author?.slice(0, 2).toUpperCase() ?? '?'
 
@@ -597,6 +889,51 @@ function AuthorAvatar({ item }: { item: SyncedGithubWorkItem }) {
       </div>
     </div>
   )
+}
+
+function getGithubAuthorsFromWorkItems(items: SyncedGithubWorkItem[]) {
+  return mergeGithubAuthors(
+    items.flatMap(item => (item.author ? [{ avatarUrl: item.authorAvatarUrl, username: item.author }] : [])),
+  )
+}
+
+function mergeGithubAuthors(...authorGroups: GithubSelectedAuthor[][]) {
+  const authors = new Map<string, GithubSelectedAuthor>()
+
+  for (const authorGroup of authorGroups) {
+    for (const author of authorGroup) {
+      const usernameKey = normalizeGithubUsername(author.username)
+      const existingAuthor = authors.get(usernameKey)
+
+      if (!existingAuthor || (!existingAuthor.avatarUrl && author.avatarUrl)) {
+        authors.set(usernameKey, author)
+      }
+    }
+  }
+
+  return [...authors.values()].sort(compareGithubAuthors)
+}
+
+function compareGithubAuthors(left: GithubSelectedAuthor, right: GithubSelectedAuthor) {
+  return left.username.localeCompare(right.username, undefined, { sensitivity: 'base' })
+}
+
+function areGithubAuthorSelectionsEqual(left: GithubSelectedAuthor[], right: GithubSelectedAuthor[]) {
+  const leftUsernames = left.map(author => normalizeGithubUsername(author.username)).sort()
+  const rightUsernames = right.map(author => normalizeGithubUsername(author.username)).sort()
+
+  return (
+    leftUsernames.length === rightUsernames.length &&
+    leftUsernames.every((username, index) => username === rightUsernames[index])
+  )
+}
+
+function isGithubUsernameEqual(left: string | undefined, right: string | undefined) {
+  return Boolean(left && right) && normalizeGithubUsername(left!) === normalizeGithubUsername(right!)
+}
+
+function normalizeGithubUsername(username: string) {
+  return username.trim().toLowerCase()
 }
 
 function compareGithubWorkItems(left: SyncedGithubWorkItem, right: SyncedGithubWorkItem) {

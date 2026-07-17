@@ -1,16 +1,23 @@
 import type { ReactNode } from 'react'
 
+import { cx } from '../../utils/cx'
+
 type SettingsSectionProps = {
+  allowOverflow?: boolean
   title: string
   children: ReactNode
 }
 
-export function SettingsSection({ title, children }: SettingsSectionProps) {
+export function SettingsSection({ allowOverflow = false, title, children }: SettingsSectionProps) {
   return (
     <section className="mx-auto flex w-full max-w-5xl flex-col gap-2">
       <h2 className="text-sm leading-6 font-semibold tracking-normal">{title}</h2>
       <div className="card card-border bg-base-200/10 dark:bg-base-200/40">
-        <div className="card-body divide-base-content/5 divide-y overflow-hidden p-0">
+        <div
+          className={cx(
+            'card-body divide-base-content/5 divide-y p-0',
+            allowOverflow ? 'overflow-visible' : 'overflow-hidden',
+          )}>
           {children}
         </div>
       </div>

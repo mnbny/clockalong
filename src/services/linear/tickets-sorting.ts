@@ -6,25 +6,17 @@ export type SortLinearTicketsOptions = {
   sortOrder: LinearTicketSortOrderOption
 }
 
-type RelevanceBucket =
-  | 'running'
-  | 'recentlyTrackedWorkable'
-  | 'started'
-  | 'unstarted'
-  | 'backlog'
-  | 'recentlyTrackedTerminal'
-  | 'terminal'
+type RelevanceBucket = 'running' | 'recentlyTrackedOpen' | 'started' | 'unstarted' | 'backlog' | 'terminal'
 
 const recentTrackedWindowMs = 7 * 24 * 60 * 60 * 1000
 
 const relevanceBucketRank: Record<RelevanceBucket, number> = {
   running: 0,
-  recentlyTrackedWorkable: 1,
+  recentlyTrackedOpen: 1,
   started: 2,
   unstarted: 3,
   backlog: 4,
-  recentlyTrackedTerminal: 5,
-  terminal: 6,
+  terminal: 5,
 }
 
 const linearStatusTypeRank: Record<string, number> = {
@@ -101,17 +93,12 @@ function compareCustom(
   const secondBucket = getRelevanceBucket(secondTicket, options, now)
   const firstBucketRank = relevanceBucketRank[firstBucket]
   const secondBucketRank = relevanceBucketRank[secondBucket]
-  const inRecentBucket =
-    firstBucket === 'recentlyTrackedWorkable' ||
-    firstBucket === 'recentlyTrackedTerminal' ||
-    secondBucket === 'recentlyTrackedWorkable' ||
-    secondBucket === 'recentlyTrackedTerminal'
+  const inRecentBucket = firstBucket === 'recentlyTrackedOpen' || secondBucket === 'recentlyTrackedOpen'
 
   return (
     compareNumberAsc(firstBucketRank, secondBucketRank) ||
     (inRecentBucket ? compareLastTrackedDesc(firstTicket, secondTicket) : 0) ||
     compareStatus(firstTicket, secondTicket) ||
-    compareLastTrackedDesc(firstTicket, secondTicket) ||
     compareDateDesc(firstTicket.updatedAt, secondTicket.updatedAt) ||
     compareStable(firstTicket, secondTicket)
   )
@@ -126,16 +113,15 @@ function getRelevanceBucket(ticket: LinearTicket, options: SortLinearTicketsOpti
 
   switch (ticket.status.type) {
     case 'started':
-      return recentlyTracked ? 'recentlyTrackedWorkable' : 'started'
     case 'unstarted':
-      return recentlyTracked ? 'recentlyTrackedWorkable' : 'unstarted'
+      return recentlyTracked ? 'recentlyTrackedOpen' : ticket.status.type
     case 'backlog':
     case 'triage':
-      return 'backlog'
+      return recentlyTracked ? 'recentlyTrackedOpen' : 'backlog'
     case 'canceled':
     case 'completed':
     case 'duplicate':
-      return recentlyTracked ? 'recentlyTrackedTerminal' : 'terminal'
+      return 'terminal'
     default:
       return 'terminal'
   }
