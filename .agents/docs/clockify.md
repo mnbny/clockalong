@@ -128,6 +128,8 @@ The synced row shape keeps the original Clockify entry plus local query fields: 
 
 For broad entry sync, send a `start` lookback but omit `end`. Clockify's user time-entry endpoint treats explicit `end` filters in a timezone-sensitive way that can exclude a user's current local-day entries when their machine timezone differs from the workspace/user timezone. Let Clockify default the upper bound to its own "now", then let local live queries decide which entries belong to today, week, or month.
 
+After every page has been fetched successfully, treat the returned entry ids as the authoritative local snapshot for the selected user and workspace. Remove cached rows that were not returned, including rows outside the configured lookback, so Clockify-side deletions and sync-window reductions cannot leave stale entries behind. Never prune the cache after a partial or failed pagination run.
+
 The `clockifyEntrySyncDays` setting controls the lookback window. Current supported values are `5`, `15`, and `30`, with `30` as the default. Keep this setting as a UX/performance knob, not as a correctness boundary for the Clockify API client.
 
 The `clockifyEntrySyncInterval` setting controls background sync frequency. Current supported values are `manual`, `5m`, `15m`, `30m`, and `1h`, with `30m` as the default. Manual mode still allows explicit refreshes through query refetches.
