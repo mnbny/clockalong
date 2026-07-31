@@ -15,8 +15,12 @@ import {
   type ClockifyDescriptionTemplateValues,
   formatClockifyDescriptionTemplate,
 } from '../services/clockify/description-template'
-import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../services/clockify/generated/clockify'
-import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
+import {
+  type CreateTimeEntryRequest,
+  type TimeEntryDtoImplV1,
+  type TimeEntryWithRatesDtoV1,
+} from '../services/clockify/generated/clockify'
+import { clockifyTimeEntriesCollection, upsertSyncedClockifyEntry } from '../services/clockify/sync'
 import {
   type ClockifyTicketTimeSummaries,
   getClockifyEntryLinearTicket,
@@ -354,7 +358,9 @@ function LinearWidgetContent() {
         throw new MissingRunningClockifyEntryError()
       }
 
-      return stopClockifyTimerForEntry({ entry: runningEntry, ticket })
+      const entry = await stopClockifyTimerForEntry({ entry: runningEntry, ticket })
+
+      return { entry, ticket }
     },
     onError: error => {
       if (error instanceof MissingRunningClockifyEntryError) {
@@ -372,10 +378,33 @@ function LinearWidgetContent() {
         description: getErrorMessage(error),
       })
     },
-    onSuccess: (_, ticket) => {
+    onSuccess: async ({ entry, ticket }) => {
       clockifyTimerLog('stop mutation succeeded', {
         ticketIdentifier: ticket.identifier,
       })
+
+      if (entry.id && entry.userId && entry.workspaceId) {
+        try {
+          await upsertSyncedClockifyEntry({
+            entry,
+            userId: entry.userId,
+            workspaceId: entry.workspaceId,
+          })
+        } catch (error) {
+          clockifyTimerLog('stop mutation entry persistence failed', {
+            error: getErrorMessage(error),
+            ticketIdentifier: ticket.identifier,
+          })
+        }
+      } else {
+        clockifyTimerLog('stop mutation returned incomplete entry', {
+          hasEntryId: Boolean(entry.id),
+          hasUserId: Boolean(entry.userId),
+          hasWorkspaceId: Boolean(entry.workspaceId),
+          ticketIdentifier: ticket.identifier,
+        })
+      }
+
       appToast.success(`Stopped timer for ${ticket.identifier}`)
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
@@ -754,7 +783,7 @@ async function stopClockifyTimerForEntry({
 }: {
   entry: TimeEntryDtoImplV1
   ticket: LinearTicket
-}): Promise<TimeEntryDtoImplV1> {
+}): Promise<TimeEntryWithRatesDtoV1> {
   if (!entry.userId || !entry.workspaceId) {
     throw new Error('Running Clockify timer is missing user or workspace information.')
   }
@@ -766,10 +795,21 @@ async function stopClockifyTimerForEntry({
     workspaceId: entry.workspaceId,
   })
 
-  return clockify.stopRunningTimeEntry(
-    { end: new Date().toISOString() },
+  const end = new Date().toISOString()
+  const stoppedEntry = await clockify.stopRunningTimeEntry(
+    { end },
     { params: { userId: entry.userId, workspaceId: entry.workspaceId } },
   )
+
+  return {
+    ...entry,
+    ...stoppedEntry,
+    timeInterval: {
+      ...entry.timeInterval,
+      ...stoppedEntry.timeInterval,
+      end: stoppedEntry.timeInterval?.end ?? end,
+    },
+  }
 }
 
 function getLinearTicketNumber(identifier: string) {

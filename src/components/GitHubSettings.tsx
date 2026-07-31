@@ -1,5 +1,5 @@
 import { type RestEndpointMethodTypes } from '@octokit/rest'
-import { IconBrandGithub, IconCheck, IconRestore } from '@tabler/icons-react'
+import { IconBrandGithub, IconCheck, IconChevronDown, IconRestore, IconSearch, IconX } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -83,7 +83,6 @@ function ConnectedGitHubSettings() {
   const [githubVisibleWorkItemTypes, setGithubVisibleWorkItemTypes] = useStorage('githubVisibleWorkItemTypes')
   const [githubWorkItemSyncLimit, setGithubWorkItemSyncLimit] = useStorage('githubWorkItemSyncLimit')
   const [githubWorkItemSyncInterval, setGithubWorkItemSyncInterval] = useStorage('githubWorkItemSyncInterval')
-  const [githubAuthoredWorkItemsOnly, setGithubAuthoredWorkItemsOnly] = useStorage('githubAuthoredWorkItemsOnly')
   const [githubShowClosedWorkItems, setGithubShowClosedWorkItems] = useStorage('githubShowClosedWorkItems')
   const [githubIssueDescriptionTemplate, setGithubIssueDescriptionTemplate, resetGithubIssueDescriptionTemplate] =
     useStorage('githubIssueDescriptionTemplate')
@@ -113,23 +112,8 @@ function ConnectedGitHubSettings() {
     () => (repositoriesQuery.data ?? []).flatMap(toGithubRepositoryOption).sort(compareGithubRepositories),
     [repositoriesQuery.data],
   )
-  const selectedFullNames = useMemo(
-    () => new Set(githubSelectedRepositories.map(repository => repository.fullName)),
-    [githubSelectedRepositories],
-  )
-
-  const toggleRepository = (repository: GithubSelectedRepository) => {
-    void setGithubSelectedRepositories(currentRepositories => {
-      if (currentRepositories.some(currentRepository => currentRepository.fullName === repository.fullName)) {
-        return currentRepositories.filter(currentRepository => currentRepository.fullName !== repository.fullName)
-      }
-
-      return [...currentRepositories, repository].sort(compareGithubRepositories)
-    })
-  }
-
   return (
-    <SettingsSection title="GitHub">
+    <SettingsSection allowOverflow title="GitHub">
       <SettingsRow label="Sync: Active" description="Repositories included in GitHub sync.">
         <div className="grid w-full gap-3">
           <div className="flex min-h-6 items-center">
@@ -142,18 +126,12 @@ function ConnectedGitHubSettings() {
             </div>
           ) : null}
 
-          <div className="flex max-h-72 flex-wrap gap-2 overflow-y-auto pr-1 filter">
-            {candidateRepositories.map(repository => (
-              <input
-                key={repository.fullName}
-                aria-label={repository.fullName}
-                checked={selectedFullNames.has(repository.fullName)}
-                className="btn btn-sm"
-                type="checkbox"
-                onChange={() => toggleRepository(repository)}
-              />
-            ))}
-          </div>
+          <GithubRepositoryPicker
+            candidateRepositories={candidateRepositories}
+            disabled={repositoriesQuery.isFetching && !candidateRepositories.length}
+            selectedRepositories={githubSelectedRepositories}
+            onChange={repositories => setGithubSelectedRepositories(repositories)}
+          />
 
           {repositoriesQuery.isSuccess && !candidateRepositories.length ? (
             <div className="text-base-content/60 text-sm">No repositories available.</div>
@@ -228,16 +206,6 @@ function ConnectedGitHubSettings() {
             </option>
           ))}
         </select>
-      </SettingsRow>
-
-      <SettingsRow label="Dashboard: Authored by me" description="Show only GitHub items opened by you.">
-        <input
-          aria-label="Only show GitHub work items authored by me"
-          checked={githubAuthoredWorkItemsOnly}
-          className="toggle toggle-primary"
-          type="checkbox"
-          onChange={event => void setGithubAuthoredWorkItemsOnly(event.currentTarget.checked)}
-        />
       </SettingsRow>
 
       <SettingsRow label="Dashboard: Closed Items" description="Show closed pull requests on the dashboard.">
@@ -315,6 +283,205 @@ function ConnectedGitHubSettings() {
         </div>
       </SettingsRow>
     </SettingsSection>
+  )
+}
+
+type GithubRepositoryPickerProps = {
+  candidateRepositories: GithubSelectedRepository[]
+  disabled: boolean
+  selectedRepositories: GithubSelectedRepository[]
+  onChange: (repositories: GithubSelectedRepository[]) => Promise<void>
+}
+
+function GithubRepositoryPicker({
+  candidateRepositories,
+  disabled,
+  onChange,
+  selectedRepositories,
+}: GithubRepositoryPickerProps) {
+  const pickerRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [draftSelectedRepositories, setDraftSelectedRepositories] = useState(selectedRepositories)
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const draftSelectedFullNames = useMemo(
+    () => new Set(draftSelectedRepositories.map(repository => repository.fullName)),
+    [draftSelectedRepositories],
+  )
+  const visibleRepositories = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase()
+
+    return candidateRepositories
+      .filter(repository => !normalizedSearch || repository.fullName.toLowerCase().includes(normalizedSearch))
+      .sort(
+        (left, right) =>
+          Number(draftSelectedFullNames.has(right.fullName)) - Number(draftSelectedFullNames.has(left.fullName)) ||
+          compareGithubRepositories(left, right),
+      )
+  }, [candidateRepositories, draftSelectedFullNames, search])
+  const selectionChanged = !areGithubRepositorySelectionsEqual(draftSelectedRepositories, selectedRepositories)
+
+  useEffect(() => {
+    if (!open) {
+      setDraftSelectedRepositories(selectedRepositories)
+    }
+  }, [open, selectedRepositories])
+
+  useEffect(() => {
+    if (open) {
+      searchInputRef.current?.focus()
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) {
+        setDraftSelectedRepositories(selectedRepositories)
+        setSearch('')
+        setOpen(false)
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setDraftSelectedRepositories(selectedRepositories)
+        setSearch('')
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open, selectedRepositories])
+
+  const openPicker = () => {
+    setDraftSelectedRepositories(selectedRepositories)
+    setSearch('')
+    setOpen(true)
+  }
+
+  const closePicker = () => {
+    setDraftSelectedRepositories(selectedRepositories)
+    setSearch('')
+    setOpen(false)
+  }
+
+  const toggleRepository = (repository: GithubSelectedRepository) => {
+    setDraftSelectedRepositories(currentRepositories => {
+      if (currentRepositories.some(currentRepository => currentRepository.fullName === repository.fullName)) {
+        return currentRepositories.filter(currentRepository => currentRepository.fullName !== repository.fullName)
+      }
+
+      return [...currentRepositories, repository].sort(compareGithubRepositories)
+    })
+  }
+
+  const saveSelection = async () => {
+    setSaving(true)
+
+    try {
+      await onChange([...draftSelectedRepositories].sort(compareGithubRepositories))
+      setSearch('')
+      setOpen(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div ref={pickerRef} className="relative w-full max-w-96">
+      <button
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        className="input input-primary flex w-full cursor-pointer items-center justify-between gap-2 text-left text-sm"
+        disabled={disabled || saving}
+        type="button"
+        onClick={() => (open ? closePicker() : openPicker())}>
+        <span className={cx('truncate', !selectedRepositories.length && 'text-base-content/60')}>
+          {getGithubRepositorySelectionLabel(selectedRepositories.length)}
+        </span>
+        <IconChevronDown className={cx('size-4 shrink-0 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open ? (
+        <div
+          aria-label="Select GitHub repositories"
+          className="border-base-content/10 bg-base-100 rounded-box absolute top-full left-0 z-50 mt-2 w-full border p-3 shadow-sm"
+          role="dialog">
+          <div className="input input-primary input-sm w-full">
+            <IconSearch className="size-4 opacity-60" />
+            <input
+              ref={searchInputRef}
+              aria-label="Search GitHub repositories"
+              placeholder="Search repositories"
+              type="search"
+              value={search}
+              onChange={event => setSearch(event.currentTarget.value)}
+            />
+            {search ? (
+              <button
+                aria-label="Clear repository search"
+                className="btn btn-ghost btn-xs btn-circle"
+                type="button"
+                onClick={() => setSearch('')}>
+                <IconX className="size-3" />
+              </button>
+            ) : null}
+          </div>
+
+          <div className="border-base-content/10 mt-3 max-h-64 overflow-y-auto border-y py-1">
+            {visibleRepositories.length ? (
+              visibleRepositories.map(repository => (
+                <label
+                  key={repository.fullName}
+                  className="hover:bg-base-200 rounded-box flex cursor-pointer items-center gap-3 px-2 py-2"
+                  title={repository.fullName}>
+                  <input
+                    aria-label={repository.fullName}
+                    checked={draftSelectedFullNames.has(repository.fullName)}
+                    className="checkbox checkbox-primary checkbox-sm"
+                    type="checkbox"
+                    onChange={() => toggleRepository(repository)}
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm">{repository.name}</span>
+                    <span className="text-base-content/60 block truncate text-xs">{repository.fullName}</span>
+                  </span>
+                </label>
+              ))
+            ) : (
+              <div className="text-base-content/60 px-2 py-4 text-center text-sm">
+                {candidateRepositories.length ? 'No repositories match your search.' : 'No repositories available.'}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3 flex justify-end gap-2">
+            <button className="btn btn-ghost btn-sm" disabled={saving} type="button" onClick={closePicker}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={!selectionChanged || saving}
+              type="button"
+              onClick={() => void saveSelection()}>
+              {saving ? <span className="loading loading-spinner loading-xs" /> : <IconCheck className="size-4" />}
+              Apply
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -541,6 +708,24 @@ function toGithubRepositoryOption(repository: GithubRepositoryResponse): GithubS
 
 function compareGithubRepositories(left: GithubSelectedRepository, right: GithubSelectedRepository) {
   return left.fullName.localeCompare(right.fullName)
+}
+
+function areGithubRepositorySelectionsEqual(left: GithubSelectedRepository[], right: GithubSelectedRepository[]) {
+  const leftFullNames = left.map(repository => repository.fullName).sort()
+  const rightFullNames = right.map(repository => repository.fullName).sort()
+
+  return (
+    leftFullNames.length === rightFullNames.length &&
+    leftFullNames.every((name, index) => name === rightFullNames[index])
+  )
+}
+
+function getGithubRepositorySelectionLabel(count: number) {
+  if (!count) {
+    return 'Select repositories'
+  }
+
+  return `${count} ${count === 1 ? 'repository' : 'repositories'} selected`
 }
 
 function normalizePositiveInteger(value: string, fallback: number) {

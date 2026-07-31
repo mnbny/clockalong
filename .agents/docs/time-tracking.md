@@ -38,7 +38,7 @@ Provider state should influence ordering, but it should not determine whether an
 
 The current Linear client-side order modes are:
 
-- `custom`: relevance. The running ticket appears first, then recently tracked workable tickets, started tickets, unstarted tickets, backlog/triage tickets, recently tracked terminal tickets, and terminal/unknown tickets. Recent tracking uses the merged Clockify `lastTrackedAt`, not the local link timestamp. Linear status type drives the portable bucket, with workflow-state position, last-tracked time, updated date, and ticket identifier used as tie-breakers.
+- `custom`: relevance. The running ticket appears first. Recently tracked started, unstarted, backlog, and triage tickets follow. Other started tickets, unstarted tickets, backlog/triage tickets, and terminal/unknown tickets come after them. Terminal tickets never receive a recency boost. Recent tracking uses the merged Clockify `lastTrackedAt`, not the local link timestamp. Linear status type drives the portable bucket, with workflow-state position, last-tracked time, updated date, and ticket identifier used as tie-breakers.
 - `status`: Linear workflow type and workflow-state position, then updated date.
 - `created`: created date descending.
 - `updated`: updated date descending.
@@ -58,6 +58,8 @@ Recency should stay functional and restrained. The data that matters:
 - last tracked time
 - total tracked duration for the item
 - source status
+
+The relevance recent window is seven days. When a Linear timer stops, the completed Clockify entry returned by the stop request is upserted into the local Clockify entry cache before the widget refreshes its queries. Relevance sorting can then use the new `lastTrackedAt` immediately, so the ticket does not fall back to its previous position.
 
 Use Day.js relative time for last-tracked values, `humanize-duration` for total tracked duration, and formatted currency for tracked value. Clockify entry aggregation is derived from synced Clockify descriptions that contain Clockalong's `ref:*` internal marker. Rows without matching Clockify entries show a restrained placeholder.
 
@@ -158,7 +160,7 @@ Current columns:
 - `Value`: rate-derived tracked value when Clockify returns a usable hourly rate and currency.
 - external link: no visible heading. Opens the source item in GitHub.
 
-The GitHub widget exposes header controls for explicit refresh, authored-only display filtering, and closed-item display filtering. Authored-only is a dashboard filter, not a sync filter.
+The GitHub widget header has controls for refresh, multi-author filtering, a transient `Show all` override, and closed-item visibility. The author filter always includes the connected GitHub viewer and can include persisted additional authors. Author filtering and `Show all` affect the dashboard only. Repository and work-item-type settings determine what enters the local cache.
 
 ## Controls
 

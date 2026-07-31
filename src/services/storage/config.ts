@@ -45,6 +45,10 @@ export type GithubSelectedRepository = {
   private: boolean
   url: string
 }
+export type GithubSelectedAuthor = {
+  avatarUrl: string | null
+  username: string
+}
 export type GithubVisibleWorkItemTypes = {
   issues: boolean
   pullRequests: boolean
@@ -186,9 +190,9 @@ const storageConfig = {
     default: defaultGithubWorkItemSyncInterval,
     version: 1,
   },
-  githubAuthoredWorkItemsOnly: {
-    type: 'boolean',
-    default: true,
+  githubSelectedAuthors: {
+    type: 'object',
+    default: [] as GithubSelectedAuthor[],
     version: 1,
   },
   githubShowClosedWorkItems: {

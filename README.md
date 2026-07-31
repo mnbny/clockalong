@@ -1,4 +1,3 @@
-
 <h1 align="center">Clockalong</h1>
 <p align="center">Track Clockify time from the work you already have open.</p>
 
@@ -18,13 +17,15 @@ Clockify stays in charge of the time entries. Clockalong gives you a smaller, fa
 - Match Clockify entries back to the work they came from.
 - See running timers, recent activity, totals, and estimated value where Clockify has enough data.
 - Review recent Clockify entries and repair overlapping completed entries.
+- Keep recently tracked non-terminal Linear work near the top under relevance sorting.
+- Filter GitHub dashboard work by multiple authors or temporarily show all synced work.
 - Keep provider credentials in native secure storage instead of browser local storage.
 
 ## Integrations
 
 - Clockify is required and keeps the actual time entries.
 - Linear can show assigned issues and start issue-based timers.
-- GitHub can show selected repositories, issues, and pull requests.
+- GitHub can show selected repositories, issues, and pull requests, with persisted multi-author dashboard filtering.
 - Quick Timers are local presets for reusable timers that are not tied to another app.
 
 ## Authentication
