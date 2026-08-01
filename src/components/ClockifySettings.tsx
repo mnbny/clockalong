@@ -135,9 +135,7 @@ export function ClockifySettings() {
         </select>
       </SettingsRow>
 
-      <SettingsRow
-        label="Project"
-        description="Clockify project used for new timers.">
+      <SettingsRow label="Project" description="Clockify project used for new timers.">
         <div className="flex w-full max-w-sm items-center gap-2">
           <select
             aria-label="Default Clockify project"
