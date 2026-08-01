@@ -32,6 +32,7 @@ type ClockifyEntrySyncOptions = {
 }
 
 type ClockifyEntrySyncResult = {
+  entriesDeleted: number
   entriesFetched: number
   entriesStored: number
   entriesInserted: number
@@ -136,10 +137,7 @@ export async function clearSyncedClockifyTimeEntries() {
   return entryIds.length
 }
 
-async function syncClockifyEntries({
-  userId,
-  workspaceId,
-}: ClockifyEntrySyncOptions): Promise<ClockifyEntrySyncResult> {
+async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOptions) {
   const now = new Date()
   const syncDays = await storage.get('clockifyEntrySyncDays')
   const start = getClockifyEntrySyncStart(syncDays, now).toISOString()
@@ -148,6 +146,7 @@ async function syncClockifyEntries({
     github: 0,
     linear: 0,
   }
+  const fetchedEntryIds = new Set<string>()
   let page = 1
   let entriesFetched = 0
   let entriesInserted = 0
@@ -164,6 +163,11 @@ async function syncClockifyEntries({
     workspaceId,
   })
   await clockifyTimeEntriesCollection.preload()
+  const prunableEntryIds = new Set(
+    clockifyTimeEntriesCollection.toArray
+      .filter(syncedEntry => syncedEntry.userId === userId && syncedEntry.workspaceId === workspaceId)
+      .map(syncedEntry => syncedEntry.id),
+  )
   clockifySyncLog('entry sync collection preloaded', {
     storageKey: clockifyEntrySyncStorageKey,
   })
@@ -185,6 +189,12 @@ async function syncClockifyEntries({
       entriesFetched += entries.length
       refCounts.github += pageRefCounts.github
       refCounts.linear += pageRefCounts.linear
+
+      for (const entry of entries) {
+        if (entry.id) {
+          fetchedEntryIds.add(entry.id)
+        }
+      }
 
       clockifySyncLog('entry sync page fetched', {
         entriesFetched: entries.length,
@@ -211,7 +221,12 @@ async function syncClockifyEntries({
       page += 1
     }
 
+    const entriesDeleted = await deleteStaleSyncedClockifyEntries({
+      fetchedEntryIds,
+      prunableEntryIds,
+    })
     const result = {
+      entriesDeleted,
       entriesFetched,
       entriesInserted,
       entriesStored,
@@ -309,6 +324,24 @@ export async function upsertSyncedClockifyEntry({
     userId,
     workspaceId,
   })
+}
+
+async function deleteStaleSyncedClockifyEntries({
+  fetchedEntryIds,
+  prunableEntryIds,
+}: {
+  fetchedEntryIds: Set<string>
+  prunableEntryIds: Set<string>
+}) {
+  const staleEntryIds = [...prunableEntryIds].filter(entryId => !fetchedEntryIds.has(entryId))
+
+  if (!staleEntryIds.length) {
+    return 0
+  }
+
+  const transaction = clockifyTimeEntriesCollection.delete(staleEntryIds)
+  await transaction.isPersisted.promise
+  return staleEntryIds.length
 }
 
 function getClockifyEntrySyncStart(days: ClockifyEntrySyncDaysOption, now: Date) {
