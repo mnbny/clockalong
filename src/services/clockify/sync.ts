@@ -137,10 +137,7 @@ export async function clearSyncedClockifyTimeEntries() {
   return entryIds.length
 }
 
-async function syncClockifyEntries({
-  userId,
-  workspaceId,
-}: ClockifyEntrySyncOptions): Promise<ClockifyEntrySyncResult> {
+async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOptions) {
   const now = new Date()
   const syncDays = await storage.get('clockifyEntrySyncDays')
   const start = getClockifyEntrySyncStart(syncDays, now).toISOString()
@@ -166,6 +163,11 @@ async function syncClockifyEntries({
     workspaceId,
   })
   await clockifyTimeEntriesCollection.preload()
+  const prunableEntryIds = new Set(
+    clockifyTimeEntriesCollection.toArray
+      .filter(syncedEntry => syncedEntry.userId === userId && syncedEntry.workspaceId === workspaceId)
+      .map(syncedEntry => syncedEntry.id),
+  )
   clockifySyncLog('entry sync collection preloaded', {
     storageKey: clockifyEntrySyncStorageKey,
   })
@@ -221,8 +223,7 @@ async function syncClockifyEntries({
 
     const entriesDeleted = await deleteStaleSyncedClockifyEntries({
       fetchedEntryIds,
-      userId,
-      workspaceId,
+      prunableEntryIds,
     })
     const result = {
       entriesDeleted,
@@ -327,21 +328,12 @@ export async function upsertSyncedClockifyEntry({
 
 async function deleteStaleSyncedClockifyEntries({
   fetchedEntryIds,
-  userId,
-  workspaceId,
+  prunableEntryIds,
 }: {
   fetchedEntryIds: Set<string>
-  userId: string
-  workspaceId: string
+  prunableEntryIds: Set<string>
 }) {
-  const staleEntryIds = clockifyTimeEntriesCollection.toArray
-    .filter(
-      syncedEntry =>
-        syncedEntry.userId === userId &&
-        syncedEntry.workspaceId === workspaceId &&
-        !fetchedEntryIds.has(syncedEntry.id),
-    )
-    .map(syncedEntry => syncedEntry.id)
+  const staleEntryIds = [...prunableEntryIds].filter(entryId => !fetchedEntryIds.has(entryId))
 
   if (!staleEntryIds.length) {
     return 0
