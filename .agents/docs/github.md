@@ -2,7 +2,7 @@
 
 GitHub is an external work-source provider for Clockify tracking and review. The first workflow is pull-request-centered billing: authored pull requests, review requests, pull-request feedback, and related work that should become accurate Clockify time entries.
 
-GitHub currently supports PAT authentication, repository selection, work-item sync, settings, dashboard display, multi-author dashboard filtering, Clockify timer start/stop, and Clockify tracked-summary matching through internal refs. PR review-comment workflows are not implemented yet.
+GitHub supports PAT authentication, repository selection, work-item sync, dashboard display, author filtering, and Clockify timer controls. The additive Mentions filter shows direct mentions and pending direct review requests. Clockify internal refs provide tracked-summary matching. Detailed PR review-comment workflows are not implemented yet.
 
 ## Primary references
 
@@ -152,11 +152,15 @@ GitHub entry descriptions are configured separately for issues and pull requests
 
 `src/services/github/sync.ts` owns GitHub work-item sync. It stores issues and pull requests in one local TanStack DB collection keyed by repository, item type, and number. Sync runs only while GitHub is authenticated, reads the selected repositories from `githubSelectedRepositories`, and respects `githubVisibleWorkItemTypes`. It fetches open issues, open pull requests, and recently updated closed pull requests per repository, sorted by updated time descending. Open pull requests include both draft and active pull requests. `githubWorkItemSyncLimit` caps each repository/type/state fetch, and `githubWorkItemSyncInterval` controls the background refresh cadence. If repositories or item types are removed from settings, the next sync removes matching local rows from the GitHub work-item cache.
 
+Alongside the normal recent-item fetch, the sync fetches direct `@mention` results and open pull requests that directly request the authenticated user's review, limited to the selected repositories. It records `involvementReasons` (`mentioned` and/or `reviewRequested`) and keeps those targeted rows even when they fall outside the normal recent results. It does not infer team review requests or count past comments and reviews as involvement.
+
 Closed pull requests are synced so recently completed review and build work can still show tracked totals. They stay hidden in the dashboard unless `githubShowClosedWorkItems` is enabled.
 
 `src/components/GitHubWidget.tsx` owns the first GitHub dashboard surface. It gates on GitHub authentication, subscribes to the local GitHub work-item collection, exposes a refresh action for the GitHub and Clockify syncs, merges Clockify tracked summaries into the table, and starts or stops Clockify timers with the same control pattern as Linear. Keep broad GitHub reads inside the sync provider rather than fetching GitHub directly from the widget.
 
-The dashboard author filter only affects display. The header shows selected authors as avatars, and the user-plus button opens a searchable dialog. The dialog includes authors from the current work-item cache and persisted selections. The authenticated GitHub viewer is always selected and cannot be removed. Store additional authors in `githubSelectedAuthors` with their username and avatar metadata so a selection remains available even when that user is absent from the current cache. The inline `Show all` toggle bypasses author filtering without changing storage. Turning it off restores the selected-author filter. `githubShowClosedWorkItems` controls closed-item visibility separately.
+The dashboard author filter only affects display. The header shows selected authors as avatars, and the user-plus button opens a searchable dialog. The dialog includes authors from the current work-item cache and persisted selections. The authenticated GitHub viewer is always selected and cannot be removed. Store additional authors in `githubSelectedAuthors` with their username and avatar metadata so a selection remains available even when that user is absent from the current cache.
+
+`Mentions` is a transient, additive filter. It adds rows with `involvementReasons` to the selected-author results instead of replacing them. The inline `Show all` toggle bypasses author filtering without changing storage. Turning it off restores the selected-author filter; `githubShowClosedWorkItems` controls closed-item visibility separately.
 
 Default issue description:
 
