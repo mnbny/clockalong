@@ -103,7 +103,7 @@ Overlap detection reads completed synced entries and ignores running entries. Th
 
 Clicking the overlap badge opens a confirmation dialog with dated before/after ranges for each entry that would move. The repair preserves each entry's duration, keeps non-overlapping entries in place, and shifts overlapping entries forward until that period has no completed-entry overlap. The app updates only changed Clockify entries, then refreshes the entry sync and summary reports.
 
-The widget may expose a compact table for today's synced entries. Keep it visually aligned with the app's existing data-table patterns. Users can edit an entry's start time, end time, or duration from this table when they need to correct tracked time quickly. Do not add adjacent-entry overlap protection to that edit flow; Clockalong should accept intentional overbilling here.
+The widget may expose a compact entry table with `1 day`, `3 days`, and `7 days` calendar-day filters; it defaults to one day. Keep it visually aligned with the app's existing data-table patterns, including the shared row-level play/stop treatment. Resuming an entry creates a new running Clockify entry with the selected entry's trackable fields. Users can edit an entry's start time, end time, or duration from this table when they need to correct tracked time quickly; duration accepts fractional minutes for precise corrections. Do not add adjacent-entry overlap protection to that edit flow; Clockalong should accept intentional overbilling here.
 
 The status badge has only two states:
 
