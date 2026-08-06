@@ -33,6 +33,7 @@ const settingsBackupKeys = [
   'quickTimersColumns',
   'quickTimers',
   'quickTimersCache',
+  'menuBarVisible',
   'linearTicketSyncLimit',
   'linearTicketSyncInterval',
   'linearTicketSyncOrderBy',
@@ -54,6 +55,7 @@ type SettingsBackupKey = (typeof settingsBackupKeys)[number]
 
 export function AppSettings() {
   const [theme, setTheme] = useStorage('theme')
+  const [menuBarVisible, setMenuBarVisible] = useStorage('menuBarVisible')
   const settingsImportInputRef = useRef<HTMLInputElement>(null)
   const [appLogsDrawerOpen, setAppLogsDrawerOpen] = useState(false)
   const [importingSettings, setImportingSettings] = useState(false)
@@ -189,6 +191,16 @@ export function AppSettings() {
                 </label>
               ))}
             </fieldset>
+          </SettingsRow>
+
+          <SettingsRow label="Menu bar" description="Show Clockalong in the macOS menu bar.">
+            <input
+              aria-label="Show menu bar item"
+              checked={menuBarVisible}
+              className="toggle toggle-primary"
+              type="checkbox"
+              onChange={event => void setMenuBarVisible(event.currentTarget.checked)}
+            />
           </SettingsRow>
 
           <SettingsRow label="Backup" description="Export, import, or reset app settings and Quick Timers.">
@@ -618,6 +630,7 @@ const customFrontendLogPrefixes = [
   '[linear auth]',
   '[linear tickets]',
   '[linear widget]',
+  '[menu bar]',
   '[quick timers]',
   '[sign in]',
   '[storage]',

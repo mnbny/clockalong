@@ -52,6 +52,12 @@ Clockalong uses Tauri's updater plugin for direct-download macOS updates. The up
 - `src/components/AppSettings.tsx` owns the manual update check/install/restart UI rendered from the settings route.
 - Do not auto-install or auto-restart. Active time tracking should stay user-controlled.
 
+## macOS menu bar
+
+`src/hooks/useMenuBar.ts` owns the status item, active-timer title, native menu, and menu actions. It reads recent completed entries from the synced Clockify collection. `src/services/clockify/time-entries.ts` contains the shared start and stop behavior. `menuBarVisible` persists the App settings toggle.
+
+On macOS, closing the main window hides it so the status item and timer remain available. The Dock restores the hidden window, while the native menu's Quit item explicitly exits the app.
+
 ## Auth gate
 
 Rust owns the startup authentication snapshot. `src-tauri/src/auth.rs` exposes the command/event surface and delegates provider-specific credential work to `auth_linear.rs` and `auth_clockify.rs`. Those modules read provider credentials from Stronghold during setup, validate or refresh them as needed, emit `clockalong-auth:state-changed`, and leave app initialization blocked until that native check completes.

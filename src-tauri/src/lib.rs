@@ -10,6 +10,9 @@ mod stronghold_config;
 
 use tauri::Manager;
 
+#[cfg(target_os = "macos")]
+use tauri::WindowEvent;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     iota_stronghold::engine::snapshot::try_set_encrypt_work_factor(0)
@@ -89,5 +92,31 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, _event| {});
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            match event {
+                tauri::RunEvent::WindowEvent {
+                    label,
+                    event: WindowEvent::CloseRequested { api, .. },
+                    ..
+                } if label == "main" => {
+                    api.prevent_close();
+
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.hide();
+                    }
+                }
+                tauri::RunEvent::Reopen {
+                    has_visible_windows: false,
+                    ..
+                } => {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.unminimize();
+                        let _ = window.set_focus();
+                    }
+                }
+                _ => {}
+            }
+        });
 }
