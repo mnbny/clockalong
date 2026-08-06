@@ -120,6 +120,11 @@ const storageConfig = {
     default: null as QuickTimersActiveEntry,
     version: 1,
   },
+  menuBarVisible: {
+    type: 'boolean',
+    default: true,
+    version: 1,
+  },
   linearTicketSyncLimit: {
     type: 'number',
     default: defaultLinearTicketSyncLimit,

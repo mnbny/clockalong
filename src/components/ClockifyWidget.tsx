@@ -1,8 +1,4 @@
-import type {
-  CreateTimeEntryRequest,
-  TimeEntryWithRatesDtoV1,
-  UpdateTimeEntryRequest,
-} from '../services/clockify/generated/clockify'
+import type { TimeEntryWithRatesDtoV1, UpdateTimeEntryRequest } from '../services/clockify/generated/clockify'
 import type { TimeEntrySummaryReportDto } from '../services/clockify/generated/reports'
 
 import { formatCurrency } from '@automattic/format-currency'
@@ -33,6 +29,11 @@ import {
   getCompletedClockifyTimeEntryOverlapFixes,
 } from '../services/clockify/overlaps'
 import { clockifyTimeEntriesCollection, type SyncedClockifyTimeEntry } from '../services/clockify/sync'
+import {
+  getClockifyTimeEntryTitle,
+  resumeClockifyTimeEntry,
+  stopClockifyTimeEntry,
+} from '../services/clockify/time-entries'
 import { useStorage } from '../services/storage/useStorage'
 import { getErrorMessage } from '../utils/errors'
 import { appToast } from './AppToaster'
@@ -299,15 +300,7 @@ export function ClockifyWidget() {
     },
   })
   const resumeClockifyEntryMutation = useMutation({
-    mutationFn: (entry: TimeEntryWithRatesDtoV1) => {
-      if (!entry.workspaceId) {
-        throw new Error('Clockify entry is missing workspace information.')
-      }
-
-      return clockify.createTimeEntry(getClockifyTimeEntryResumeBody(entry), {
-        params: { workspaceId: entry.workspaceId },
-      })
-    },
+    mutationFn: resumeClockifyTimeEntry,
     onError: error => {
       appToast.error('Could not resume Clockify timer', {
         description: getErrorMessage(error),
@@ -321,11 +314,7 @@ export function ClockifyWidget() {
     },
   })
   const stopRunningEntryMutation = useMutation({
-    mutationFn: (entry: TimeEntryWithRatesDtoV1) =>
-      clockify.stopRunningTimeEntry(
-        { end: new Date().toISOString() },
-        { params: { userId: entry.userId ?? '', workspaceId: entry.workspaceId ?? '' } },
-      ),
+    mutationFn: stopClockifyTimeEntry,
     onError: error => {
       appToast.error('Could not stop Clockify timer', {
         description: getErrorMessage(error),
@@ -471,7 +460,7 @@ export function ClockifyWidget() {
             <div className="grid gap-1">
               <h3 className="text-lg leading-7 font-semibold">Edit Entry</h3>
               <p className="text-base-content/60 truncate text-sm">
-                {editDialogState ? getEntryTitle(editDialogState.entry) : 'Clockify time entry'}
+                {editDialogState ? getClockifyTimeEntryTitle(editDialogState.entry) : 'Clockify time entry'}
               </p>
             </div>
 
@@ -576,7 +565,7 @@ export function ClockifyWidget() {
                 <tbody>
                   {overlapFixes.map(fix => (
                     <tr key={fix.entry.id ?? `${fix.start.toISOString()}-${fix.end.toISOString()}`}>
-                      <td className="max-w-80 truncate">{getEntryTitle(fix.entry)}</td>
+                      <td className="max-w-80 truncate">{getClockifyTimeEntryTitle(fix.entry)}</td>
                       <td className="whitespace-nowrap tabular-nums">
                         {formatDatedTimeRange(fix.entry.timeInterval?.start, fix.entry.timeInterval?.end)}
                       </td>
@@ -818,8 +807,8 @@ function ClockifyEntriesTable({
                       stopping={stoppingEntryId === syncedEntry.id}
                     />
                   </td>
-                  <td className="w-full min-w-0" title={getEntryTitle(syncedEntry.entry)}>
-                    <div className="truncate">{getEntryTitle(syncedEntry.entry)}</div>
+                  <td className="w-full min-w-0" title={getClockifyTimeEntryTitle(syncedEntry.entry)}>
+                    <div className="truncate">{getClockifyTimeEntryTitle(syncedEntry.entry)}</div>
                   </td>
                   <td className="whitespace-nowrap tabular-nums">
                     {formatEntryTimeRange(
@@ -833,7 +822,7 @@ function ClockifyEntriesTable({
                     <button
                       className="btn btn-square btn-ghost text-primary hover:bg-primary/10 btn-xs"
                       type="button"
-                      aria-label={`Edit ${getEntryTitle(syncedEntry.entry)}`}
+                      aria-label={`Edit ${getClockifyTimeEntryTitle(syncedEntry.entry)}`}
                       title="Edit entry"
                       disabled={!syncedEntry.entry.id || !syncedEntry.entry.workspaceId}
                       onClick={() => onEdit(syncedEntry.entry)}>
@@ -871,7 +860,7 @@ function ClockifyEntryTrackingButton({
   resuming: boolean
   stopping: boolean
 }) {
-  const entryTitle = getEntryTitle(entry)
+  const entryTitle = getClockifyTimeEntryTitle(entry)
 
   if (active) {
     return (
@@ -927,7 +916,7 @@ function RunningTimerView({
           Timer
         </div>
         <RunningTimerElapsed start={entry.timeInterval?.start} />
-        <div className="text-base-content/60 truncate text-sm">{getEntryTitle(entry)}</div>
+        <div className="text-base-content/60 truncate text-sm">{getClockifyTimeEntryTitle(entry)}</div>
       </div>
 
       <button
@@ -988,10 +977,6 @@ function formatReportPeriodStat(
     label: period.label,
     time: formatShortDuration(seconds * 1000),
   }
-}
-
-function getEntryTitle(entry: TimeEntryWithRatesDtoV1) {
-  return entry.description?.trim() || 'Untitled time entry'
 }
 
 function parseDate(value: string | undefined) {
@@ -1169,32 +1154,6 @@ function getClockifyTimeEntryUpdateBody(
 
   if (entry.type === 'REGULAR' || entry.type === 'BREAK') {
     body.type = entry.type
-  }
-
-  return body
-}
-
-function getClockifyTimeEntryResumeBody(entry: TimeEntryWithRatesDtoV1): CreateTimeEntryRequest {
-  const body: CreateTimeEntryRequest = {
-    billable: entry.billable ?? false,
-    start: new Date().toISOString(),
-    type: entry.type === 'BREAK' ? 'BREAK' : 'REGULAR',
-  }
-
-  if (entry.description !== undefined) {
-    body.description = entry.description
-  }
-
-  if (entry.projectId) {
-    body.projectId = entry.projectId
-  }
-
-  if (entry.taskId) {
-    body.taskId = entry.taskId
-  }
-
-  if (entry.tagIds) {
-    body.tagIds = entry.tagIds
   }
 
   return body

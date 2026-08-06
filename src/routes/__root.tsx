@@ -4,6 +4,7 @@ import { AppHeader } from '../components/AppHeader'
 import { AppToaster } from '../components/AppToaster'
 import { useAppUpdates } from '../hooks/useAppUpdates'
 import { useDevTools } from '../hooks/useDevTools'
+import { useMenuBar } from '../hooks/useMenuBar'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -12,6 +13,7 @@ export const Route = createRootRoute({
 function RootLayout() {
   useDevTools()
   useAppUpdates()
+  useMenuBar()
 
   return (
     <main className="bg-base-100 text-base-content grid h-dvh w-dvw grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
