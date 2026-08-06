@@ -33,6 +33,16 @@ export class StorageService<T extends StorageConfig> {
     await this.getStore()
   }
 
+  getSnapshot = async (): Promise<Record<string, unknown>> => {
+    const store = await this.getStore()
+
+    if (!store) {
+      return {}
+    }
+
+    return Object.fromEntries(await store.entries())
+  }
+
   get = async <K extends StorageKey<typeof this.config>>(key: K): Promise<StorageValue<typeof this.config, K>> => {
     type Value = StorageValue<typeof this.config, K>
     const defaultValue = this.config[key]?.default as Value
