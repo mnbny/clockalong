@@ -26,7 +26,12 @@ import {
   type GithubIssueDescriptionTemplateValues,
   type GithubPullRequestDescriptionTemplateValues,
 } from '../services/github/description-template'
-import { githubWorkItemsCollection, type SyncedGithubWorkItem, useGithubSync } from '../services/github/sync'
+import {
+  getGithubWorkItemInvolvementReasons,
+  githubWorkItemsCollection,
+  type SyncedGithubWorkItem,
+  useGithubSync,
+} from '../services/github/sync'
 import {
   getClockifyEntryGithubWorkItem,
   getGithubWorkItemInternalRef,
@@ -166,6 +171,7 @@ function GitHubWidgetContent() {
   const [githubSelectedAuthors, setGithubSelectedAuthors] = useStorage('githubSelectedAuthors')
   const [githubShowClosedWorkItems, setGithubShowClosedWorkItems] = useStorage('githubShowClosedWorkItems')
   const [showAllGithubWorkItems, setShowAllGithubWorkItems] = useState(false)
+  const [showMentionedGithubWorkItems, setShowMentionedGithubWorkItems] = useState(false)
   const githubSync = useGithubSync()
   const {
     queries: { syncQuery },
@@ -215,12 +221,19 @@ function GitHubWidgetContent() {
         .filter(
           item =>
             showAllGithubWorkItems ||
-            (item.author !== null && githubSelectedAuthorUsernames.has(normalizeGithubUsername(item.author))),
+            (item.author !== null && githubSelectedAuthorUsernames.has(normalizeGithubUsername(item.author))) ||
+            (showMentionedGithubWorkItems && getGithubWorkItemInvolvementReasons(item).length > 0),
         )
         .filter(item => githubShowClosedWorkItems || item.state !== 'closed')
         .map(row => row)
         .sort(compareGithubWorkItems),
-    [githubSelectedAuthorUsernames, githubShowClosedWorkItems, showAllGithubWorkItems, syncedWorkItemsQuery.data],
+    [
+      githubSelectedAuthorUsernames,
+      githubShowClosedWorkItems,
+      showAllGithubWorkItems,
+      showMentionedGithubWorkItems,
+      syncedWorkItemsQuery.data,
+    ],
   )
   const clockifyUserQuery = useQuery({
     queryKey: queryKeys.clockify.loggedUser,
@@ -467,6 +480,18 @@ function GitHubWidgetContent() {
               selectedAuthors={githubSelectedAuthors}
               onChange={authors => setGithubSelectedAuthors(authors)}
             />
+            <label
+              className="flex h-8 cursor-pointer items-center gap-2 text-xs"
+              title="Add items where you were mentioned or requested to review">
+              <input
+                aria-label="Show GitHub work items that mention you or request your review"
+                checked={showMentionedGithubWorkItems}
+                className="toggle toggle-primary toggle-xs"
+                type="checkbox"
+                onChange={event => setShowMentionedGithubWorkItems(event.currentTarget.checked)}
+              />
+              <span className="whitespace-nowrap">Mentions</span>
+            </label>
             <label className="flex h-8 cursor-pointer items-center gap-2 text-xs">
               <input
                 aria-label="Show all GitHub work items"

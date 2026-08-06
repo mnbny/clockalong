@@ -18,17 +18,23 @@ import { createGithubClient } from './client'
 import { getGithubWorkItemSyncIntervalMilliseconds } from './sync-settings'
 
 type GithubIssue = RestEndpointMethodTypes['issues']['listForRepo']['response']['data'][number]
+type GithubMentionedIssue = RestEndpointMethodTypes['issues']['listForAuthenticatedUser']['response']['data'][number]
 type GithubPullRequest = RestEndpointMethodTypes['pulls']['list']['response']['data'][number]
+type GithubPullRequestDetails = RestEndpointMethodTypes['pulls']['get']['response']['data']
+type GithubIssueData = GithubIssue | GithubMentionedIssue
+type GithubPullRequestData = GithubPullRequest | GithubPullRequestDetails
 
 const githubWorkItemsStorageKey = 'clockalong.github.workItems.v1'
 
 export type GithubWorkItemType = 'issue' | 'pullRequest'
+export type GithubWorkItemInvolvementReason = 'mentioned' | 'reviewRequested'
 
 export type GithubIssueWorkItem = {
   author: string | null
   authorAvatarUrl: string | null
   id: string
-  item: GithubIssue
+  involvementReasons?: GithubWorkItemInvolvementReason[]
+  item: GithubIssueData
   number: number
   repositoryFullName: string
   repositoryOwner: string
@@ -47,7 +53,8 @@ export type GithubPullRequestWorkItem = {
   baseBranch: string
   headBranch: string
   id: string
-  item: GithubPullRequest
+  involvementReasons?: GithubWorkItemInvolvementReason[]
+  item: GithubPullRequestData
   number: number
   repositoryFullName: string
   repositoryOwner: string
@@ -166,6 +173,7 @@ async function syncGithubWorkItems({
 }: GithubWorkItemSyncOptions): Promise<GithubWorkItemSyncResult> {
   const syncedAt = new Date().toISOString()
   const fetchedItemIds = new Set<string>()
+  const syncedWorkItemsById = new Map<string, SyncedGithubWorkItem>()
   let issuesFetched = 0
   let itemsStored = 0
   let pullRequestsFetched = 0
@@ -198,14 +206,8 @@ async function syncGithubWorkItems({
       })
       const issueItems = issuesResponse.data.flatMap(issue => toSyncedGithubIssue({ issue, repository, syncedAt }))
 
-      for (const item of issueItems) {
-        fetchedItemIds.add(item.id)
-      }
-
-      const upsertResult = await upsertSyncedGithubWorkItems(issueItems)
-
       issuesFetched += issueItems.length
-      itemsStored += upsertResult.stored
+      addGithubWorkItems(syncedWorkItemsById, issueItems)
     }
 
     if (visibleWorkItemTypes.pullRequests) {
@@ -229,16 +231,36 @@ async function syncGithubWorkItems({
         pullRequest => toSyncedGithubPullRequest({ pullRequest, repository, syncedAt }),
       )
 
-      for (const item of pullRequestItems) {
-        fetchedItemIds.add(item.id)
-      }
-
-      const upsertResult = await upsertSyncedGithubWorkItems(pullRequestItems)
-
       pullRequestsFetched += pullRequestItems.length
-      itemsStored += upsertResult.stored
+      addGithubWorkItems(syncedWorkItemsById, pullRequestItems)
     }
   }
+
+  await syncGithubMentionedWorkItems({
+    github,
+    repositories,
+    syncLimit,
+    syncedAt,
+    syncedWorkItemsById,
+    visibleWorkItemTypes,
+  })
+  await syncGithubReviewRequestWorkItems({
+    github,
+    repositories,
+    syncLimit,
+    syncedAt,
+    syncedWorkItemsById,
+    visibleWorkItemTypes,
+  })
+
+  const syncedWorkItems = [...syncedWorkItemsById.values()]
+
+  for (const item of syncedWorkItems) {
+    fetchedItemIds.add(item.id)
+  }
+
+  const upsertResult = await upsertSyncedGithubWorkItems(syncedWorkItems)
+  itemsStored += upsertResult.stored
 
   const itemsDeleted = await deleteStaleSyncedGithubWorkItems({ fetchedItemIds, repositories, visibleWorkItemTypes })
 
@@ -251,12 +273,203 @@ async function syncGithubWorkItems({
   }
 }
 
+async function syncGithubMentionedWorkItems({
+  github,
+  repositories,
+  syncLimit,
+  syncedAt,
+  syncedWorkItemsById,
+  visibleWorkItemTypes,
+}: {
+  github: Awaited<ReturnType<typeof createGithubClient>>
+  repositories: GithubSelectedRepository[]
+  syncLimit: number
+  syncedAt: string
+  syncedWorkItemsById: Map<string, SyncedGithubWorkItem>
+  visibleWorkItemTypes: GithubVisibleWorkItemTypes
+}) {
+  const repositoriesByFullName = new Map(repositories.map(repository => [repository.fullName, repository]))
+  const response = await github.rest.issues.listForAuthenticatedUser({
+    direction: 'desc',
+    filter: 'mentioned',
+    per_page: syncLimit,
+    sort: 'updated',
+    state: 'open',
+  })
+
+  for (const issue of response.data) {
+    const repository = getGithubMentionedIssueRepository(issue, repositoriesByFullName)
+
+    if (!repository) {
+      continue
+    }
+
+    if (issue.pull_request) {
+      if (!visibleWorkItemTypes.pullRequests) {
+        continue
+      }
+
+      await addGithubRelevantPullRequest({
+        github,
+        involvementReason: 'mentioned',
+        number: issue.number,
+        repository,
+        syncedAt,
+        syncedWorkItemsById,
+      })
+      continue
+    }
+
+    if (!visibleWorkItemTypes.issues) {
+      continue
+    }
+
+    addGithubWorkItems(
+      syncedWorkItemsById,
+      toSyncedGithubIssue({
+        involvementReasons: ['mentioned'],
+        issue,
+        repository,
+        syncedAt,
+      }),
+    )
+  }
+}
+
+async function syncGithubReviewRequestWorkItems({
+  github,
+  repositories,
+  syncLimit,
+  syncedAt,
+  syncedWorkItemsById,
+  visibleWorkItemTypes,
+}: {
+  github: Awaited<ReturnType<typeof createGithubClient>>
+  repositories: GithubSelectedRepository[]
+  syncLimit: number
+  syncedAt: string
+  syncedWorkItemsById: Map<string, SyncedGithubWorkItem>
+  visibleWorkItemTypes: GithubVisibleWorkItemTypes
+}) {
+  if (!visibleWorkItemTypes.pullRequests) {
+    return
+  }
+
+  for (const repository of repositories) {
+    const response = await github.rest.search.issuesAndPullRequests({
+      order: 'desc',
+      per_page: syncLimit,
+      q: `repo:${repository.fullName} is:open is:pr user-review-requested:@me`,
+      sort: 'updated',
+    })
+
+    for (const pullRequest of response.data.items) {
+      await addGithubRelevantPullRequest({
+        github,
+        involvementReason: 'reviewRequested',
+        number: pullRequest.number,
+        repository,
+        syncedAt,
+        syncedWorkItemsById,
+      })
+    }
+  }
+}
+
+async function addGithubRelevantPullRequest({
+  github,
+  involvementReason,
+  number,
+  repository,
+  syncedAt,
+  syncedWorkItemsById,
+}: {
+  github: Awaited<ReturnType<typeof createGithubClient>>
+  involvementReason: GithubWorkItemInvolvementReason
+  number: number
+  repository: GithubSelectedRepository
+  syncedAt: string
+  syncedWorkItemsById: Map<string, SyncedGithubWorkItem>
+}) {
+  const id = getGithubWorkItemId(repository.fullName, 'pullRequest', number)
+  const existingItem = syncedWorkItemsById.get(id)
+
+  if (existingItem) {
+    syncedWorkItemsById.set(id, addGithubWorkItemInvolvementReason(existingItem, involvementReason))
+    return
+  }
+
+  const response = await github.rest.pulls.get({
+    owner: repository.owner,
+    pull_number: number,
+    repo: repository.name,
+  })
+  const pullRequestItem = toSyncedGithubPullRequest({
+    involvementReasons: [involvementReason],
+    pullRequest: response.data,
+    repository,
+    syncedAt,
+  })
+
+  addGithubWorkItems(syncedWorkItemsById, pullRequestItem)
+}
+
+function getGithubMentionedIssueRepository(
+  issue: GithubMentionedIssue,
+  repositoriesByFullName: Map<string, GithubSelectedRepository>,
+) {
+  const repositoryFullName = issue.repository?.full_name
+
+  return repositoryFullName ? repositoriesByFullName.get(repositoryFullName) : undefined
+}
+
+function addGithubWorkItems(syncedWorkItemsById: Map<string, SyncedGithubWorkItem>, items: SyncedGithubWorkItem[]) {
+  for (const item of items) {
+    const existingItem = syncedWorkItemsById.get(item.id)
+
+    syncedWorkItemsById.set(
+      item.id,
+      existingItem
+        ? {
+            ...item,
+            involvementReasons: mergeGithubWorkItemInvolvementReasons(
+              existingItem.involvementReasons,
+              item.involvementReasons,
+            ),
+          }
+        : item,
+    )
+  }
+}
+
+function addGithubWorkItemInvolvementReason(
+  item: SyncedGithubWorkItem,
+  involvementReason: GithubWorkItemInvolvementReason,
+) {
+  return {
+    ...item,
+    involvementReasons: mergeGithubWorkItemInvolvementReasons(item.involvementReasons, [involvementReason]),
+  }
+}
+
+function mergeGithubWorkItemInvolvementReasons(...reasonGroups: Array<GithubWorkItemInvolvementReason[] | undefined>) {
+  const reasons = new Set(reasonGroups.flatMap(reasonGroup => reasonGroup ?? []))
+
+  return (['reviewRequested', 'mentioned'] as const).filter(reason => reasons.has(reason))
+}
+
+export function getGithubWorkItemInvolvementReasons(workItem: SyncedGithubWorkItem) {
+  return workItem.involvementReasons ?? []
+}
+
 function toSyncedGithubIssue({
+  involvementReasons = [],
   issue,
   repository,
   syncedAt,
 }: {
-  issue: GithubIssue
+  involvementReasons?: GithubWorkItemInvolvementReason[]
+  issue: GithubIssueData
   repository: GithubSelectedRepository
   syncedAt: string
 }): SyncedGithubWorkItem[] {
@@ -269,6 +482,7 @@ function toSyncedGithubIssue({
       author: issue.user?.login ?? null,
       authorAvatarUrl: issue.user?.avatar_url ?? null,
       id: getGithubWorkItemId(repository.fullName, 'issue', issue.number),
+      involvementReasons,
       item: issue,
       number: issue.number,
       repositoryFullName: repository.fullName,
@@ -285,11 +499,13 @@ function toSyncedGithubIssue({
 }
 
 function toSyncedGithubPullRequest({
+  involvementReasons = [],
   pullRequest,
   repository,
   syncedAt,
 }: {
-  pullRequest: GithubPullRequest
+  involvementReasons?: GithubWorkItemInvolvementReason[]
+  pullRequest: GithubPullRequestData
   repository: GithubSelectedRepository
   syncedAt: string
 }): SyncedGithubWorkItem[] {
@@ -300,6 +516,7 @@ function toSyncedGithubPullRequest({
       baseBranch: pullRequest.base.ref,
       headBranch: pullRequest.head.ref,
       id: getGithubWorkItemId(repository.fullName, 'pullRequest', pullRequest.number),
+      involvementReasons,
       item: pullRequest,
       number: pullRequest.number,
       repositoryFullName: repository.fullName,

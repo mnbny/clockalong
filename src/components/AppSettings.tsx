@@ -1,9 +1,19 @@
-import { IconCopy, IconDownload, IconFileText, IconRefresh, IconTrash, IconX } from '@tabler/icons-react'
+import {
+  IconCopy,
+  IconDownload,
+  IconFileText,
+  IconRefresh,
+  IconRestore,
+  IconTrash,
+  IconUpload,
+  IconX,
+} from '@tabler/icons-react'
 import { useMutation } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { type ChangeEvent, useMemo, useRef, useState } from 'react'
 
 import { useAppLogs } from '../hooks/useAppLogs'
-import { type ThemeOption, themeOptions } from '../services/storage/config'
+import { storage, type ThemeOption, themeOptions } from '../services/storage/config'
+import { type StorageKey, type StorageValue } from '../services/storage/storage'
 import { useStorage } from '../services/storage/useStorage'
 import { app } from '../services/tauri/app-client'
 import { type AppUpdate, type AppUpdateDownloadProgress, appUpdates } from '../services/tauri/app-updates'
@@ -12,9 +22,42 @@ import { appToast } from './AppToaster'
 import { PageHeader } from './PageHeader'
 import { SettingsRow, SettingsSection } from './settings/SettingsSection'
 
+const settingsBackupKeys = [
+  'clockifyBillable',
+  'clockifyDefaultProject',
+  'clockifyDescriptionTemplate',
+  'clockifyDescriptionTemplateFallback',
+  'clockifyEntrySyncDays',
+  'clockifyEntrySyncInterval',
+  'quickTimersEnabled',
+  'quickTimersColumns',
+  'quickTimers',
+  'quickTimersCache',
+  'linearTicketSyncLimit',
+  'linearTicketSyncInterval',
+  'linearTicketSyncOrderBy',
+  'linearTicketSortOrder',
+  'githubSelectedRepositories',
+  'githubVisibleWorkItemTypes',
+  'githubWorkItemSyncLimit',
+  'githubWorkItemSyncInterval',
+  'githubSelectedAuthors',
+  'githubShowClosedWorkItems',
+  'githubIssueDescriptionTemplate',
+  'githubIssueDescriptionTemplateFallback',
+  'githubPullRequestDescriptionTemplate',
+  'githubPullRequestDescriptionTemplateFallback',
+  'theme',
+] as const satisfies readonly StorageKey<typeof storage.config>[]
+
+type SettingsBackupKey = (typeof settingsBackupKeys)[number]
+
 export function AppSettings() {
   const [theme, setTheme] = useStorage('theme')
+  const settingsImportInputRef = useRef<HTMLInputElement>(null)
   const [appLogsDrawerOpen, setAppLogsDrawerOpen] = useState(false)
+  const [importingSettings, setImportingSettings] = useState(false)
+  const [resettingSettings, setResettingSettings] = useState(false)
   const appLogs = useAppLogs({ enabled: appLogsDrawerOpen })
   const displayedAppLogs = useMemo(() => filterDisplayedAppLogs(appLogs.value.contents), [appLogs.value.contents])
   const clearAppLogsMutation = useMutation({
@@ -50,18 +93,73 @@ export function AppSettings() {
       return
     }
 
-    const blob = new Blob([displayedAppLogs], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-
-    link.href = url
-    link.download = `clockalong-logs-${getLogDownloadTimestamp(new Date())}.txt`
-    document.body.append(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
+    downloadTextFile(
+      displayedAppLogs,
+      'text/plain;charset=utf-8',
+      `clockalong-logs-${getDownloadTimestamp(new Date())}.txt`,
+    )
     appToast.success('Logs downloaded')
   }
+
+  const exportSettings = async () => {
+    try {
+      await downloadSettingsBackup()
+      appToast.success('Settings exported', {
+        description: 'Saved to your Downloads folder.',
+      })
+    } catch (error) {
+      appToast.error('Could not export settings', {
+        description: getErrorMessage(error),
+      })
+    }
+  }
+
+  const importSettings = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0]
+
+    event.currentTarget.value = ''
+
+    if (!file) {
+      return
+    }
+
+    setImportingSettings(true)
+
+    try {
+      const snapshot = parseSettingsSnapshot(await file.text())
+      const { importedKeys, skippedKeys } = await importSettingsBackup(snapshot)
+
+      appToast.success('Settings imported', {
+        description: getSettingsImportDescription(importedKeys.length, skippedKeys.length),
+      })
+    } catch (error) {
+      appToast.error('Could not import settings', {
+        description: getErrorMessage(error),
+      })
+    } finally {
+      setImportingSettings(false)
+    }
+  }
+
+  const resetSettings = async () => {
+    setResettingSettings(true)
+
+    try {
+      await downloadSettingsBackup()
+      await resetSettingsBackup()
+      appToast.success('Settings reset', {
+        description: 'A backup was saved to your Downloads folder.',
+      })
+    } catch (error) {
+      appToast.error('Could not reset settings', {
+        description: getErrorMessage(error),
+      })
+    } finally {
+      setResettingSettings(false)
+    }
+  }
+
+  const backupActionPending = importingSettings || resettingSettings
 
   return (
     <div className="drawer drawer-end">
@@ -91,6 +189,52 @@ export function AppSettings() {
                 </label>
               ))}
             </fieldset>
+          </SettingsRow>
+
+          <SettingsRow label="Backup" description="Export, import, or reset app settings and Quick Timers.">
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="btn btn-primary btn-sm"
+                type="button"
+                disabled={backupActionPending}
+                onClick={() => void exportSettings()}>
+                <IconDownload className="size-4" />
+                Export
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                type="button"
+                disabled={backupActionPending}
+                onClick={() => settingsImportInputRef.current?.click()}>
+                {importingSettings ? (
+                  <span className="loading loading-spinner loading-xs" />
+                ) : (
+                  <IconUpload className="size-4" />
+                )}
+                Import
+              </button>
+              <input
+                ref={settingsImportInputRef}
+                accept="application/json,.json"
+                aria-label="Import settings"
+                className="hidden"
+                disabled={backupActionPending}
+                type="file"
+                onChange={event => void importSettings(event)}
+              />
+              <button
+                className="btn btn-error btn-sm"
+                type="button"
+                disabled={backupActionPending}
+                onClick={() => void resetSettings()}>
+                {resettingSettings ? (
+                  <span className="loading loading-spinner loading-xs" />
+                ) : (
+                  <IconRestore className="size-4" />
+                )}
+                Reset
+              </button>
+            </div>
           </SettingsRow>
 
           <SettingsRow label="Updates" description="Check for app updates.">
@@ -338,11 +482,109 @@ function formatBytes(bytes: number) {
   return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`
 }
 
-function getLogDownloadTimestamp(date: Date) {
+function downloadTextFile(contents: string, type: string, filename: string) {
+  const blob = new Blob([contents], { type })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = filename
+  document.body.append(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function getDownloadTimestamp(date: Date) {
   return date
     .toISOString()
     .replace(/\.\d{3}Z$/, 'Z')
     .replace(/[:.]/g, '-')
+}
+
+async function downloadSettingsBackup() {
+  const snapshot = await storage.getSnapshot()
+
+  downloadTextFile(
+    JSON.stringify(snapshot, null, 2),
+    'application/json;charset=utf-8',
+    `clockalong-settings-${getDownloadTimestamp(new Date())}.json`,
+  )
+}
+
+function parseSettingsSnapshot(contents: string) {
+  let snapshot: unknown
+
+  try {
+    snapshot = JSON.parse(contents)
+  } catch {
+    throw new Error('Choose a valid Clockalong settings JSON file.')
+  }
+
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+    throw new Error('Choose a valid Clockalong settings JSON file.')
+  }
+
+  return snapshot as Record<string, unknown>
+}
+
+function getSettingsImportDescription(importedCount: number, skippedCount: number) {
+  const importedLabel = `${importedCount} setting${importedCount === 1 ? '' : 's'} restored`
+
+  if (!skippedCount) {
+    return importedLabel
+  }
+
+  return `${importedLabel}; ${skippedCount} unsupported setting${skippedCount === 1 ? '' : 's'} skipped`
+}
+
+async function importSettingsBackup(snapshot: Record<string, unknown>) {
+  const importedKeys: SettingsBackupKey[] = []
+  const skippedKeys: SettingsBackupKey[] = []
+
+  for (const key of settingsBackupKeys) {
+    if (!Object.prototype.hasOwnProperty.call(snapshot, key)) {
+      continue
+    }
+
+    const value = snapshot[key]
+
+    if (!isStorageValue(key, value)) {
+      skippedKeys.push(key)
+      continue
+    }
+
+    await storage.set(key, value)
+    importedKeys.push(key)
+  }
+
+  if (!importedKeys.length) {
+    throw new Error('This file does not contain any supported Clockalong settings.')
+  }
+
+  return { importedKeys, skippedKeys }
+}
+
+async function resetSettingsBackup() {
+  for (const key of settingsBackupKeys) {
+    await storage.remove(key)
+  }
+}
+
+function isStorageValue<K extends StorageKey<typeof storage.config>>(
+  key: K,
+  value: unknown,
+): value is StorageValue<typeof storage.config, K> {
+  switch (storage.config[key].type) {
+    case 'boolean':
+      return typeof value === 'boolean'
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value)
+    case 'object':
+      return value === null || typeof value === 'object'
+    case 'string':
+      return typeof value === 'string'
+  }
 }
 
 function filterDisplayedAppLogs(contents: string) {

@@ -210,7 +210,7 @@ function signInLog(message: string) {
 async function clearClockifySessionState() {
   await resetClockifyQueryCache()
   const clearedTimeEntries = await clearSyncedClockifyTimeEntries()
-  await Promise.all([storage.remove('clockifyDefaultProject'), storage.remove('clockifyQuickTimerEntryLinks')])
+  await Promise.all([storage.remove('clockifyDefaultProject'), storage.remove('quickTimersActiveEntry')])
 
   return clearedTimeEntries
 }

@@ -1,4 +1,8 @@
-import type { TimeEntryWithRatesDtoV1, UpdateTimeEntryRequest } from '../services/clockify/generated/clockify'
+import type {
+  CreateTimeEntryRequest,
+  TimeEntryWithRatesDtoV1,
+  UpdateTimeEntryRequest,
+} from '../services/clockify/generated/clockify'
 import type { TimeEntrySummaryReportDto } from '../services/clockify/generated/reports'
 
 import { formatCurrency } from '@automattic/format-currency'
@@ -10,6 +14,7 @@ import {
   IconEye,
   IconEyeOff,
   IconPencil,
+  IconPlayerPlay,
   IconPlayerStop,
   IconRefresh,
   IconWand,
@@ -28,6 +33,7 @@ import {
   getCompletedClockifyTimeEntryOverlapFixes,
 } from '../services/clockify/overlaps'
 import { clockifyTimeEntriesCollection, type SyncedClockifyTimeEntry } from '../services/clockify/sync'
+import { useStorage } from '../services/storage/useStorage'
 import { getErrorMessage } from '../utils/errors'
 import { appToast } from './AppToaster'
 import { ClockifyIcon } from './icons/ClockifyIcon'
@@ -45,6 +51,8 @@ const clockifyReportPeriods = [
   { id: 'month', label: 'Month' },
 ] as const
 type ClockifyReportPeriodId = (typeof clockifyReportPeriods)[number]['id']
+const clockifyEntryTableDayRanges = [1, 3, 7] as const
+type ClockifyEntryTableDayRange = (typeof clockifyEntryTableDayRanges)[number]
 type ClockifyOverlapDialogState = {
   fixes: ClockifyTimeEntryOverlapFix[]
   label: string
@@ -96,9 +104,11 @@ const formatShortDuration = humanizeDuration.humanizer({
 
 export function ClockifyWidget() {
   const queryClient = useQueryClient()
+  const [, setQuickTimersActiveEntry] = useStorage('quickTimersActiveEntry')
   const fixOverlapDialogRef = useRef<HTMLDialogElement>(null)
   const editEntryDialogRef = useRef<HTMLDialogElement>(null)
   const [entriesVisible, setEntriesVisible] = useState(false)
+  const [entryTableDayRange, setEntryTableDayRange] = useState<ClockifyEntryTableDayRange>(1)
   const [overlapDialogState, setOverlapDialogState] = useState<ClockifyOverlapDialogState | null>(null)
   const [editDialogState, setEditDialogState] = useState<ClockifyEntryEditDialogState | null>(null)
   const userQuery = useQuery({
@@ -184,6 +194,10 @@ export function ClockifyWidget() {
   })
   const entrySyncFetching = useIsFetching({ queryKey: queryKeys.clockify.entrySync() }) > 0
   const todaySyncedEntries = useSyncedClockifyEntriesForPeriod('today', {
+    userId: userQuery.data?.id,
+    workspaceId: selectedWorkspace?.id,
+  })
+  const entryTableSyncedEntries = useSyncedClockifyEntriesForRecentDays(entryTableDayRange, {
     userId: userQuery.data?.id,
     workspaceId: selectedWorkspace?.id,
   })
@@ -284,6 +298,28 @@ export function ClockifyWidget() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
     },
   })
+  const resumeClockifyEntryMutation = useMutation({
+    mutationFn: (entry: TimeEntryWithRatesDtoV1) => {
+      if (!entry.workspaceId) {
+        throw new Error('Clockify entry is missing workspace information.')
+      }
+
+      return clockify.createTimeEntry(getClockifyTimeEntryResumeBody(entry), {
+        params: { workspaceId: entry.workspaceId },
+      })
+    },
+    onError: error => {
+      appToast.error('Could not resume Clockify timer', {
+        description: getErrorMessage(error),
+      })
+    },
+    onSuccess: () => {
+      appToast.success('Resumed Clockify timer')
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.entrySync() })
+    },
+  })
   const stopRunningEntryMutation = useMutation({
     mutationFn: (entry: TimeEntryWithRatesDtoV1) =>
       clockify.stopRunningTimeEntry(
@@ -296,6 +332,7 @@ export function ClockifyWidget() {
       })
     },
     onSuccess: () => {
+      void setQuickTimersActiveEntry(null)
       appToast.success('Stopped Clockify timer')
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
@@ -400,14 +437,21 @@ export function ClockifyWidget() {
           </div>
 
           {entriesVisible ? (
-            <TodayClockifyEntriesTable
-              entries={todaySyncedEntries}
+            <ClockifyEntriesTable
+              activeEntryId={runningEntry?.id ?? null}
+              entries={entryTableSyncedEntries}
+              entryTableDayRange={entryTableDayRange}
               onEdit={entry => {
                 flushSync(() => {
                   setEditDialogState(getClockifyEntryEditDialogState(entry))
                 })
                 editEntryDialogRef.current?.showModal()
               }}
+              onEntryTableDayRangeChange={setEntryTableDayRange}
+              onResume={entry => resumeClockifyEntryMutation.mutate(entry)}
+              onStop={entry => stopRunningEntryMutation.mutate(entry)}
+              resumingEntryId={resumeClockifyEntryMutation.isPending ? resumeClockifyEntryMutation.variables?.id : null}
+              stoppingEntryId={stopRunningEntryMutation.isPending ? stopRunningEntryMutation.variables?.id : null}
             />
           ) : null}
         </div>
@@ -470,7 +514,7 @@ export function ClockifyWidget() {
                       aria-label="Clockify entry duration in minutes"
                       className="min-w-0 grow"
                       min={0}
-                      step={1}
+                      step="any"
                       type="number"
                       value={editDialogState.durationMinutes}
                       onChange={event => {
@@ -630,6 +674,43 @@ function useSyncedClockifyEntriesForPeriod(
   return syncedEntriesQuery.data ?? []
 }
 
+function useSyncedClockifyEntriesForRecentDays(
+  days: ClockifyEntryTableDayRange,
+  {
+    userId,
+    workspaceId,
+  }: {
+    userId: string | undefined
+    workspaceId: string | undefined
+  },
+) {
+  const range = getClockifyEntryTableRange(days, new Date())
+  const rangeStart = range.start.toISOString()
+  const rangeEnd = range.end.toISOString()
+  const syncedEntriesQuery = useLiveQuery(
+    q => {
+      if (!userId || !workspaceId) {
+        return null
+      }
+
+      return q
+        .from({ syncedEntry: clockifyTimeEntriesCollection })
+        .where(({ syncedEntry }) =>
+          and(
+            eq(syncedEntry.userId, userId),
+            eq(syncedEntry.workspaceId, workspaceId),
+            gte(syncedEntry.startedAt, rangeStart),
+            lt(syncedEntry.startedAt, rangeEnd),
+          ),
+        )
+        .orderBy(({ syncedEntry }) => syncedEntry.startedAt)
+    },
+    [rangeEnd, rangeStart, userId, workspaceId],
+  )
+
+  return syncedEntriesQuery.data ?? []
+}
+
 function summarizeSyncedEntryLog(entries: SyncedClockifyTimeEntry[]) {
   return {
     count: entries.length,
@@ -663,27 +744,60 @@ function useClockifyOverlapFixes(entries: SyncedClockifyTimeEntry[]) {
   )
 }
 
-function TodayClockifyEntriesTable({
+function ClockifyEntriesTable({
+  activeEntryId,
   entries,
+  entryTableDayRange,
   onEdit,
+  onEntryTableDayRangeChange,
+  onResume,
+  onStop,
+  resumingEntryId,
+  stoppingEntryId,
 }: {
+  activeEntryId: string | null
   entries: SyncedClockifyTimeEntry[]
+  entryTableDayRange: ClockifyEntryTableDayRange
   onEdit: (entry: TimeEntryWithRatesDtoV1) => void
+  onEntryTableDayRangeChange: (days: ClockifyEntryTableDayRange) => void
+  onResume: (entry: TimeEntryWithRatesDtoV1) => void
+  onStop: (entry: TimeEntryWithRatesDtoV1) => void
+  resumingEntryId: string | null | undefined
+  stoppingEntryId: string | null | undefined
 }) {
   return (
-    <div className="border-base-content/5 border-t px-4 py-3">
+    <div className="border-base-content/5 grid gap-3 border-t px-4 py-3">
+      <div className="flex justify-end">
+        <div className="join" role="group" aria-label="Clockify entry date range">
+          {clockifyEntryTableDayRanges.map(days => (
+            <button
+              key={days}
+              className={entryTableDayRange === days ? 'btn btn-primary btn-sm join-item' : 'btn btn-sm join-item'}
+              type="button"
+              aria-pressed={entryTableDayRange === days}
+              onClick={() => onEntryTableDayRangeChange(days)}>
+              {days} day{days === 1 ? '' : 's'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="table-zebra table-sm table w-full table-fixed">
           <colgroup>
+            <col className="w-12" />
             <col className="w-full" />
-            <col className="w-36" />
+            <col className="w-48" />
             <col className="w-24" />
             <col className="w-12" />
           </colgroup>
           <thead>
             <tr>
+              <th className="w-12 min-w-12 text-center">
+                <span className="sr-only">Track time</span>
+              </th>
               <th className="w-full min-w-0">Entry</th>
-              <th className="whitespace-nowrap">Time</th>
+              <th className="whitespace-nowrap">{entryTableDayRange === 1 ? 'Time' : 'Date & time'}</th>
               <th className="whitespace-nowrap">Duration</th>
               <th className="w-12 min-w-12 text-center">
                 <span className="sr-only">Edit</span>
@@ -694,11 +808,25 @@ function TodayClockifyEntriesTable({
             {entries.length ? (
               entries.map(syncedEntry => (
                 <tr key={syncedEntry.id}>
+                  <td className="w-12 min-w-12 text-center">
+                    <ClockifyEntryTrackingButton
+                      active={syncedEntry.id === activeEntryId}
+                      entry={syncedEntry.entry}
+                      onResume={onResume}
+                      onStop={onStop}
+                      resuming={resumingEntryId === syncedEntry.id}
+                      stopping={stoppingEntryId === syncedEntry.id}
+                    />
+                  </td>
                   <td className="w-full min-w-0" title={getEntryTitle(syncedEntry.entry)}>
                     <div className="truncate">{getEntryTitle(syncedEntry.entry)}</div>
                   </td>
                   <td className="whitespace-nowrap tabular-nums">
-                    {formatTimeRange(syncedEntry.entry.timeInterval?.start, syncedEntry.entry.timeInterval?.end)}
+                    {formatEntryTimeRange(
+                      syncedEntry.entry.timeInterval?.start,
+                      syncedEntry.entry.timeInterval?.end,
+                      entryTableDayRange > 1,
+                    )}
                   </td>
                   <td className="whitespace-nowrap tabular-nums">{formatEntryDuration(syncedEntry.entry)}</td>
                   <td className="w-12 min-w-12 text-center">
@@ -716,8 +844,8 @@ function TodayClockifyEntriesTable({
               ))
             ) : (
               <tr>
-                <td className="text-base-content/60" colSpan={4}>
-                  No synced Clockify entries for today.
+                <td className="text-base-content/60" colSpan={5}>
+                  No synced Clockify entries for the selected range.
                 </td>
               </tr>
             )}
@@ -725,6 +853,60 @@ function TodayClockifyEntriesTable({
         </table>
       </div>
     </div>
+  )
+}
+
+function ClockifyEntryTrackingButton({
+  active,
+  entry,
+  onResume,
+  onStop,
+  resuming,
+  stopping,
+}: {
+  active: boolean
+  entry: TimeEntryWithRatesDtoV1
+  onResume: (entry: TimeEntryWithRatesDtoV1) => void
+  onStop: (entry: TimeEntryWithRatesDtoV1) => void
+  resuming: boolean
+  stopping: boolean
+}) {
+  const entryTitle = getEntryTitle(entry)
+
+  if (active) {
+    return (
+      <button
+        aria-label={`Stop Clockify timer for ${entryTitle}`}
+        className="time-tracking-action-button btn btn-square btn-ghost text-error hover:bg-error/10 size-10 min-h-10"
+        data-time-tracking-action={entry.id}
+        title={`Stop Clockify timer for ${entryTitle}`}
+        type="button"
+        disabled={stopping}
+        onClick={() => onStop(entry)}>
+        {stopping ? (
+          <span className="loading loading-spinner loading-xs" />
+        ) : (
+          <IconPlayerStop className="pointer-events-none size-5" />
+        )}
+      </button>
+    )
+  }
+
+  return (
+    <button
+      aria-label={`Resume Clockify timer for ${entryTitle}`}
+      className="time-tracking-action-button btn btn-square btn-ghost text-primary hover:bg-primary/10 size-10 min-h-10"
+      data-time-tracking-action={entry.id}
+      title={`Resume Clockify timer for ${entryTitle}`}
+      type="button"
+      disabled={resuming}
+      onClick={() => onResume(entry)}>
+      {resuming ? (
+        <span className="loading loading-spinner loading-xs" />
+      ) : (
+        <IconPlayerPlay className="pointer-events-none size-5" />
+      )}
+    </button>
   )
 }
 
@@ -841,6 +1023,10 @@ function toLocalDateTimeInputValue(date: Date) {
 
 function formatTimeRange(startValue: string | undefined, endValue: string | undefined) {
   return `${formatTime(startValue)} - ${formatTime(endValue)}`
+}
+
+function formatEntryTimeRange(startValue: string | undefined, endValue: string | undefined, includeDate: boolean) {
+  return includeDate ? formatDatedTimeRange(startValue, endValue) : formatTimeRange(startValue, endValue)
 }
 
 function formatDatedTimeRange(startValue: string | undefined, endValue: string | undefined) {
@@ -988,6 +1174,32 @@ function getClockifyTimeEntryUpdateBody(
   return body
 }
 
+function getClockifyTimeEntryResumeBody(entry: TimeEntryWithRatesDtoV1): CreateTimeEntryRequest {
+  const body: CreateTimeEntryRequest = {
+    billable: entry.billable ?? false,
+    start: new Date().toISOString(),
+    type: entry.type === 'BREAK' ? 'BREAK' : 'REGULAR',
+  }
+
+  if (entry.description !== undefined) {
+    body.description = entry.description
+  }
+
+  if (entry.projectId) {
+    body.projectId = entry.projectId
+  }
+
+  if (entry.taskId) {
+    body.taskId = entry.taskId
+  }
+
+  if (entry.tagIds) {
+    body.tagIds = entry.tagIds
+  }
+
+  return body
+}
+
 function getClockifyReportDateRangeType(period: ClockifyReportPeriodId): 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' {
   switch (period) {
     case 'today':
@@ -1016,6 +1228,16 @@ function getClockifyPeriodRange(period: ClockifyReportPeriodId, now: Date) {
       start.setDate(start.getDate() - 6)
       break
   }
+
+  return { end, start }
+}
+
+function getClockifyEntryTableRange(days: ClockifyEntryTableDayRange, now: Date) {
+  const start = getDayStart(now)
+  const end = getDayStart(now)
+
+  start.setDate(start.getDate() - (days - 1))
+  end.setDate(end.getDate() + 1)
 
   return { end, start }
 }
