@@ -107,14 +107,24 @@ export function useMenuBar() {
     },
     [userId, workspaceId],
   )
-  const recentEntries = useMemo(
-    () =>
-      (syncedEntriesQuery.data ?? [])
-        .filter(syncedEntry => Boolean(syncedEntry.entry.timeInterval?.end) && syncedEntry.id !== runningEntry?.id)
-        .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
-        .slice(0, recentEntryLimit),
-    [runningEntry?.id, syncedEntriesQuery.data],
-  )
+  const recentEntries = useMemo(() => {
+    const seenTitles = new Set<string>()
+
+    return (syncedEntriesQuery.data ?? [])
+      .filter(syncedEntry => Boolean(syncedEntry.entry.timeInterval?.end) && syncedEntry.id !== runningEntry?.id)
+      .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
+      .filter(syncedEntry => {
+        const title = getClockifyTimeEntryTitle(syncedEntry.entry)
+
+        if (seenTitles.has(title)) {
+          return false
+        }
+
+        seenTitles.add(title)
+        return true
+      })
+      .slice(0, recentEntryLimit)
+  }, [runningEntry?.id, syncedEntriesQuery.data])
 
   const openDestination = useCallback(
     async (destination: MenuBarDestination) => {
