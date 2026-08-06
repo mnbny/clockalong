@@ -42,7 +42,11 @@ function showAppToast(level: AppToastLevel, message: ReactNode, options?: AppToa
           {options.action.label}
         </button>
       ) : null}
-      <button className="btn btn-square btn-ghost btn-xs ml-auto" type="button" onClick={() => toast.dismiss(toastId)}>
+      <button
+        className="btn btn-square btn-ghost btn-xs ml-auto"
+        style={{ color: 'inherit' }}
+        type="button"
+        onClick={() => toast.dismiss(toastId)}>
         <IconX className="size-4" />
       </button>
     </div>
