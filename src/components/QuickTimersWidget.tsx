@@ -67,7 +67,7 @@ export function QuickTimersWidget() {
   const [quickTimers] = useStorage('quickTimers')
   const [quickTimersColumns] = useStorage('quickTimersColumns')
   const [quickTimersEnabled] = useStorage('quickTimersEnabled')
-  const [clockifyQuickTimerEntryLinks] = useStorage('clockifyQuickTimerEntryLinks')
+  const [quickTimersActiveEntry] = useStorage('quickTimersActiveEntry')
   const normalizedColumns = normalizeQuickTimerColumns(quickTimersColumns)
   const clockifyUserQuery = useQuery({
     enabled: quickTimersEnabled,
@@ -117,7 +117,8 @@ export function QuickTimersWidget() {
     const runningEntries = runningEntryQuery.data ?? []
     return runningEntries.find(entry => entry.userId === clockifyUserQuery.data?.id) ?? runningEntries[0] ?? null
   }, [clockifyUserQuery.data?.id, runningEntryQuery.data])
-  const activeQuickTimerId = runningEntry?.id ? clockifyQuickTimerEntryLinks[runningEntry.id]?.quickTimerId : undefined
+  const activeQuickTimerId =
+    runningEntry?.id === quickTimersActiveEntry?.entryId ? quickTimersActiveEntry?.quickTimerId : undefined
 
   if (!quickTimersEnabled) {
     return null
@@ -453,7 +454,7 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
   const queryClient = useQueryClient()
   const [clockifyBillable] = useStorage('clockifyBillable')
   const [clockifyDefaultProject] = useStorage('clockifyDefaultProject')
-  const [, setClockifyQuickTimerEntryLinks] = useStorage('clockifyQuickTimerEntryLinks')
+  const [, setQuickTimersActiveEntry] = useStorage('quickTimersActiveEntry')
   const [quickTimers] = useStorage('quickTimers')
   const [quickTimersCache, setQuickTimersCache] = useStorage('quickTimersCache')
   const quickTimer = quickTimers.find(timer => timer.id === quickTimerId)
@@ -508,15 +509,9 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
         description: getErrorMessage(error),
       })
     },
-    onSuccess: async (entry, values) => {
+    onSuccess: async entry => {
       if (entry.id) {
-        await setClockifyQuickTimerEntryLinks(current => ({
-          ...current,
-          [entry.id as string]: {
-            quickTimerId,
-            values,
-          },
-        }))
+        await setQuickTimersActiveEntry({ entryId: entry.id, quickTimerId })
       }
 
       appToast.success(`Started timer for ${quickTimer?.name ?? 'Quick Timer'}`)

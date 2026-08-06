@@ -23,14 +23,7 @@ export const themeOptions = [
   { theme: 'abyss', appearance: 'dark' },
   { theme: 'emerald', appearance: 'light' },
 ] as const
-export const defaultViewOptions = ['dashboard', 'recent', 'active'] as const
-export const refreshIntervalOptions = ['manual', '5m', '15m', '30m'] as const
 
-export type ClockifyQuickTimerEntryLink = {
-  quickTimerId: string
-  values: Record<string, string>
-}
-export type ClockifyQuickTimerEntryLinkRegistry = Record<string, ClockifyQuickTimerEntryLink>
 export type ClockifyDefaultProject = {
   projectId: string
   projectName: string
@@ -56,40 +49,22 @@ export type GithubVisibleWorkItemTypes = {
 export const defaultGithubWorkItemSyncLimit = 30
 export const maxGithubWorkItemSyncLimit = 100
 export type ThemeOption = (typeof themeOptions)[number]
-export type DefaultViewOption = (typeof defaultViewOptions)[number]
 export type QuickTimerPreset = {
   descriptionTemplate: string
   icon: string
   id: string
   name: string
 }
+export type QuickTimersActiveEntry = {
+  entryId: string
+  quickTimerId: string
+} | null
 export type QuickTimersCacheEntry = {
   id: string
   values: Record<string, string>
 }
-export type RefreshIntervalOption = (typeof refreshIntervalOptions)[number]
 
 const storageConfig = {
-  compactRows: {
-    type: 'boolean',
-    default: false,
-    version: 1,
-  },
-  defaultView: {
-    type: 'string',
-    default: defaultViewOptions[0] as DefaultViewOption,
-    version: 1,
-  },
-  density: {
-    type: 'number',
-    default: 60,
-    version: 1,
-  },
-  desktopAlerts: {
-    type: 'boolean',
-    default: true,
-    version: 1,
-  },
   clockifyBillable: {
     type: 'boolean',
     default: true,
@@ -120,11 +95,6 @@ const storageConfig = {
     default: defaultClockifyEntrySyncInterval,
     version: 1,
   },
-  clockifyQuickTimerEntryLinks: {
-    type: 'object',
-    default: {} as ClockifyQuickTimerEntryLinkRegistry,
-    version: 1,
-  },
   quickTimersEnabled: {
     type: 'boolean',
     default: true,
@@ -145,9 +115,9 @@ const storageConfig = {
     default: [] as QuickTimersCacheEntry[],
     version: 1,
   },
-  displayName: {
-    type: 'string',
-    default: 'Moon Bunny Clockalong',
+  quickTimersActiveEntry: {
+    type: 'object',
+    default: null as QuickTimersActiveEntry,
     version: 1,
   },
   linearTicketSyncLimit: {
@@ -218,11 +188,6 @@ const storageConfig = {
   githubPullRequestDescriptionTemplateFallback: {
     type: 'string',
     default: defaultGithubPullRequestDescriptionTemplateFallback,
-    version: 1,
-  },
-  refreshInterval: {
-    type: 'string',
-    default: refreshIntervalOptions[0] as RefreshIntervalOption,
     version: 1,
   },
   theme: {

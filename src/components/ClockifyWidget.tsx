@@ -33,6 +33,7 @@ import {
   getCompletedClockifyTimeEntryOverlapFixes,
 } from '../services/clockify/overlaps'
 import { clockifyTimeEntriesCollection, type SyncedClockifyTimeEntry } from '../services/clockify/sync'
+import { useStorage } from '../services/storage/useStorage'
 import { getErrorMessage } from '../utils/errors'
 import { appToast } from './AppToaster'
 import { ClockifyIcon } from './icons/ClockifyIcon'
@@ -103,6 +104,7 @@ const formatShortDuration = humanizeDuration.humanizer({
 
 export function ClockifyWidget() {
   const queryClient = useQueryClient()
+  const [, setQuickTimersActiveEntry] = useStorage('quickTimersActiveEntry')
   const fixOverlapDialogRef = useRef<HTMLDialogElement>(null)
   const editEntryDialogRef = useRef<HTMLDialogElement>(null)
   const [entriesVisible, setEntriesVisible] = useState(false)
@@ -330,6 +332,7 @@ export function ClockifyWidget() {
       })
     },
     onSuccess: () => {
+      void setQuickTimersActiveEntry(null)
       appToast.success('Stopped Clockify timer')
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
