@@ -5,7 +5,6 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "core:app:allow-default-window-icon",
     "core:window:allow-set-focus",
     "core:window:allow-start-dragging",
     "core:window:allow-set-theme",

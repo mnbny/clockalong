@@ -5,13 +5,14 @@ import type { MenuItemOptions, PredefinedMenuItemOptions } from '@tauri-apps/api
 import { and, eq, useLiveQuery } from '@tanstack/react-db'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { defaultWindowIcon } from '@tauri-apps/api/app'
 import { isTauri } from '@tauri-apps/api/core'
+import { Image } from '@tauri-apps/api/image'
 import { Menu } from '@tauri-apps/api/menu'
 import { TrayIcon } from '@tauri-apps/api/tray'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import menuBarIconUrl from '../../src-tauri/icons/menu_icon_64x64.png?url'
 import { appToast } from '../components/AppToaster'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
@@ -186,20 +187,21 @@ export function useMenuBar() {
 
     const initializeTray = async () => {
       const existingTray = await TrayIcon.getById(menuBarTrayId)
-      const icon = await defaultWindowIcon()
-
-      if (!icon) {
-        throw new Error('Clockalong is missing its application icon.')
-      }
+      const icon = await loadMenuBarIcon()
 
       const nextTray =
         existingTray ??
         (await TrayIcon.new({
           icon,
+          iconAsTemplate: true,
           id: menuBarTrayId,
           showMenuOnLeftClick: true,
           tooltip: 'Clockalong',
         }))
+
+      if (existingTray) {
+        await existingTray.setIconWithAsTemplate(icon, true)
+      }
 
       if (!cancelled) {
         setTray(nextTray)
@@ -281,6 +283,16 @@ export function useMenuBar() {
         console.warn('[menu bar] Could not update menu:', error)
       })
   }, [openDestination, recentEntries, resumeEntry, runningEntry, stopTimer, tray])
+}
+
+async function loadMenuBarIcon() {
+  const response = await fetch(menuBarIconUrl)
+
+  if (!response.ok) {
+    throw new Error('Could not load the Clockalong menu bar icon.')
+  }
+
+  return Image.fromBytes(await response.arrayBuffer())
 }
 
 function createMenu({
