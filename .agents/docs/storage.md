@@ -4,20 +4,22 @@ Frontend settings use `src/services/storage/`.
 
 The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults outside Tauri so the app can render in browser-based Vite development. Keep stored values small, serializable, and versioned when changing shape.
 
+## Settings backup
+
+The App settings section can download the raw `settings.json` snapshot and import it later. Import restores only the supported settings in the file. It ignores store metadata, unknown keys, and `quickTimersActiveEntry`; missing backup keys leave current settings unchanged.
+
+The Reset action first downloads the same raw backup, then clears those supported settings. It does not affect credentials, synced caches, or `quickTimersActiveEntry`.
+
+Backups include Quick Timer presets and their last-used template values. They do not include Stronghold credentials or the local Clockify, Linear, and GitHub caches. The active Quick Timer association stays local because it refers to a specific Clockify entry in a specific workspace.
+
 ## Keys
 
-- `compactRows`: temporary preference for dense list and table views.
 - `clockifyBillable`: default billable flag for new Clockify time entries created from Linear issues.
 - `clockifyDefaultProject`: default Clockify project for new time entries created from Linear issues. Stores the selected workspace/project IDs plus display names.
 - `clockifyDescriptionTemplate`: Clockify time-entry description format for Linear issue variables.
 - `clockifyDescriptionTemplateFallback`: replacement text for missing values in the Clockify description template.
 - `clockifyEntrySyncDays`: number of recent Clockify entry days to sync into the local Clockify entry cache. Values are `5`, `15`, and `30`. Default is `30`.
 - `clockifyEntrySyncInterval`: how often recent Clockify entries sync in the background. Values are `manual`, `5m`, `15m`, `30m`, and `1h`. Default is `30m`.
-- `clockifyQuickTimerEntryLinks`: local mapping from Clockify time entry IDs to Quick Timer preset IDs and submitted template values.
-- `defaultView`: temporary landing view preference for the app shell.
-- `density`: temporary numeric UI density value.
-- `desktopAlerts`: temporary preference for desktop notifications.
-- `displayName`: temporary local display name used by settings UI previews.
 - `githubSelectedRepositories`: GitHub repositories allowed to appear in GitHub dashboard surfaces. Stores compact repository snapshots.
 - `githubVisibleWorkItemTypes`: GitHub item types allowed to appear in GitHub dashboard surfaces. Defaults to issues and pull requests.
 - `githubWorkItemSyncLimit`: maximum number of GitHub issues or pull requests fetched per active repository. Default is `30`, capped at `100`.
@@ -34,9 +36,9 @@ The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults 
 - `quickTimersColumns`: number of Quick Timer columns to show in the dashboard grid. Default is `5`.
 - `quickTimersEnabled`: whether the Quick Timers dashboard feature is enabled. Default is `true`.
 - `quickTimers`: saved ad hoc Quick Timer presets.
+- `quickTimersActiveEntry`: local association between the active Quick Timer preset and its Clockify entry.
 - `quickTimersCache`: last submitted template variable values per Quick Timer preset.
 - `theme`: active daisyUI theme and native window appearance.
-- `refreshInterval`: temporary background refresh preference.
 
 ## Native secrets
 

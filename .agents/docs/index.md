@@ -2,7 +2,7 @@
 
 - `project.md`: current product boundary and Clockify companion framing
 - `time-tracking.md`: dashboard scope, work-source ordering, and time-tracking workflow decisions
-- `quick-timers.md`: ad hoc Quick Timer presets, templates, cache, and Clockify entry links
+- `quick-timers.md`: ad hoc Quick Timer presets, templates, cache, and active Clockify association
 - `architecture.md`: app architecture and commands
 - `tauri.md`: Tauri state, events, and React hook conventions
 - `logging.md`: Rust/frontend logging and diagnostics UI pattern

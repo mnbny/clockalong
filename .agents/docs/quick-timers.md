@@ -25,6 +25,8 @@ Each preset stores:
 
 Do not store Clockify workspace or project data on the preset. Quick Timers use the global `clockifyDefaultProject` and `clockifyBillable` settings when starting timers.
 
+Settings backups preserve Quick Timer presets and their cached form values. They do not restore `quickTimersActiveEntry`, because it refers to an entry in a particular Clockify workspace.
+
 ## Template variables
 
 Quick Timer description templates use the shared template utility in `src/utils/templates.ts`.
@@ -45,22 +47,22 @@ Each cache entry has the preset id plus dynamic template variable keys:
 
 The cache is not an active-timer registry. It only remembers form values.
 
-## Clockify entry links
+## Active Quick Timer
 
-`clockifyQuickTimerEntryLinks` maps Clockify time entry ids to Quick Timer ownership.
+`quickTimersActiveEntry` stores the one Quick Timer currently associated with a Clockify entry.
 
-The registry value stays small:
+Its value stays small:
 
 ```ts
 {
+  entryId: string
   quickTimerId: string
-  values: Record<string, string>
 }
 ```
 
-Do not duplicate the Clockify description, project, task, duration, or timestamps in this registry. Clockify owns the actual time entry data. The registry only answers which preset created a Clockify entry and which template values were submitted.
+The dashboard treats a preset as active only when its saved `entryId` matches the current running Clockify entry. Do not store historical links or template values here; Clockify owns the time entry data and `quickTimersCache` owns saved form values.
 
-The dashboard derives the active Quick Timer from the current running Clockify entry id. Active preset cells use the same accent pulse treatment as active provider-backed rows.
+Active preset cells use the same accent pulse treatment as active provider-backed rows. Clear this setting when its matching timer stops or Clockify disconnects.
 
 ## Clockify start and stop
 
@@ -69,7 +71,7 @@ Starting a Quick Timer calls `clockify.createTimeEntry` directly from the mutati
 Mutation side effects belong in callbacks:
 
 - `onMutate`: persist `quickTimersCache`.
-- `onSuccess`: save `clockifyQuickTimerEntryLinks`, invalidate Clockify queries, close the dialog, and show success feedback.
+- `onSuccess`: save `quickTimersActiveEntry`, invalidate Clockify queries, close the dialog, and show success feedback.
 - `onError`: show error feedback.
 
 The Clockify dashboard widget owns the generic running-timer stop control. When any Clockify timer is running, it shows a red square stop button opposite the running timer text, visually matching the active Linear row stop button.

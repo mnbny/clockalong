@@ -103,7 +103,7 @@ Overlap detection reads completed synced entries and ignores running entries. Th
 
 Clicking the overlap badge opens a confirmation dialog with dated before/after ranges for each entry that would move. The repair preserves each entry's duration, keeps non-overlapping entries in place, and shifts overlapping entries forward until that period has no completed-entry overlap. The app updates only changed Clockify entries, then refreshes the entry sync and summary reports.
 
-The widget may expose a compact entry table with `1 day`, `3 days`, and `7 days` calendar-day filters; it defaults to one day. Keep it visually aligned with the app's existing data-table patterns, including the shared row-level play/stop treatment. Resuming an entry creates a new running Clockify entry with the selected entry's trackable fields. Users can edit an entry's start time, end time, or duration from this table when they need to correct tracked time quickly; duration accepts fractional minutes for precise corrections. Do not add adjacent-entry overlap protection to that edit flow; Clockalong should accept intentional overbilling here.
+The widget has a compact entry table with `1 day`, `3 days`, and `7 days` calendar-day filters. It defaults to one day and follows the app's existing data-table patterns, including the shared row-level play/stop treatment. Resuming an entry creates a new running Clockify entry with the selected entry's trackable fields. Users can edit an entry's start time, end time, or duration from this table; duration accepts fractional minutes for precise corrections. Do not add adjacent-entry overlap protection to that edit flow; Clockalong should accept intentional overbilling here.
 
 The status badge has only two states:
 
@@ -123,7 +123,7 @@ Provider-backed templates should include `{internal-ref}`. It renders to a stabl
 
 Use the shared parser and formatter in `src/utils/templates.ts`; do not hand-roll provider regexes in widgets. Entries without a supported internal ref are treated as unlinked.
 
-For Quick Timers, `clockifyQuickTimerEntryLinks` is the local registry that records which preset created a Clockify entry. It should stay small and should not duplicate Clockify-owned entry data.
+For Quick Timers, `quickTimersActiveEntry` is the one local association between a preset and its active Clockify entry. It should stay small and should not duplicate Clockify-owned entry data.
 
 Do not reintroduce a local Clockify-entry-to-source-item registry as the normal source of truth. If Clockify custom-field metadata is added later, it can become a stronger match source, but Clockify-side description markers remain the portable fallback.
 
