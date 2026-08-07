@@ -461,8 +461,8 @@ function LinearWidgetContent() {
   return (
     <section className="card card-border bg-base-200/10 dark:bg-base-200/40">
       <div className="card-body gap-0 p-0">
-        <header className="border-base-content/5 flex min-w-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
+        <header className="border-base-content/5 flex min-w-0 flex-wrap items-center justify-between gap-4 border-b px-4 py-3">
+          <div className="flex min-w-0 items-center gap-4">
             {linearSyncing ? (
               <span className="text-primary grid size-6 place-items-center">
                 <span className="loading loading-spinner size-6" />
@@ -476,7 +476,7 @@ function LinearWidgetContent() {
             </div>
           </div>
 
-          <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-4">
             <button
               className="btn btn-square btn-ghost btn-sm"
               type="button"

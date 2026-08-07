@@ -173,15 +173,15 @@ export function QuickTimersWidget() {
     <>
       <section className="card card-border bg-base-200/10 dark:bg-base-200/40">
         <div className="card-body gap-0 p-0">
-          <header className="border-base-content/5 flex min-w-0 items-center justify-between gap-3 border-b px-4 py-3">
-            <div className="flex min-w-0 items-center gap-3">
+          <header className="border-base-content/5 flex min-w-0 items-center justify-between gap-4 border-b px-4 py-3">
+            <div className="flex min-w-0 items-center gap-4">
               <IconTimeDuration15 className="text-primary size-6" />
               <div className="min-w-0">
                 <h2 className="text-base leading-6 font-semibold">Quick Timers</h2>
                 <p className="text-base-content/60 truncate text-sm">Reusable time presets</p>
               </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-4">
               {quickTimers.length > 0 ? (
                 <button
                   className="btn btn-square btn-ghost btn-sm"

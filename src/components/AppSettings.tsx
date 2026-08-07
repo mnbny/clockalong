@@ -43,6 +43,7 @@ const settingsBackupKeys = [
   'githubWorkItemSyncLimit',
   'githubWorkItemSyncInterval',
   'githubSelectedAuthors',
+  'githubSelectedLabels',
   'githubShowClosedWorkItems',
   'githubIssueDescriptionTemplate',
   'githubIssueDescriptionTemplateFallback',

@@ -160,7 +160,7 @@ Current columns:
 - `Value`: rate-derived tracked value when Clockify returns a usable hourly rate and currency.
 - external link: no visible heading. Opens the source item in GitHub.
 
-The GitHub widget header has controls for refresh, multi-author filtering, a transient `Show all` override, and closed-item visibility. The author filter always includes the connected GitHub viewer and can include persisted additional authors. Author filtering and `Show all` affect the dashboard only. Repository and work-item-type settings determine what enters the local cache.
+The GitHub widget header has controls for refresh, multi-author filtering, additive label filtering, a transient `Show all` override, and closed-item visibility. The author filter always includes the connected GitHub viewer and can include persisted additional authors. The label picker lazily loads label catalogs from the configured repositories and matches selected label names against synced work items. Author, label, and Mentions filtering affect the dashboard only; `Show all` bypasses all three. Repository and work-item-type settings determine what enters the local cache.
 
 ## Controls
 

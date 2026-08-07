@@ -67,6 +67,9 @@ export const queryKeys = {
       ['linear', 'ticket-sync', ...spreadQueryKeySegments(keys)] as const,
   },
   github: {
+    all: ['github'] as const,
+    repositoryLabels: (keys?: QueryKeySegments<GithubRepositoryQueryParams>) =>
+      ['github', 'repository-labels', ...spreadQueryKeySegments(keys)] as const,
     repositories: ['github', 'repositories'] as const,
     repositoryIssues: (keys?: QueryKeySegments<GithubRepositoryQueryParams>) =>
       ['github', 'repository-issues', ...spreadQueryKeySegments(keys)] as const,
