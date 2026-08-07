@@ -2,7 +2,7 @@
 
 GitHub is an external work-source provider for Clockify tracking and review. The first workflow is pull-request-centered billing: authored pull requests, review requests, pull-request feedback, and related work that should become accurate Clockify time entries.
 
-GitHub supports PAT authentication, repository selection, work-item sync, dashboard display, author filtering, and Clockify timer controls. The additive Mentions filter shows direct mentions and pending direct review requests. Clockify internal refs provide tracked-summary matching. Detailed PR review-comment workflows are not implemented yet.
+GitHub supports PAT authentication, repository selection, work-item sync, dashboard display, author and label filtering, and Clockify timer controls. The additive Mentions filter shows direct mentions and pending direct review requests. Clockify internal refs provide tracked-summary matching. Detailed PR review-comment workflows are not implemented yet.
 
 ## Primary references
 
@@ -146,7 +146,7 @@ No `refreshGithubCredential` command is needed for PAT-first auth.
 
 `src/components/GitHubSettings.tsx` owns the first GitHub settings surface. When GitHub is disconnected it offers the same PAT connection flow as the sign-in screen. When connected, it uses TanStack Query plus Octokit to load repository candidates and store the dashboard allow-list in `githubSelectedRepositories`. The repository control is a searchable multi-select that follows the app's existing settings styles. It stages changes until the user applies them. Its width stays stable while filtering, and long names are truncated with the full name available on hover.
 
-Keep the repository selector compact and searchable. Repository selection controls what enters the local work-item cache. Author filtering only changes dashboard visibility.
+Keep the repository selector compact and searchable. Repository selection controls what enters the local work-item cache and which repositories the dashboard label picker queries. Author and label filtering only change dashboard visibility.
 
 GitHub entry descriptions are configured separately for issues and pull requests. Keep issue templates limited to issue-safe variables and keep pull-request branch variables on the pull-request template only. Include `{internal-ref}` in provider-backed templates so Clockify entries can be matched back to GitHub rows for tracked totals.
 
@@ -156,11 +156,13 @@ The sync also fetches direct `@mention` results and open pull requests with a di
 
 Closed pull requests are synced so recently completed review and build work can still show tracked totals. They stay hidden in the dashboard unless `githubShowClosedWorkItems` is enabled.
 
-`src/components/GitHubWidget.tsx` owns the first GitHub dashboard surface. It gates on GitHub authentication, subscribes to the local GitHub work-item collection, exposes a refresh action for the GitHub and Clockify syncs, merges Clockify tracked summaries into the table, and starts or stops Clockify timers with the same control pattern as Linear. Keep broad GitHub reads inside the sync provider rather than fetching GitHub directly from the widget.
+`src/components/GitHubWidget.tsx` owns the first GitHub dashboard surface. It gates on GitHub authentication, subscribes to the local GitHub work-item collection, exposes a refresh action for the GitHub and Clockify syncs, merges Clockify tracked summaries into the table, and starts or stops Clockify timers with the same control pattern as Linear. Keep broad work-item reads inside the sync provider rather than fetching GitHub work items directly from the widget. The scoped label picker may lazily read configured-repository label catalogs through `src/services/github/labels.ts`.
 
 The dashboard author filter only affects display. The header shows selected authors as avatars, and the user-plus button opens a searchable dialog. The dialog includes authors from the current work-item cache and persisted selections. The authenticated GitHub viewer is always selected and cannot be removed. Store additional authors in `githubSelectedAuthors` with their username and avatar metadata so a selection remains available even when that user is absent from the current cache.
 
-`Mentions` is a transient, additive filter. It adds rows with `involvementReasons` to the selected-author results instead of replacing them. The inline `Show all` toggle bypasses author filtering without changing storage. Turning it off restores the selected-author filter; `githubShowClosedWorkItems` controls closed-item visibility separately.
+The label picker starts one paginated repository-label query per configured repository when its dialog opens and keeps each result in TanStack Query for five minutes, rather than deriving options from synced work items. It de-duplicates labels by normalized name across those repositories, stores selected labels in `githubSelectedLabels` as `{ name, color }`, and matches a selection against any synced issue or pull request with that label name. The dashboard header shows the selected-label count plus the label-add button.
+
+Author, label, and `Mentions` filters are additive: a work item matching any active filter is displayed. `Mentions` is transient and adds rows with `involvementReasons`. The inline `Show all` toggle bypasses all three filters without changing storage. Turning it off restores the selected filters; `githubShowClosedWorkItems` controls closed-item visibility separately.
 
 Default issue description:
 

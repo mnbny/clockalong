@@ -42,6 +42,10 @@ export type GithubSelectedAuthor = {
   avatarUrl: string | null
   username: string
 }
+export type GithubSelectedLabel = {
+  color: string
+  name: string
+}
 export type GithubVisibleWorkItemTypes = {
   issues: boolean
   pullRequests: boolean
@@ -168,6 +172,11 @@ const storageConfig = {
   githubSelectedAuthors: {
     type: 'object',
     default: [] as GithubSelectedAuthor[],
+    version: 1,
+  },
+  githubSelectedLabels: {
+    type: 'object',
+    default: [] as GithubSelectedLabel[],
     version: 1,
   },
   githubShowClosedWorkItems: {

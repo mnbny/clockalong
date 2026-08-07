@@ -24,6 +24,7 @@ Backups include Quick Timer presets and their last-used template values. They do
 - `githubVisibleWorkItemTypes`: GitHub item types allowed to appear in GitHub dashboard surfaces. Defaults to issues and pull requests.
 - `githubWorkItemSyncLimit`: maximum number of GitHub issues or pull requests fetched per active repository. Default is `30`, capped at `100`.
 - `githubSelectedAuthors`: persisted additional GitHub dashboard authors. Each entry stores `{ username, avatarUrl }`. The connected GitHub viewer is always included at runtime and is not stored in this array.
+- `githubSelectedLabels`: persisted additive GitHub dashboard label filters. Each entry stores `{ name, color }`. Label names are matched across the selected repositories.
 - `githubShowClosedWorkItems`: whether GitHub dashboard surfaces show closed synced GitHub work items. Defaults to `false`. Sync still stores closed pull requests.
 - `githubIssueDescriptionTemplate`: Clockify time-entry description format for GitHub issue variables.
 - `githubIssueDescriptionTemplateFallback`: replacement text for missing values in the GitHub issue description template.
@@ -56,4 +57,4 @@ Assigned Linear ticket rows are persisted by TanStack DB through browser localSt
 
 ## Local GitHub work-item cache
 
-GitHub issue and pull request rows are persisted by TanStack DB through browser localStorage under `clockalong.github.workItems.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for GitHub dashboard surfaces, rebuilt by `GithubSyncProvider` from GitHub's API according to the selected repositories, enabled work-item types, and fetch limit. Author selection, the transient `Show all` override, and closed-item visibility affect dashboard display only. They do not change sync filters. Persisted author selections may refer to users absent from the current cache so they can become active again when new work items arrive.
+GitHub issue and pull request rows are persisted by TanStack DB through browser localStorage under `clockalong.github.workItems.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for GitHub dashboard surfaces, rebuilt by `GithubSyncProvider` from GitHub's API according to the selected repositories, enabled work-item types, and fetch limit. Author and label selection, the transient `Show all` override, and closed-item visibility affect dashboard display only. They do not change sync filters. Persisted author and label selections may refer to values absent from the current cache so they can become active again when new work items arrive.

@@ -6,11 +6,12 @@ import {
   IconPlayerStop,
   IconRefresh,
   IconSearch,
+  IconTagPlus,
   IconUserPlus,
   IconX,
 } from '@tabler/icons-react'
 import { and, eq, useLiveQuery } from '@tanstack/react-db'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -26,6 +27,7 @@ import {
   type GithubIssueDescriptionTemplateValues,
   type GithubPullRequestDescriptionTemplateValues,
 } from '../services/github/description-template'
+import { getGithubRepositoryLabels } from '../services/github/labels'
 import {
   getGithubWorkItemInvolvementReasons,
   githubWorkItemsCollection,
@@ -39,7 +41,11 @@ import {
   mergeGithubWorkItemTimeSummaries,
   summarizeClockifyGithubWorkItemTimeEntries,
 } from '../services/github/work-item-summaries'
-import { type GithubSelectedAuthor } from '../services/storage/config'
+import {
+  type GithubSelectedAuthor,
+  type GithubSelectedLabel,
+  type GithubSelectedRepository,
+} from '../services/storage/config'
 import { useStorage } from '../services/storage/useStorage'
 import { cx } from '../utils/cx'
 import { getErrorMessage } from '../utils/errors'
@@ -168,7 +174,9 @@ function GitHubWidgetContent() {
   const [githubIssueDescriptionTemplateFallback] = useStorage('githubIssueDescriptionTemplateFallback')
   const [githubPullRequestDescriptionTemplate] = useStorage('githubPullRequestDescriptionTemplate')
   const [githubPullRequestDescriptionTemplateFallback] = useStorage('githubPullRequestDescriptionTemplateFallback')
+  const [githubSelectedRepositories] = useStorage('githubSelectedRepositories')
   const [githubSelectedAuthors, setGithubSelectedAuthors] = useStorage('githubSelectedAuthors')
+  const [githubSelectedLabels, setGithubSelectedLabels] = useStorage('githubSelectedLabels')
   const [githubShowClosedWorkItems, setGithubShowClosedWorkItems] = useStorage('githubShowClosedWorkItems')
   const [showAllGithubWorkItems, setShowAllGithubWorkItems] = useState(false)
   const [showMentionedGithubWorkItems, setShowMentionedGithubWorkItems] = useState(false)
@@ -215,6 +223,10 @@ function GitHubWidgetContent() {
       ),
     [githubSelectedAuthors, githubViewerAuthor?.username],
   )
+  const githubSelectedLabelNames = useMemo(
+    () => new Set(githubSelectedLabels.map(label => normalizeGithubLabelName(label.name))),
+    [githubSelectedLabels],
+  )
   const workItems = useMemo(
     () =>
       (syncedWorkItemsQuery.data ?? [])
@@ -222,13 +234,16 @@ function GitHubWidgetContent() {
           item =>
             showAllGithubWorkItems ||
             (item.author !== null && githubSelectedAuthorUsernames.has(normalizeGithubUsername(item.author))) ||
-            (showMentionedGithubWorkItems && getGithubWorkItemInvolvementReasons(item).length > 0),
+            (showMentionedGithubWorkItems && getGithubWorkItemInvolvementReasons(item).length > 0) ||
+            (githubSelectedLabelNames.size > 0 &&
+              getGithubWorkItemLabelNames(item).some(labelName => githubSelectedLabelNames.has(labelName))),
         )
         .filter(item => githubShowClosedWorkItems || item.state !== 'closed')
         .map(row => row)
         .sort(compareGithubWorkItems),
     [
       githubSelectedAuthorUsernames,
+      githubSelectedLabelNames,
       githubShowClosedWorkItems,
       showAllGithubWorkItems,
       showMentionedGithubWorkItems,
@@ -479,6 +494,11 @@ function GitHubWidgetContent() {
               currentAuthor={githubViewerAuthor}
               selectedAuthors={githubSelectedAuthors}
               onChange={authors => setGithubSelectedAuthors(authors)}
+            />
+            <GithubLabelPicker
+              repositories={githubSelectedRepositories}
+              selectedLabels={githubSelectedLabels}
+              onChange={labels => setGithubSelectedLabels(labels)}
             />
             <label
               className="flex h-8 cursor-pointer items-center gap-2 text-xs"
@@ -888,6 +908,247 @@ function GithubAuthorPicker({ availableAuthors, currentAuthor, onChange, selecte
   )
 }
 
+type GithubLabelPickerProps = {
+  repositories: GithubSelectedRepository[]
+  selectedLabels: GithubSelectedLabel[]
+  onChange: (labels: GithubSelectedLabel[]) => Promise<void>
+}
+
+function GithubLabelPicker({ onChange, repositories, selectedLabels }: GithubLabelPickerProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [draftSelectedLabels, setDraftSelectedLabels] = useState(selectedLabels)
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
+  const repositoryLabelQueries = useQueries({
+    queries: repositories.map(repository => ({
+      enabled: dialogOpen,
+      queryKey: queryKeys.github.repositoryLabels({
+        params: { owner: repository.owner, repo: repository.name },
+      }),
+      queryFn: () => getGithubRepositoryLabels(repository),
+      staleTime: 5 * 60_000,
+    })),
+  })
+  const fetchedLabels = useMemo(
+    () =>
+      repositoryLabelQueries.flatMap(
+        query => query.data?.map(label => ({ color: label.color, name: label.name })) ?? [],
+      ),
+    [repositoryLabelQueries],
+  )
+  const labelsLoading = repositoryLabelQueries.some(query => query.isLoading)
+  const labelLoadError = repositoryLabelQueries.find(query => query.isError)?.error
+  const draftSelectedLabelNames = useMemo(
+    () => new Set(draftSelectedLabels.map(label => normalizeGithubLabelName(label.name))),
+    [draftSelectedLabels],
+  )
+  const pickerLabels = useMemo(() => {
+    const labels = mergeGithubLabels(fetchedLabels, selectedLabels)
+
+    return labels.sort(
+      (left, right) =>
+        Number(draftSelectedLabelNames.has(normalizeGithubLabelName(right.name))) -
+          Number(draftSelectedLabelNames.has(normalizeGithubLabelName(left.name))) || compareGithubLabels(left, right),
+    )
+  }, [draftSelectedLabelNames, fetchedLabels, selectedLabels])
+  const visibleLabels = useMemo(() => {
+    const normalizedSearch = normalizeGithubLabelName(search)
+
+    return pickerLabels.filter(
+      label => !normalizedSearch || normalizeGithubLabelName(label.name).includes(normalizedSearch),
+    )
+  }, [pickerLabels, search])
+  const selectionChanged = !areGithubLabelSelectionsEqual(draftSelectedLabels, selectedLabels)
+
+  useEffect(() => {
+    if (dialogOpen) {
+      searchInputRef.current?.focus()
+    }
+  }, [dialogOpen])
+
+  const openPicker = () => {
+    setDraftSelectedLabels(selectedLabels)
+    setSearch('')
+    setDialogOpen(true)
+    dialogRef.current?.showModal()
+  }
+
+  const closePicker = () => {
+    dialogRef.current?.close()
+  }
+
+  const handleDialogClose = () => {
+    setDraftSelectedLabels(selectedLabels)
+    setSearch('')
+    setDialogOpen(false)
+  }
+
+  const toggleLabel = (label: GithubSelectedLabel) => {
+    setDraftSelectedLabels(currentLabels => {
+      if (
+        currentLabels.some(
+          currentLabel => normalizeGithubLabelName(currentLabel.name) === normalizeGithubLabelName(label.name),
+        )
+      ) {
+        return currentLabels.filter(
+          currentLabel => normalizeGithubLabelName(currentLabel.name) !== normalizeGithubLabelName(label.name),
+        )
+      }
+
+      return [...currentLabels, label].sort(compareGithubLabels)
+    })
+  }
+
+  const saveSelection = async () => {
+    setSaving(true)
+
+    try {
+      await onChange([...draftSelectedLabels].sort(compareGithubLabels))
+      dialogRef.current?.close()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="flex h-8 items-center gap-1">
+        {selectedLabels.length ? (
+          <span
+            className="text-base-content/70 text-xs whitespace-nowrap"
+            title={`Selected GitHub labels: ${selectedLabels.map(label => label.name).join(', ')}`}>
+            {selectedLabels.length} {selectedLabels.length === 1 ? 'Label' : 'Labels'}
+          </span>
+        ) : null}
+        <button
+          aria-haspopup="dialog"
+          aria-label="Filter GitHub work items by label"
+          className="btn btn-square btn-ghost btn-sm"
+          title="Filter by label"
+          type="button"
+          onClick={openPicker}>
+          <IconTagPlus className="size-4" />
+        </button>
+      </div>
+
+      <dialog ref={dialogRef} className="modal" onClose={handleDialogClose}>
+        <div className="modal-box max-w-md rounded-lg">
+          <form
+            className="grid gap-5"
+            onSubmit={event => {
+              event.preventDefault()
+
+              if (!selectionChanged || saving) {
+                return
+              }
+
+              void saveSelection()
+            }}>
+            <div className="grid gap-1">
+              <h3 className="text-lg leading-7 font-semibold">Filter by label</h3>
+              <p className="text-base-content/60 text-sm">Choose labels to add to the dashboard.</p>
+            </div>
+
+            <div className="input input-primary w-full">
+              <IconSearch className="size-4 opacity-60" />
+              <input
+                ref={searchInputRef}
+                aria-label="Search GitHub labels"
+                placeholder="Search labels"
+                type="search"
+                value={search}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                  }
+                }}
+                onChange={event => setSearch(event.currentTarget.value)}
+              />
+              {search ? (
+                <button
+                  aria-label="Clear label search"
+                  className="btn btn-ghost btn-xs btn-circle"
+                  type="button"
+                  onClick={() => setSearch('')}>
+                  <IconX className="size-3" />
+                </button>
+              ) : null}
+            </div>
+
+            <fieldset
+              className="border-base-content/10 max-h-72 overflow-y-auto border-y py-1"
+              aria-label="GitHub labels">
+              {!repositories.length ? (
+                <div className="text-base-content/60 px-2 py-4 text-center text-sm">
+                  Select active GitHub repositories in Settings first.
+                </div>
+              ) : null}
+              {repositories.length && labelsLoading ? (
+                <div className="text-base-content/60 flex items-center justify-center gap-2 px-2 py-4 text-sm">
+                  <span className="loading loading-spinner loading-sm" />
+                  Loading labels…
+                </div>
+              ) : null}
+              {repositories.length && labelLoadError ? (
+                <div className="text-error px-2 py-4 text-center text-sm">
+                  Could not load labels. {getErrorMessage(labelLoadError)}
+                </div>
+              ) : null}
+              {repositories.length && !labelsLoading && !labelLoadError ? (
+                visibleLabels.length ? (
+                  visibleLabels.map(label => (
+                    <label
+                      key={normalizeGithubLabelName(label.name)}
+                      className="hover:bg-base-200 rounded-box flex cursor-pointer items-center gap-3 px-2 py-2"
+                      title={label.name}>
+                      <input
+                        aria-label={`Show GitHub work items with label ${label.name}`}
+                        checked={draftSelectedLabelNames.has(normalizeGithubLabelName(label.name))}
+                        className="checkbox checkbox-primary checkbox-sm"
+                        disabled={saving}
+                        type="checkbox"
+                        onChange={() => toggleLabel(label)}
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="size-3 shrink-0 rounded-full"
+                        style={{ backgroundColor: `#${label.color}` }}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm">{label.name}</span>
+                    </label>
+                  ))
+                ) : (
+                  <div className="text-base-content/60 px-2 py-4 text-center text-sm">
+                    {pickerLabels.length
+                      ? 'No labels match your search.'
+                      : 'No labels are available in the active repositories.'}
+                  </div>
+                )
+              ) : null}
+            </fieldset>
+
+            <div className="modal-action mt-0">
+              <button className="btn btn-ghost" disabled={saving} type="button" onClick={closePicker}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" disabled={!selectionChanged || saving} type="submit">
+                {saving ? <span className="loading loading-spinner loading-sm" /> : <IconCheck className="size-4" />}
+                Apply
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <form className="modal-backdrop" method="dialog">
+          <button type="submit">close</button>
+        </form>
+      </dialog>
+    </>
+  )
+}
+
 function GithubAuthorAvatar({ author, className }: { author: GithubSelectedAuthor; className: string }) {
   const initials = author.username.slice(0, 2).toUpperCase()
 
@@ -953,12 +1214,53 @@ function areGithubAuthorSelectionsEqual(left: GithubSelectedAuthor[], right: Git
   )
 }
 
+function areGithubLabelSelectionsEqual(left: GithubSelectedLabel[], right: GithubSelectedLabel[]) {
+  const leftLabelNames = left.map(label => normalizeGithubLabelName(label.name)).sort()
+  const rightLabelNames = right.map(label => normalizeGithubLabelName(label.name)).sort()
+
+  return (
+    leftLabelNames.length === rightLabelNames.length &&
+    leftLabelNames.every((labelName, index) => labelName === rightLabelNames[index])
+  )
+}
+
+function mergeGithubLabels(...labelGroups: GithubSelectedLabel[][]) {
+  const labels = new Map<string, GithubSelectedLabel>()
+
+  for (const labelGroup of labelGroups) {
+    for (const label of labelGroup) {
+      const labelName = normalizeGithubLabelName(label.name)
+
+      if (!labels.has(labelName)) {
+        labels.set(labelName, label)
+      }
+    }
+  }
+
+  return [...labels.values()].sort(compareGithubLabels)
+}
+
+function compareGithubLabels(left: GithubSelectedLabel, right: GithubSelectedLabel) {
+  return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })
+}
+
 function isGithubUsernameEqual(left: string | undefined, right: string | undefined) {
   return Boolean(left && right) && normalizeGithubUsername(left!) === normalizeGithubUsername(right!)
 }
 
 function normalizeGithubUsername(username: string) {
   return username.trim().toLowerCase()
+}
+
+function normalizeGithubLabelName(name: string) {
+  return name.trim().toLowerCase()
+}
+
+function getGithubWorkItemLabelNames(item: SyncedGithubWorkItem) {
+  return (item.item.labels ?? [])
+    .map(label => (typeof label === 'string' ? label : label.name))
+    .filter((labelName): labelName is string => Boolean(labelName))
+    .map(normalizeGithubLabelName)
 }
 
 function compareGithubWorkItems(left: SyncedGithubWorkItem, right: SyncedGithubWorkItem) {

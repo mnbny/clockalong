@@ -73,6 +73,7 @@ function SignInScreen() {
       if (provider === 'github') {
         await auth.disconnectGithub()
         const clearedWorkItems = await clearSyncedGithubWorkItems()
+        await resetGithubQueryCache()
         signInLog('disconnectProvider: github disconnected')
         signInLog(`disconnectProvider: cleared_github_work_items=${clearedWorkItems}`)
         appToast.success('GitHub disconnected.')
@@ -218,6 +219,11 @@ async function clearClockifySessionState() {
 async function resetClockifyQueryCache() {
   await queryClient.cancelQueries({ queryKey: queryKeys.clockify.all })
   queryClient.removeQueries({ queryKey: queryKeys.clockify.all })
+}
+
+async function resetGithubQueryCache() {
+  await queryClient.cancelQueries({ queryKey: queryKeys.github.all })
+  queryClient.removeQueries({ queryKey: queryKeys.github.all })
 }
 
 function getProviderLabel(provider: ClockalongAuthProvider) {
