@@ -8,6 +8,7 @@ import { createContext, createElement, useCallback, useContext, useMemo } from '
 import { useAppAuth } from '../../hooks/useAppAuth'
 import { queryKeys } from '../../lib/query-client'
 import { getErrorMessage } from '../../utils/errors'
+import { pick } from '../../utils/objects'
 import { parseInternalRefs } from '../../utils/templates'
 import { storage } from '../storage/config'
 import { useStorage } from '../storage/useStorage'
@@ -17,8 +18,24 @@ import { type ClockifyEntrySyncDaysOption, getClockifyEntrySyncIntervalMilliseco
 const clockifyEntrySyncPageSize = 100
 const clockifyEntrySyncStorageKey = 'clockalong.clockify.timeEntries.v1'
 
+const storedClockifyEntryFields = [
+  'billable',
+  'description',
+  'hourlyRate',
+  'id',
+  'projectId',
+  'tagIds',
+  'taskId',
+  'timeInterval',
+  'type',
+  'userId',
+  'workspaceId',
+] as const satisfies ReadonlyArray<keyof TimeEntryWithRatesDtoV1>
+
+type StoredClockifyTimeEntry = Pick<TimeEntryWithRatesDtoV1, (typeof storedClockifyEntryFields)[number]>
+
 export type SyncedClockifyTimeEntry = {
-  entry: TimeEntryWithRatesDtoV1
+  entry: StoredClockifyTimeEntry
   id: string
   startedAt: string
   syncedAt: string
@@ -278,7 +295,7 @@ async function upsertSyncedClockifyEntries({
     }
 
     const syncedEntry = {
-      entry,
+      entry: pick(entry, ...storedClockifyEntryFields),
       id: entry.id,
       startedAt: entry.timeInterval?.start ?? '',
       syncedAt,
