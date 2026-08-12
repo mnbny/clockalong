@@ -7,6 +7,7 @@ import { createContext, createElement, useCallback, useContext, useMemo } from '
 
 import { useAppAuth } from '../../hooks/useAppAuth'
 import { queryKeys } from '../../lib/query-client'
+import { pick } from '../../utils/objects'
 import {
   defaultGithubWorkItemSyncLimit,
   type GithubSelectedRepository,
@@ -26,6 +27,12 @@ type GithubPullRequestData = GithubPullRequest | GithubPullRequestDetails
 
 const githubWorkItemsStorageKey = 'clockalong.github.workItems.v1'
 
+const storedGithubIssueItemFields = ['labels'] as const satisfies ReadonlyArray<keyof GithubIssueData>
+const storedGithubPullRequestItemFields = ['labels'] as const satisfies ReadonlyArray<keyof GithubPullRequestData>
+
+type StoredGithubIssueItem = Pick<GithubIssueData, (typeof storedGithubIssueItemFields)[number]>
+type StoredGithubPullRequestItem = Pick<GithubPullRequestData, (typeof storedGithubPullRequestItemFields)[number]>
+
 export type GithubWorkItemType = 'issue' | 'pullRequest'
 export type GithubWorkItemInvolvementReason = 'mentioned' | 'reviewRequested'
 
@@ -34,7 +41,7 @@ export type GithubIssueWorkItem = {
   authorAvatarUrl: string | null
   id: string
   involvementReasons?: GithubWorkItemInvolvementReason[]
-  item: GithubIssueData
+  item: StoredGithubIssueItem
   number: number
   repositoryFullName: string
   repositoryOwner: string
@@ -54,7 +61,7 @@ export type GithubPullRequestWorkItem = {
   headBranch: string
   id: string
   involvementReasons?: GithubWorkItemInvolvementReason[]
-  item: GithubPullRequestData
+  item: StoredGithubPullRequestItem
   number: number
   repositoryFullName: string
   repositoryOwner: string
@@ -483,7 +490,7 @@ function toSyncedGithubIssue({
       authorAvatarUrl: issue.user?.avatar_url ?? null,
       id: getGithubWorkItemId(repository.fullName, 'issue', issue.number),
       involvementReasons,
-      item: issue,
+      item: pick(issue, ...storedGithubIssueItemFields),
       number: issue.number,
       repositoryFullName: repository.fullName,
       repositoryOwner: repository.owner,
@@ -517,7 +524,7 @@ function toSyncedGithubPullRequest({
       headBranch: pullRequest.head.ref,
       id: getGithubWorkItemId(repository.fullName, 'pullRequest', pullRequest.number),
       involvementReasons,
-      item: pullRequest,
+      item: pick(pullRequest, ...storedGithubPullRequestItemFields),
       number: pullRequest.number,
       repositoryFullName: repository.fullName,
       repositoryOwner: repository.owner,
