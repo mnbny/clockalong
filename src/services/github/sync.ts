@@ -266,10 +266,10 @@ async function syncGithubWorkItems({
     fetchedItemIds.add(item.id)
   }
 
+  const itemsDeleted = await deleteStaleSyncedGithubWorkItems({ fetchedItemIds, repositories, visibleWorkItemTypes })
+
   const upsertResult = await upsertSyncedGithubWorkItems(syncedWorkItems)
   itemsStored += upsertResult.stored
-
-  const itemsDeleted = await deleteStaleSyncedGithubWorkItems({ fetchedItemIds, repositories, visibleWorkItemTypes })
 
   return {
     issuesFetched,
