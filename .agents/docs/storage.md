@@ -23,6 +23,7 @@ Backups include Quick Timer presets and their last-used template values. They do
 - `githubSelectedRepositories`: GitHub repositories allowed to appear in GitHub dashboard surfaces. Stores compact repository snapshots.
 - `githubVisibleWorkItemTypes`: GitHub item types allowed to appear in GitHub dashboard surfaces. Defaults to issues and pull requests.
 - `githubWorkItemSyncLimit`: maximum number of GitHub issues or pull requests fetched per active repository. Default is `30`, capped at `100`.
+- `githubWorkItemSyncInterval`: how often GitHub work items sync in the background.
 - `githubSelectedAuthors`: persisted additional GitHub dashboard authors. Each entry stores `{ username, avatarUrl }`. The connected GitHub viewer is always included at runtime and is not stored in this array.
 - `githubSelectedLabels`: persisted additive GitHub dashboard label filters. Each entry stores `{ name, color }`. Label names are matched across the selected repositories.
 - `githubShowClosedWorkItems`: whether GitHub dashboard surfaces show closed synced GitHub work items. Defaults to `false`. Sync still stores closed pull requests.
@@ -44,6 +45,19 @@ Backups include Quick Timer presets and their last-used template values. They do
 ## Native secrets
 
 Clockify stores the user API key in native Stronghold storage, not in the Tauri JSON store. Linear stores OAuth token data in Stronghold as well. On startup, Rust reads those saved credentials and validates or refreshes them before setting provider auth state.
+
+## Local cache field budgets
+
+The webview enforces a per-origin localStorage quota of about 5 MB, shared by every local cache. The packaged app and the Vite dev server are separate origins, so quota exhaustion usually appears in the installed app first.
+
+Local caches must persist only the fields UI consumes. Each sync module declares an explicit field allowlist and maps raw provider payloads through `pick` from `src/utils/objects.ts`:
+
+- `storedClockifyEntryFields` in `src/services/clockify/sync.ts`
+- `storedGithubIssueItemFields` and `storedGithubPullRequestItemFields` in `src/services/github/sync.ts`
+
+Extend the matching list when UI needs another field. Do not persist raw provider responses. A raw Octokit pull request averages about 25 KB, and the generated Clockify schema is `passthrough`, so hydrated responses carry whole project, task, tag, and user objects that never appear in `TimeEntryWithRatesDtoV1`.
+
+Sync reconciliation should prune stale rows before writing new ones. Pruning first keeps the cache from peaking at old rows plus new rows during the write, and it keeps a failed write from skipping reconciliation entirely.
 
 ## Local Clockify entry cache
 
