@@ -39,6 +39,8 @@ The app exposes two narrow commands for diagnostics UI:
 - `[linear tickets]`: Linear ticket fetch and client-side ordering diagnostics. Log request parameters, page counts, aggregate counts, cursor presence, state-type counts, linked-ticket counts, and top identifiers. Do not log issue titles, descriptions, assignee names, or credential values.
 - `[clockify api]`: Clockify REST request and response diagnostics. Keep request bodies summarized and scrubbed to operational fields. Time-tracking lifecycle diagnostics use the same prefix with subphrases such as `timer ...`.
 - `[clockify sync]`: Clockify time-entry sync diagnostics for API page counts, local collection writes, ref counts, and sync failures.
+- `[github sync]`: GitHub work-item sync diagnostics for configured repositories, fetched/stored/deleted counts, and sync failures. Failure logs include the cached item count and storage key, because localStorage quota exhaustion is a known failure mode.
+- `[LocalStorageCollection]`: TanStack DB emits this prefix, not app code. It reports local cache write failures such as an exceeded localStorage quota, so the settings drawer shows it alongside app prefixes.
 - `[clockify widget]`: Clockify dashboard diagnostics for the local synced-entry live queries and log drawer interactions.
 - `[linear widget]`: Linear dashboard diagnostics for Clockify synced-entry inputs and computed summary counts.
 - `[github widget]`: GitHub dashboard diagnostics for Clockify synced-entry inputs and computed summary counts.

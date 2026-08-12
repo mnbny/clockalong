@@ -7,6 +7,7 @@ import { createContext, createElement, useCallback, useContext, useMemo } from '
 
 import { useAppAuth } from '../../hooks/useAppAuth'
 import { queryKeys } from '../../lib/query-client'
+import { getErrorMessage } from '../../utils/errors'
 import { pick } from '../../utils/objects'
 import {
   defaultGithubWorkItemSyncLimit,
@@ -173,11 +174,7 @@ export async function clearSyncedGithubWorkItems() {
   return itemIds.length
 }
 
-async function syncGithubWorkItems({
-  repositories,
-  syncLimit,
-  visibleWorkItemTypes,
-}: GithubWorkItemSyncOptions): Promise<GithubWorkItemSyncResult> {
+async function syncGithubWorkItems({ repositories, syncLimit, visibleWorkItemTypes }: GithubWorkItemSyncOptions) {
   const syncedAt = new Date().toISOString()
   const fetchedItemIds = new Set<string>()
   const syncedWorkItemsById = new Map<string, SyncedGithubWorkItem>()
@@ -185,98 +182,128 @@ async function syncGithubWorkItems({
   let itemsStored = 0
   let pullRequestsFetched = 0
 
+  githubSyncLog('work item sync start', {
+    repositories: repositories.map(repository => repository.fullName),
+    syncLimit,
+    visibleWorkItemTypes,
+  })
   await githubWorkItemsCollection.preload()
 
-  if (!repositories.length || (!visibleWorkItemTypes.issues && !visibleWorkItemTypes.pullRequests)) {
-    const itemsDeleted = await deleteStaleSyncedGithubWorkItems({ fetchedItemIds, repositories, visibleWorkItemTypes })
+  try {
+    if (!repositories.length || (!visibleWorkItemTypes.issues && !visibleWorkItemTypes.pullRequests)) {
+      const itemsDeleted = await deleteStaleSyncedGithubWorkItems({
+        fetchedItemIds,
+        repositories,
+        visibleWorkItemTypes,
+      })
+      const emptyResult = {
+        issuesFetched,
+        itemsDeleted,
+        itemsStored,
+        pullRequestsFetched,
+        repositoriesSynced: repositories.length,
+      } satisfies GithubWorkItemSyncResult
 
-    return {
+      githubSyncLog('work item sync complete', emptyResult)
+
+      return emptyResult
+    }
+
+    const github = await createGithubClient()
+
+    for (const repository of repositories) {
+      if (visibleWorkItemTypes.issues) {
+        const issuesResponse = await github.rest.issues.listForRepo({
+          direction: 'desc',
+          owner: repository.owner,
+          per_page: syncLimit,
+          repo: repository.name,
+          sort: 'updated',
+          state: 'open',
+        })
+        const issueItems = issuesResponse.data.flatMap(issue => toSyncedGithubIssue({ issue, repository, syncedAt }))
+
+        issuesFetched += issueItems.length
+        addGithubWorkItems(syncedWorkItemsById, issueItems)
+      }
+
+      if (visibleWorkItemTypes.pullRequests) {
+        const openPullRequestsResponse = await github.rest.pulls.list({
+          direction: 'desc',
+          owner: repository.owner,
+          per_page: syncLimit,
+          repo: repository.name,
+          sort: 'updated',
+          state: 'open',
+        })
+        const closedPullRequestsResponse = await github.rest.pulls.list({
+          direction: 'desc',
+          owner: repository.owner,
+          per_page: syncLimit,
+          repo: repository.name,
+          sort: 'updated',
+          state: 'closed',
+        })
+        const pullRequestItems = [...openPullRequestsResponse.data, ...closedPullRequestsResponse.data].flatMap(
+          pullRequest => toSyncedGithubPullRequest({ pullRequest, repository, syncedAt }),
+        )
+
+        pullRequestsFetched += pullRequestItems.length
+        addGithubWorkItems(syncedWorkItemsById, pullRequestItems)
+      }
+    }
+
+    await syncGithubMentionedWorkItems({
+      github,
+      repositories,
+      syncLimit,
+      syncedAt,
+      syncedWorkItemsById,
+      visibleWorkItemTypes,
+    })
+    await syncGithubReviewRequestWorkItems({
+      github,
+      repositories,
+      syncLimit,
+      syncedAt,
+      syncedWorkItemsById,
+      visibleWorkItemTypes,
+    })
+
+    const syncedWorkItems = [...syncedWorkItemsById.values()]
+
+    for (const item of syncedWorkItems) {
+      fetchedItemIds.add(item.id)
+    }
+
+    const itemsDeleted = await deleteStaleSyncedGithubWorkItems({
+      fetchedItemIds,
+      repositories,
+      visibleWorkItemTypes,
+    })
+
+    const upsertResult = await upsertSyncedGithubWorkItems(syncedWorkItems)
+    itemsStored += upsertResult.stored
+
+    const result = {
       issuesFetched,
       itemsDeleted,
       itemsStored,
       pullRequestsFetched,
       repositoriesSynced: repositories.length,
-    }
-  }
+    } satisfies GithubWorkItemSyncResult
 
-  const github = await createGithubClient()
+    githubSyncLog('work item sync complete', result)
 
-  for (const repository of repositories) {
-    if (visibleWorkItemTypes.issues) {
-      const issuesResponse = await github.rest.issues.listForRepo({
-        direction: 'desc',
-        owner: repository.owner,
-        per_page: syncLimit,
-        repo: repository.name,
-        sort: 'updated',
-        state: 'open',
-      })
-      const issueItems = issuesResponse.data.flatMap(issue => toSyncedGithubIssue({ issue, repository, syncedAt }))
-
-      issuesFetched += issueItems.length
-      addGithubWorkItems(syncedWorkItemsById, issueItems)
-    }
-
-    if (visibleWorkItemTypes.pullRequests) {
-      const openPullRequestsResponse = await github.rest.pulls.list({
-        direction: 'desc',
-        owner: repository.owner,
-        per_page: syncLimit,
-        repo: repository.name,
-        sort: 'updated',
-        state: 'open',
-      })
-      const closedPullRequestsResponse = await github.rest.pulls.list({
-        direction: 'desc',
-        owner: repository.owner,
-        per_page: syncLimit,
-        repo: repository.name,
-        sort: 'updated',
-        state: 'closed',
-      })
-      const pullRequestItems = [...openPullRequestsResponse.data, ...closedPullRequestsResponse.data].flatMap(
-        pullRequest => toSyncedGithubPullRequest({ pullRequest, repository, syncedAt }),
-      )
-
-      pullRequestsFetched += pullRequestItems.length
-      addGithubWorkItems(syncedWorkItemsById, pullRequestItems)
-    }
-  }
-
-  await syncGithubMentionedWorkItems({
-    github,
-    repositories,
-    syncLimit,
-    syncedAt,
-    syncedWorkItemsById,
-    visibleWorkItemTypes,
-  })
-  await syncGithubReviewRequestWorkItems({
-    github,
-    repositories,
-    syncLimit,
-    syncedAt,
-    syncedWorkItemsById,
-    visibleWorkItemTypes,
-  })
-
-  const syncedWorkItems = [...syncedWorkItemsById.values()]
-
-  for (const item of syncedWorkItems) {
-    fetchedItemIds.add(item.id)
-  }
-
-  const itemsDeleted = await deleteStaleSyncedGithubWorkItems({ fetchedItemIds, repositories, visibleWorkItemTypes })
-
-  const upsertResult = await upsertSyncedGithubWorkItems(syncedWorkItems)
-  itemsStored += upsertResult.stored
-
-  return {
-    issuesFetched,
-    itemsDeleted,
-    itemsStored,
-    pullRequestsFetched,
-    repositoriesSynced: repositories.length,
+    return result
+  } catch (error) {
+    githubSyncLog('work item sync failed', {
+      cachedItems: githubWorkItemsCollection.size,
+      error: getErrorMessage(error),
+      repositories: repositories.map(repository => repository.fullName),
+      storageKey: githubWorkItemsStorageKey,
+    })
+    throw error
   }
 }
 
@@ -590,6 +617,15 @@ async function deleteStaleSyncedGithubWorkItems({
 
 function getGithubWorkItemId(repositoryFullName: string, type: GithubWorkItemType, number: number) {
   return `${repositoryFullName}:${type}:${number}`
+}
+
+function githubSyncLog(message: string, details?: unknown) {
+  if (details === undefined) {
+    console.info(`[github sync] ${message}`)
+    return
+  }
+
+  console.info(`[github sync] ${message}`, details)
 }
 
 function normalizeGithubWorkItemSyncLimit(syncLimit: number) {
