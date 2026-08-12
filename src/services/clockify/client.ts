@@ -9,6 +9,8 @@ import { createApiClient as createReportsApiClient } from './generated/reports'
 export const CLOCKIFY_GLOBAL_API_BASE_URL = 'https://api.clockify.me/api'
 export const CLOCKIFY_GLOBAL_REPORTS_BASE_URL = 'https://reports.api.clockify.me'
 
+const clockifyRequestTimeoutMs = 15_000
+
 export type CreateClockifyClientOptions = ZodiosOptions & {
   apiKey?: string
 }
@@ -18,6 +20,7 @@ export const clockifyClientOptions = {
     paramsSerializer: {
       indexes: null,
     },
+    timeout: clockifyRequestTimeoutMs,
   },
   validate: 'request',
 } satisfies ZodiosOptions
@@ -57,11 +60,13 @@ const authenticatedClockifyReportsAxios = axios.create(clockifyClientOptions.axi
       if (axios.isAxiosError(error)) {
         clockifyApiLog('response error', {
           baseURL: error.config?.baseURL,
+          code: error.code,
           data: getClockifyResponseDataLog(error.response?.data),
           method: error.config?.method?.toUpperCase(),
           params: error.config?.params,
           status: error.response?.status,
           statusText: error.response?.statusText,
+          timeout: error.config?.timeout,
           url: error.config?.url,
         })
       }

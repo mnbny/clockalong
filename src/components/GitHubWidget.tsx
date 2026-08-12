@@ -587,7 +587,7 @@ function GitHubWidgetContent() {
 
         {syncQuery.isError ? (
           <div className="text-error grid min-h-48 place-items-center px-4 text-center text-sm">
-            Could not load GitHub work items.
+            Could not load GitHub work items. {getErrorMessage(syncQuery.error)}
           </div>
         ) : null}
 

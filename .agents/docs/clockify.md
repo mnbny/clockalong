@@ -117,6 +117,7 @@ For Clockalong, adapt that pattern to Clockify:
 - Export `createClockifyClient(baseUrl, options)`, `createClockifyReportsClient(baseUrl, options)`, `clockify`, and `clockifyReports` from `src/services/clockify/client.ts`.
 - Configure auth by attaching `X-Api-Key` from the native auth bridge before Clockify requests.
 - Keep regional and subdomain base URL selection outside the generated client so it can be changed per workspace.
+- Keep a request timeout on `clockifyClientOptions.axiosConfig` so every Clockify client inherits it. Axios defaults to no timeout, and a single stalled request leaves the workspace lookup pending forever, which disables the running-timer read, the entry sync, and summary reports without surfacing an error.
 
 ## Entry sync
 
