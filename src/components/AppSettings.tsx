@@ -25,6 +25,8 @@ import { SettingsRow, SettingsSection } from './settings/SettingsSection'
 const settingsBackupKeys = [
   'clockifyBillable',
   'clockifyDefaultProject',
+  'clockifyOverrideProject',
+  'clockifyOverrideProjectVisibility',
   'clockifyDescriptionTemplate',
   'clockifyDescriptionTemplateFallback',
   'clockifyEntrySyncDays',
