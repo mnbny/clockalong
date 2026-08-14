@@ -24,12 +24,14 @@ export const themeOptions = [
   { theme: 'emerald', appearance: 'light' },
 ] as const
 
-export type ClockifyDefaultProject = {
+export type ClockifyProject = {
   projectId: string
   projectName: string
   workspaceId: string
   workspaceName: string
-} | null
+}
+export type ClockifyDefaultProject = ClockifyProject | null
+export type ClockifyOverrideProject = ClockifyProject | null
 export type GithubSelectedRepository = {
   fullName: string
   id: number
@@ -77,6 +79,16 @@ const storageConfig = {
   clockifyDefaultProject: {
     type: 'object',
     default: null as ClockifyDefaultProject,
+    version: 1,
+  },
+  clockifyOverrideProject: {
+    type: 'object',
+    default: null as ClockifyOverrideProject,
+    version: 1,
+  },
+  clockifyOverrideProjectVisibility: {
+    type: 'boolean',
+    default: false,
     version: 1,
   },
   clockifyDescriptionTemplate: {
