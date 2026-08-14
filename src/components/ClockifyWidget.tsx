@@ -105,6 +105,9 @@ const formatShortDuration = humanizeDuration.humanizer({
 
 export function ClockifyWidget() {
   const queryClient = useQueryClient()
+  const [clockifyDefaultProject] = useStorage('clockifyDefaultProject')
+  const [clockifyOverrideProject, setClockifyOverrideProject] = useStorage('clockifyOverrideProject')
+  const [clockifyOverrideProjectVisibility] = useStorage('clockifyOverrideProjectVisibility')
   const [, setQuickTimersActiveEntry] = useStorage('quickTimersActiveEntry')
   const fixOverlapDialogRef = useRef<HTMLDialogElement>(null)
   const editEntryDialogRef = useRef<HTMLDialogElement>(null)
@@ -136,6 +139,52 @@ export function ClockifyWidget() {
       workspaces[0]
     )
   }, [userQuery.data, workspacesQuery.data])
+  const clockifyProjectsQuery = useQuery({
+    enabled: clockifyOverrideProjectVisibility && Boolean(selectedWorkspace?.id),
+    queryKey: queryKeys.clockify.projects({
+      params: { workspaceId: selectedWorkspace?.id },
+    }),
+    queryFn: () =>
+      clockify.getProjects({
+        params: { workspaceId: selectedWorkspace!.id! },
+        queries: {
+          archived: false,
+          page: 1,
+          'page-size': 100,
+          'sort-column': 'NAME',
+          'sort-order': 'ASCENDING',
+        },
+      }),
+    retry: 1,
+    staleTime: 5 * 60_000,
+  })
+  const clockifyProjectOptions = useMemo(() => {
+    if (!selectedWorkspace?.id) {
+      return []
+    }
+
+    const workspaceId = selectedWorkspace.id
+
+    return (clockifyProjectsQuery.data ?? []).flatMap(project => {
+      if (!project.id || !project.name) {
+        return []
+      }
+
+      return {
+        projectId: project.id,
+        projectName: project.name,
+        workspaceId,
+        workspaceName: selectedWorkspace.name ?? 'Clockify workspace',
+      }
+    })
+  }, [clockifyProjectsQuery.data, selectedWorkspace])
+  const clockifyOverrideProjectValue = clockifyOverrideProject
+    ? `${clockifyOverrideProject.workspaceId}:${clockifyOverrideProject.projectId}`
+    : ''
+  const selectedClockifyOverrideProjectLoaded = clockifyProjectOptions.some(
+    project => `${project.workspaceId}:${project.projectId}` === clockifyOverrideProjectValue,
+  )
+  const clockifyTimerProject = clockifyOverrideProject ?? clockifyDefaultProject
   const runningEntryQuery = useQuery({
     enabled: Boolean(userQuery.data?.id && selectedWorkspace?.id),
     queryKey: queryKeys.clockify.runningEntry({
@@ -300,7 +349,7 @@ export function ClockifyWidget() {
     },
   })
   const resumeClockifyEntryMutation = useMutation({
-    mutationFn: resumeClockifyTimeEntry,
+    mutationFn: (entry: TimeEntryWithRatesDtoV1) => resumeClockifyTimeEntry(entry, clockifyTimerProject),
     onError: error => {
       appToast.error('Could not resume Clockify timer', {
         description: getErrorMessage(error),
@@ -347,7 +396,49 @@ export function ClockifyWidget() {
                 <p className="text-base-content/60 truncate text-sm">Time tracker</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+              {clockifyOverrideProjectVisibility ? (
+                <div className="flex min-w-0 items-center gap-2">
+                  <select
+                    aria-label="Clockify project override"
+                    className="select select-bordered select-sm max-w-52 min-w-0"
+                    disabled={
+                      userQuery.isLoading ||
+                      workspacesQuery.isLoading ||
+                      clockifyProjectsQuery.isLoading ||
+                      userQuery.isError ||
+                      workspacesQuery.isError ||
+                      clockifyProjectsQuery.isError ||
+                      !clockifyProjectOptions.length
+                    }
+                    title="Project override"
+                    value={clockifyOverrideProjectValue}
+                    onChange={event => {
+                      const selectedProject = clockifyProjectOptions.find(
+                        project => `${project.workspaceId}:${project.projectId}` === event.currentTarget.value,
+                      )
+
+                      void setClockifyOverrideProject(selectedProject ?? null)
+                    }}>
+                    <option value="">Use default project</option>
+                    {clockifyOverrideProjectValue &&
+                    !selectedClockifyOverrideProjectLoaded &&
+                    clockifyOverrideProject ? (
+                      <option value={clockifyOverrideProjectValue}>
+                        {`${clockifyOverrideProject.workspaceName} / ${clockifyOverrideProject.projectName}`}
+                      </option>
+                    ) : null}
+                    {clockifyProjectOptions.map(project => (
+                      <option
+                        key={`${project.workspaceId}:${project.projectId}`}
+                        value={`${project.workspaceId}:${project.projectId}`}>
+                        {`${project.workspaceName} / ${project.projectName}`}
+                      </option>
+                    ))}
+                  </select>
+                  {clockifyProjectsQuery.isFetching ? <span className="loading loading-spinner loading-xs" /> : null}
+                </div>
+              ) : null}
               <ClockifyRefreshButton fetching={fetching} />
               <button
                 className="btn btn-square btn-ghost btn-sm"

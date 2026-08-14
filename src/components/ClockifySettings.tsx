@@ -17,6 +17,9 @@ import { SettingsRow, SettingsSection } from './settings/SettingsSection'
 export function ClockifySettings() {
   const [clockifyBillable, setClockifyBillable] = useStorage('clockifyBillable')
   const [clockifyDefaultProject, setClockifyDefaultProject] = useStorage('clockifyDefaultProject')
+  const [clockifyOverrideProjectVisibility, setClockifyOverrideProjectVisibility] = useStorage(
+    'clockifyOverrideProjectVisibility',
+  )
   const [clockifyEntrySyncDays, setClockifyEntrySyncDays] = useStorage('clockifyEntrySyncDays')
   const [clockifyEntrySyncInterval, setClockifyEntrySyncInterval] = useStorage('clockifyEntrySyncInterval')
   const clockifyUserQuery = useQuery({
@@ -177,6 +180,18 @@ export function ClockifySettings() {
             <span className="loading loading-spinner loading-xs" />
           ) : null}
         </div>
+      </SettingsRow>
+
+      <SettingsRow
+        label="Project override"
+        description="Show a project override selector in the Clockify dashboard widget.">
+        <input
+          aria-label="Show Clockify project override"
+          checked={clockifyOverrideProjectVisibility}
+          className="toggle toggle-primary"
+          type="checkbox"
+          onChange={event => void setClockifyOverrideProjectVisibility(event.currentTarget.checked)}
+        />
       </SettingsRow>
 
       <SettingsRow label="Billable by default" description="Start new timers as billable.">
