@@ -16,10 +16,12 @@ import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tan
 import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
+import { useClockifyTimerProject } from '../hooks/useClockifyTimerProject'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
 import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../services/clockify/generated/clockify'
 import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
+import { MissingClockifyProjectError } from '../services/clockify/time-entries'
 import { createGithubClient } from '../services/github/client'
 import {
   formatGithubIssueDescriptionTemplate,
@@ -169,7 +171,7 @@ export function GitHubWidget() {
 function GitHubWidgetContent() {
   const queryClient = useQueryClient()
   const [clockifyBillable] = useStorage('clockifyBillable')
-  const [clockifyDefaultProject] = useStorage('clockifyDefaultProject')
+  const clockifyTimerProject = useClockifyTimerProject()
   const [githubIssueDescriptionTemplate] = useStorage('githubIssueDescriptionTemplate')
   const [githubIssueDescriptionTemplateFallback] = useStorage('githubIssueDescriptionTemplateFallback')
   const [githubPullRequestDescriptionTemplate] = useStorage('githubPullRequestDescriptionTemplate')
@@ -370,24 +372,24 @@ function GitHubWidgetContent() {
   const activeGithubWorkItemId = getClockifyEntryGithubWorkItem(runningEntry, workItemsWithTracking)?.id ?? null
   const startTrackingMutation = useMutation({
     mutationFn: async (item: SyncedGithubWorkItem) => {
-      if (!clockifyDefaultProject) {
-        throw new MissingClockifyDefaultProjectError()
+      if (!clockifyTimerProject) {
+        throw new MissingClockifyProjectError()
       }
 
       const entry = await startClockifyTimerForGithubWorkItem({
         billable: clockifyBillable,
         description: workItemDescriptions.get(item.id) ?? '',
         item,
-        workspaceId: clockifyDefaultProject.workspaceId,
-        projectId: clockifyDefaultProject.projectId,
+        workspaceId: clockifyTimerProject.workspaceId,
+        projectId: clockifyTimerProject.projectId,
       })
 
       return { entry, item }
     },
     onError: error => {
-      if (error instanceof MissingClockifyDefaultProjectError) {
-        appToast.warning('Choose a default Clockify project first', {
-          description: 'Open settings and select the project to track time against.',
+      if (error instanceof MissingClockifyProjectError) {
+        appToast.warning('Choose a Clockify project first', {
+          description: 'Select an override in the Clockify widget or a default project in Settings.',
         })
         return
       }
@@ -1412,12 +1414,6 @@ async function stopClockifyTimerForEntry({
     { end: new Date().toISOString() },
     { params: { userId: entry.userId, workspaceId: entry.workspaceId } },
   )
-}
-
-class MissingClockifyDefaultProjectError extends Error {
-  constructor() {
-    super('Missing default Clockify project.')
-  }
 }
 
 class MissingRunningClockifyEntryError extends Error {

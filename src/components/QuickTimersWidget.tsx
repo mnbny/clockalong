@@ -17,9 +17,11 @@ import { flushSync } from 'react-dom'
 import { type SubmitHandler, useForm } from 'react-hook-form'
 import { z } from 'zod'
 
+import { useClockifyTimerProject } from '../hooks/useClockifyTimerProject'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
 import { type CreateTimeEntryRequest } from '../services/clockify/generated/clockify'
+import { MissingClockifyProjectError } from '../services/clockify/time-entries'
 import { useStorage } from '../services/storage/useStorage'
 import { cx } from '../utils/cx'
 import { getErrorMessage } from '../utils/errors'
@@ -453,7 +455,7 @@ function QuickTimerForm({ onCancel, quickTimerId }: QuickTimerFormProps) {
 function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProps) {
   const queryClient = useQueryClient()
   const [clockifyBillable] = useStorage('clockifyBillable')
-  const [clockifyDefaultProject] = useStorage('clockifyDefaultProject')
+  const clockifyTimerProject = useClockifyTimerProject()
   const [, setQuickTimersActiveEntry] = useStorage('quickTimersActiveEntry')
   const [quickTimers] = useStorage('quickTimers')
   const [quickTimersCache, setQuickTimersCache] = useStorage('quickTimersCache')
@@ -482,18 +484,22 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
 
   const startQuickTimerMutation = useMutation({
     mutationFn: (values: Record<string, string>) => {
+      if (!clockifyTimerProject) {
+        throw new MissingClockifyProjectError()
+      }
+
       const body = {
         billable: clockifyBillable,
         description: formatTemplate(quickTimer?.descriptionTemplate ?? '', values, {
           fallback: '',
           knownTokens: templateTokens,
         }),
-        projectId: clockifyDefaultProject?.projectId,
+        projectId: clockifyTimerProject.projectId,
         start: new Date().toISOString(),
         type: 'REGULAR',
       } satisfies CreateTimeEntryRequest
 
-      return clockify.createTimeEntry(body, { params: { workspaceId: clockifyDefaultProject?.workspaceId ?? '' } })
+      return clockify.createTimeEntry(body, { params: { workspaceId: clockifyTimerProject.workspaceId } })
     },
     onMutate: async values => {
       await setQuickTimersCache(current => [
@@ -505,6 +511,13 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
       ])
     },
     onError: error => {
+      if (error instanceof MissingClockifyProjectError) {
+        appToast.warning('Choose a Clockify project first', {
+          description: 'Select an override in the Clockify widget or a default project in Settings.',
+        })
+        return
+      }
+
       appToast.error('Could not start Clockify timer', {
         description: getErrorMessage(error),
       })
