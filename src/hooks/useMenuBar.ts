@@ -26,6 +26,7 @@ import { useStorage } from '../services/storage/useStorage'
 import { getErrorMessage } from '../utils/errors'
 import { useAppAuth } from './useAppAuth'
 import { useAppInit } from './useAppInit'
+import { useClockifyTimerProject } from './useClockifyTimerProject'
 
 const menuBarTrayId = 'clockalong-menu-bar'
 const recentEntryLimit = 5
@@ -41,6 +42,7 @@ export function useMenuBar() {
   const queryClient = useQueryClient()
   const [, setQuickTimersActiveEntry] = useStorage('quickTimersActiveEntry')
   const [menuBarVisible] = useStorage('menuBarVisible')
+  const clockifyTimerProject = useClockifyTimerProject()
   const [tray, setTray] = useState<TrayIcon | null>(null)
   const trayTitleUpdates = useRef(Promise.resolve())
   const clockifyEnabled =
@@ -173,7 +175,7 @@ export function useMenuBar() {
     },
   })
   const { mutate: resumeEntry } = useMutation({
-    mutationFn: resumeClockifyTimeEntry,
+    mutationFn: (entry: TimeEntryWithRatesDtoV1) => resumeClockifyTimeEntry(entry, clockifyTimerProject),
     onError: error => {
       console.warn('[menu bar] Could not start Clockify timer:', error)
       appToast.error('Could not start Clockify timer', { description: getErrorMessage(error) })

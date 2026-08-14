@@ -1,18 +1,27 @@
+import type { ClockifyProject } from '../storage/config'
 import type { CreateTimeEntryRequest, TimeEntryWithRatesDtoV1 } from './generated/clockify'
 
 import { clockify } from './client'
+
+export class MissingClockifyProjectError extends Error {
+  constructor() {
+    super('Missing Clockify project.')
+  }
+}
 
 export function getClockifyTimeEntryTitle(entry: TimeEntryWithRatesDtoV1) {
   return entry.description?.trim() || 'Untitled time entry'
 }
 
-export async function resumeClockifyTimeEntry(entry: TimeEntryWithRatesDtoV1) {
-  if (!entry.workspaceId) {
+export async function resumeClockifyTimeEntry(entry: TimeEntryWithRatesDtoV1, project: ClockifyProject | null = null) {
+  const workspaceId = project?.workspaceId ?? entry.workspaceId
+
+  if (!workspaceId) {
     throw new Error('Clockify entry is missing workspace information.')
   }
 
-  return clockify.createTimeEntry(getClockifyTimeEntryResumeBody(entry), {
-    params: { workspaceId: entry.workspaceId },
+  return clockify.createTimeEntry(getClockifyTimeEntryResumeBody(entry, project), {
+    params: { workspaceId },
   })
 }
 
@@ -27,7 +36,8 @@ export async function stopClockifyTimeEntry(entry: TimeEntryWithRatesDtoV1) {
   )
 }
 
-function getClockifyTimeEntryResumeBody(entry: TimeEntryWithRatesDtoV1) {
+function getClockifyTimeEntryResumeBody(entry: TimeEntryWithRatesDtoV1, project: ClockifyProject | null) {
+  const projectId = project?.projectId ?? entry.projectId
   const body: CreateTimeEntryRequest = {
     billable: entry.billable ?? false,
     start: new Date().toISOString(),
@@ -38,11 +48,11 @@ function getClockifyTimeEntryResumeBody(entry: TimeEntryWithRatesDtoV1) {
     body.description = entry.description
   }
 
-  if (entry.projectId) {
-    body.projectId = entry.projectId
+  if (projectId) {
+    body.projectId = projectId
   }
 
-  if (entry.taskId) {
+  if (entry.taskId && projectId === entry.projectId) {
     body.taskId = entry.taskId
   }
 

@@ -14,8 +14,10 @@ Backups include Quick Timer presets and their last-used template values. They do
 
 ## Keys
 
-- `clockifyBillable`: default billable flag for new Clockify time entries created from Linear issues.
-- `clockifyDefaultProject`: default Clockify project for new time entries created from Linear issues. Stores the selected workspace/project IDs plus display names.
+- `clockifyBillable`: default billable flag for newly created Clockify time entries.
+- `clockifyDefaultProject`: fallback Clockify project for new timers when no dashboard override is active. Stores the selected workspace/project IDs plus display names.
+- `clockifyOverrideProject`: Clockify project selected in the dashboard. It takes precedence over `clockifyDefaultProject` for new timers and stores the selected workspace/project IDs plus display names.
+- `clockifyOverrideProjectVisibility`: whether the Clockify dashboard shows its project override selector. Defaults to `false`.
 - `clockifyDescriptionTemplate`: Clockify time-entry description format for Linear issue variables.
 - `clockifyDescriptionTemplateFallback`: replacement text for missing values in the Clockify description template.
 - `clockifyEntrySyncDays`: number of recent Clockify entry days to sync into the local Clockify entry cache. Values are `5`, `15`, and `30`. Default is `30`.

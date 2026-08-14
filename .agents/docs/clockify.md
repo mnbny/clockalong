@@ -22,7 +22,7 @@ Rust owns Clockify credential storage and auth state. Clockify API calls stay in
 - Validate a saved key by calling `GET /v1/user`.
 - Startup validation should mark Clockify disconnected whenever validation does not succeed; Clockalong does not support offline authenticated Clockify mode.
 - Clear the saved key only when validation clearly fails because the credential is invalid or revoked. Keep the saved key after network or provider failures so the app can retry without asking the user to paste it again.
-- Clockify disconnect should clear the saved key, reset all Clockify TanStack Query cache, clear the local synced Clockify entry collection, and remove workspace-bound Clockify defaults such as the selected default project and active Quick Timer association. This keeps API-key rotation from showing the previous user's workspace, entries, or running timer.
+- Clockify disconnect should clear the saved key, reset all Clockify TanStack Query cache, clear the local synced Clockify entry collection, and remove workspace-bound Clockify settings such as the selected default project, dashboard project override, and active Quick Timer association. This keeps API-key rotation from showing the previous user's workspace, entries, or running timer.
 - Subdomain and regional workspaces may require a workspace-specific key or alternate base URL. Keep base URL handling configurable instead of hard-coding every request to the global host.
 
 Clockify also has a CAKE.com Marketplace add-on model that uses `X-Addon-Token` and add-on scopes. That path is for marketplace add-ons embedded in or installed into Clockify workspaces. It is not the right auth model for Clockalong's local Tauri desktop app.
@@ -64,7 +64,7 @@ Clockalong builds Clockify time-entry descriptions from the user-configured Line
 - `{internal-ref}` is a stable Clockalong marker used to match Clockify entries back to provider work items. For Linear it renders as `ref:linear:{workspaceSlug}:{issueIdentifier}`.
 - Template and fallback preferences are stored through `useStorage` as `clockifyDescriptionTemplate` and `clockifyDescriptionTemplateFallback`.
 - Timer creation should format from the assigned-issue list DTO when possible. Do not fetch full issue details only to build the Clockify description.
-- New time entries should use the `clockifyBillable` storage preference for their initial billable flag. The default is billable.
+- New time entries should use the dashboard `clockifyOverrideProject` when present, otherwise `clockifyDefaultProject`, and use the `clockifyBillable` storage preference for their initial billable flag. The default is billable.
 
 ## Client strategy
 

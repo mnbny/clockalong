@@ -23,7 +23,7 @@ Each preset stores:
 - `descriptionTemplate`: Clockify description template used when starting the timer.
 - `icon`: optional SVG string rendered in the preset control, with the Bolt icon as fallback.
 
-Do not store Clockify workspace or project data on the preset. Quick Timers use the global `clockifyDefaultProject` and `clockifyBillable` settings when starting timers.
+Do not store Clockify workspace or project data on the preset. Quick Timers use the dashboard `clockifyOverrideProject` when present, otherwise the global `clockifyDefaultProject`, plus the `clockifyBillable` setting when starting timers.
 
 Settings backups preserve Quick Timer presets and their cached form values. They do not restore `quickTimersActiveEntry`, because it refers to an entry in a particular Clockify workspace.
 

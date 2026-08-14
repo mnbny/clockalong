@@ -9,6 +9,7 @@ import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-tabl
 import { useCallback, useEffect, useMemo } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
+import { useClockifyTimerProject } from '../hooks/useClockifyTimerProject'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
 import {
@@ -27,6 +28,7 @@ import {
   getLinearTicketInternalRef,
   summarizeClockifyTicketTimeEntries,
 } from '../services/clockify/ticket-summaries'
+import { MissingClockifyProjectError } from '../services/clockify/time-entries'
 import { linearTicketsCollection, useLinearSync } from '../services/linear/sync'
 import {
   getLinearTicketSortOrderLabel,
@@ -149,7 +151,7 @@ export function LinearWidget() {
 function LinearWidgetContent() {
   const queryClient = useQueryClient()
   const [clockifyBillable] = useStorage('clockifyBillable')
-  const [clockifyDefaultProject] = useStorage('clockifyDefaultProject')
+  const clockifyTimerProject = useClockifyTimerProject()
   const [clockifyDescriptionTemplate] = useStorage('clockifyDescriptionTemplate')
   const [clockifyDescriptionTemplateFallback] = useStorage('clockifyDescriptionTemplateFallback')
   const [linearTicketSyncLimit] = useStorage('linearTicketSyncLimit')
@@ -291,15 +293,15 @@ function LinearWidgetContent() {
   const startTrackingMutation = useMutation({
     mutationFn: async (ticket: LinearTicket) => {
       clockifyTimerLog('start mutation requested', {
-        defaultProjectPresent: Boolean(clockifyDefaultProject),
+        projectSource: clockifyTimerProject ? 'override-or-default' : 'missing',
         ticketIdentifier: ticket.identifier,
       })
 
-      if (!clockifyDefaultProject) {
-        clockifyTimerLog('start mutation missing default project', {
+      if (!clockifyTimerProject) {
+        clockifyTimerLog('start mutation missing project', {
           ticketIdentifier: ticket.identifier,
         })
-        throw new MissingClockifyDefaultProjectError()
+        throw new MissingClockifyProjectError()
       }
 
       const entry = await startClockifyTimerForTicket({
@@ -307,19 +309,19 @@ function LinearWidgetContent() {
         descriptionTemplate: clockifyDescriptionTemplate,
         descriptionTemplateFallback: clockifyDescriptionTemplateFallback,
         ticket,
-        workspaceId: clockifyDefaultProject.workspaceId,
-        projectId: clockifyDefaultProject.projectId,
+        workspaceId: clockifyTimerProject.workspaceId,
+        projectId: clockifyTimerProject.projectId,
       })
 
       return { entry, ticket }
     },
     onError: error => {
-      if (error instanceof MissingClockifyDefaultProjectError) {
+      if (error instanceof MissingClockifyProjectError) {
         clockifyTimerLog('start mutation blocked', {
-          reason: 'missing-default-project',
+          reason: 'missing-project',
         })
-        appToast.warning('Choose a default Clockify project first', {
-          description: 'Open settings and select the project to track time against.',
+        appToast.warning('Choose a Clockify project first', {
+          description: 'Select an override in the Clockify widget or a default project in Settings.',
         })
         return
       }
@@ -821,12 +823,6 @@ function getLinearTicketNumber(identifier: string) {
 function getLinearTicketTeamKey(identifier: string) {
   const [teamKey] = identifier.split('-')
   return teamKey || undefined
-}
-
-class MissingClockifyDefaultProjectError extends Error {
-  constructor() {
-    super('Missing default Clockify project.')
-  }
 }
 
 class MissingRunningClockifyEntryError extends Error {

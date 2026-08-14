@@ -48,7 +48,7 @@ Dashboard routes should stay thin composition shells. `src/routes/_app.dashboard
 
 Current dashboard widget boundaries:
 
-- `src/components/ClockifyWidget.tsx`: Clockify summary, running timer, overlap repair, and Clockify-centric dashboard controls.
+- `src/components/ClockifyWidget.tsx`: Clockify summary, running timer, overlap repair, optional dashboard project override, and Clockify-centric dashboard controls.
 - `src/components/QuickTimersWidget.tsx`: Quick Timer visibility, active preset lookup, preset CRUD, and preset start forms. It returns `null` when Quick Timers are disabled.
 - `src/components/GitHubWidget.tsx`: GitHub auth gate, synced work-item live query, Clockify summary merge, issue and pull request table, GitHub work-item refresh, and GitHub timer start/stop controls. It returns `null` when GitHub is unauthenticated.
 - `src/components/LinearWidget.tsx`: Linear auth gate, assigned-ticket live query, Clockify summary merge, Linear ticket table, ticket ordering, and Linear timer start/stop controls. It returns `null` when Linear is unauthenticated.
