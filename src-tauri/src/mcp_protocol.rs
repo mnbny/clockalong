@@ -271,32 +271,19 @@ fn list_recent_entries(
     snapshot: &CachedMcpSnapshot,
     arguments: ListRecentEntriesArguments,
 ) -> Result<Value, String> {
+    let days = arguments.days.to_string();
     let entries = snapshot
         .value
         .get("recentEntries")
+        .and_then(Value::as_object)
+        .and_then(|entries| entries.get(&days))
         .and_then(Value::as_array)
         .ok_or_else(|| "MCP snapshot does not contain recent entries".to_string())?;
-    let cutoff = current_epoch_seconds()
-        .unwrap_or_default()
-        .saturating_sub(i64::from(arguments.days) * 86_400);
-    let mut entries = entries
+    let entries = entries
         .iter()
-        .filter(|entry| {
-            entry
-                .get("startedAt")
-                .and_then(Value::as_str)
-                .and_then(parse_rfc3339_seconds)
-                .is_some_and(|started_at| started_at >= cutoff)
-        })
+        .take(arguments.limit)
         .cloned()
         .collect::<Vec<_>>();
-    entries.sort_by(|left, right| {
-        right
-            .get("startedAt")
-            .and_then(Value::as_str)
-            .cmp(&left.get("startedAt").and_then(Value::as_str))
-    });
-    entries.truncate(arguments.limit);
 
     Ok(json!({
         "entries": entries,
