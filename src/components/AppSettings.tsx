@@ -163,6 +163,7 @@ export function AppSettings() {
     try {
       const snapshot = parseSettingsSnapshot(await file.text())
       const { importedKeys, skippedKeys } = await importSettingsBackup(snapshot)
+      await syncNativeMcpServerEnabled()
 
       appToast.success('Settings imported', {
         description: getSettingsImportDescription(importedKeys.length, skippedKeys.length),
@@ -182,6 +183,7 @@ export function AppSettings() {
     try {
       await downloadSettingsBackup()
       await resetSettingsBackup()
+      await syncNativeMcpServerEnabled()
       appToast.success('Settings reset', {
         description: 'A backup was saved to your Downloads folder.',
       })
@@ -668,6 +670,14 @@ async function resetSettingsBackup() {
   for (const key of settingsBackupKeys) {
     await storage.remove(key)
   }
+}
+
+async function syncNativeMcpServerEnabled() {
+  if (!isTauri()) {
+    return
+  }
+
+  await mcp.setEnabled(await storage.get('mcpServerEnabled'))
 }
 
 function isStorageValue<K extends StorageKey<typeof storage.config>>(
