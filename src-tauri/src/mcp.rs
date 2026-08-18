@@ -95,12 +95,18 @@ async fn set_enabled<R: Runtime>(
     }
 
     if !enabled {
-        app.state::<McpBridgeState>()
+        let bridge_state = app.state::<McpBridgeState>();
+        bridge_state
             .replace_listener(None, None, None)
+            .map_err(|error| error.to_string())?;
+        bridge_state
+            .clear_snapshot()
             .map_err(|error| error.to_string())?;
         return state.update_snapshot(app, |snapshot| {
             snapshot.running = false;
             snapshot.port = None;
+            snapshot.bridge_ready = false;
+            snapshot.snapshot_captured_at = None;
             snapshot.last_error = None;
         });
     }

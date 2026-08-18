@@ -102,7 +102,6 @@ impl McpBridgeState {
             .ok_or(McpBridgeError::NotReady)
     }
 
-    #[allow(dead_code)]
     pub fn clear_snapshot(&self) -> Result<(), McpBridgeError> {
         *self
             .snapshot
