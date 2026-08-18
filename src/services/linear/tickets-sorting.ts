@@ -109,6 +109,10 @@ function getRelevanceBucket(ticket: LinearTicket, options: SortLinearTicketsOpti
     return 'running'
   }
 
+  if (isLinearTicketTerminal(ticket)) {
+    return 'terminal'
+  }
+
   const recentlyTracked = isRecentlyTracked(ticket, now)
 
   switch (ticket.status.type) {
@@ -118,12 +122,23 @@ function getRelevanceBucket(ticket: LinearTicket, options: SortLinearTicketsOpti
     case 'backlog':
     case 'triage':
       return recentlyTracked ? 'recentlyTrackedOpen' : 'backlog'
+    default:
+      return 'terminal'
+  }
+}
+
+export function isLinearTicketTerminal(ticket: LinearTicket) {
+  switch (ticket.status.type) {
+    case 'started':
+    case 'unstarted':
+    case 'backlog':
+    case 'triage':
+      return false
     case 'canceled':
     case 'completed':
     case 'duplicate':
-      return 'terminal'
     default:
-      return 'terminal'
+      return true
   }
 }
 
