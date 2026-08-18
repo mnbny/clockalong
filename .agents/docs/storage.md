@@ -37,11 +37,12 @@ Backups include Quick Timer presets and their last-used template values. They do
 - `linearTicketSyncInterval`: how often assigned Linear tickets sync in the background. Default is `30m`.
 - `linearTicketSyncOrderBy`: Linear pagination ordering field for ticket sync. Values mirror Linear `PaginationOrderBy` support currently exposed by the app: `createdAt`, `updatedAt`.
 - `linearTicketSortOrder`: client-side ticket ordering mode. Values are `custom`, `status`, `created`, `updated`, and `alphabetical`.
+- `mcpServerEnabled`: whether the local MCP server runs. Defaults to `false`. Rust reads this key from the same `settings.json` store during startup. The listener allocates a port from its pool and does not store the port.
 - `quickTimersColumns`: number of Quick Timer columns to show in the dashboard grid. Default is `5`.
 - `quickTimersEnabled`: whether the Quick Timers dashboard feature is enabled. Default is `true`.
 - `quickTimers`: saved ad hoc Quick Timer presets.
 - `quickTimersActiveEntry`: local association between the active Quick Timer preset and its Clockify entry.
-- `quickTimersCache`: last submitted template variable values per Quick Timer preset.
+- `quickTimersCache`: last submitted template variable values per Quick Timer preset. Each entry stores `{ id, values }`.
 - `theme`: active daisyUI theme and native window appearance.
 
 ## Native secrets

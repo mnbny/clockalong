@@ -13,6 +13,7 @@
 - Reusable frontend components live in `src/components/`; shared frontend helpers live in `src/utils/`.
 - Frontend-to-Rust bridge calls live in clients under `src/services/tauri/`; route code should use those clients instead of raw `invoke`.
 - External frontend API clients live under `src/services/<provider>/`; Clockify uses a generated Zodios client under `src/services/clockify/`.
+- The frontend MCP boundary lives under `src/services/mcp/`. It normalizes snapshots and runs timer commands through existing provider services.
 - Work sources can be external providers such as Linear and GitHub or local sources such as Quick Timers. Do not force a generic provider abstraction until multiple implemented sources prove the common shape.
 - Avoid broad service barrels; import concrete provider modules when that keeps dependencies clearer.
 - Native auth is split by responsibility:
@@ -21,6 +22,11 @@
   - `src-tauri/src/auth_linear.rs`: Linear OAuth, loopback callback, token refresh, and disconnect.
   - `src-tauri/src/auth_github.rs`: GitHub PAT validation, secure credential lifecycle, and disconnect.
   - `src-tauri/src/stronghold.rs`: narrow Stronghold read/write/remove helpers for native secrets.
+- Native MCP modules split responsibilities:
+  - `src-tauri/src/mcp.rs`: reads stored enablement, reports server status, and owns the Tauri commands.
+  - `src-tauri/src/mcp_http.rs`: owns the loopback listener and validates HTTP requests.
+  - `src-tauri/src/mcp_protocol.rs`: negotiates MCP, defines public tool schemas, validates arguments, and answers read tools.
+  - `src-tauri/src/mcp_bridge.rs`: owns the cached snapshot and tracks pending webview commands.
 - Auth routing uses Clockify as the app-level gate:
   - `/` waits for native app initialization, then navigates to `/dashboard`.
   - `_app` guards authenticated routes and redirects users to `/sign-in` only when Clockify is unauthenticated.
