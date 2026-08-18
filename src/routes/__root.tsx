@@ -4,6 +4,7 @@ import { AppHeader } from '../components/AppHeader'
 import { AppToaster } from '../components/AppToaster'
 import { useAppUpdates } from '../hooks/useAppUpdates'
 import { useDevTools } from '../hooks/useDevTools'
+import { useMcpServerBridge } from '../hooks/useMcpServerBridge'
 import { useMenuBar } from '../hooks/useMenuBar'
 
 export const Route = createRootRoute({
@@ -13,6 +14,7 @@ export const Route = createRootRoute({
 function RootLayout() {
   useDevTools()
   useAppUpdates()
+  useMcpServerBridge()
   useMenuBar()
 
   return (
