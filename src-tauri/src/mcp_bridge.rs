@@ -102,6 +102,17 @@ impl McpBridgeState {
             .ok_or(McpBridgeError::NotReady)
     }
 
+    #[allow(dead_code)]
+    pub fn clear_snapshot(&self) -> Result<(), McpBridgeError> {
+        *self
+            .snapshot
+            .lock()
+            .map_err(|_| McpBridgeError::Internal("Failed to clear MCP snapshot".to_string()))? =
+            None;
+
+        Ok(())
+    }
+
     pub async fn dispatch_command<R: Runtime>(
         &self,
         app: &AppHandle<R>,
@@ -217,20 +228,6 @@ impl McpBridgeState {
             .map_err(|_| McpBridgeError::Internal("Failed to clear MCP port".to_string()))? = None;
 
         Ok(())
-    }
-
-    pub fn listener_status(&self) -> Result<(Option<u16>, Option<String>), McpBridgeError> {
-        let bound_port = *self
-            .bound_port
-            .lock()
-            .map_err(|_| McpBridgeError::Internal("Failed to read MCP port".to_string()))?;
-        let bind_error = self
-            .last_bind_error
-            .lock()
-            .map_err(|_| McpBridgeError::Internal("Failed to read MCP bind error".to_string()))?
-            .clone();
-
-        Ok((bound_port, bind_error))
     }
 }
 
