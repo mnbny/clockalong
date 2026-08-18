@@ -6,12 +6,13 @@ import type {
 } from '../services/clockify/generated/clockify'
 import type { TimeEntrySummaryReportDto } from '../services/clockify/generated/reports'
 import type { McpCommandPayload, McpCommandResult } from '../services/tauri/mcp-client'
+import type { QueryKey } from '@tanstack/react-query'
 
 import { useLiveQuery } from '@tanstack/react-db'
-import { useQuery } from '@tanstack/react-query'
+import { hashKey, useQueryClient } from '@tanstack/react-query'
 import { isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 
 import { queryKeys } from '../lib/query-client'
 import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
@@ -42,18 +43,9 @@ export function useMcpServerBridge() {
   const [quickTimersEnabled] = useStorage('quickTimersEnabled')
   const [commandListenerReady, setCommandListenerReady] = useState(false)
   const clockifyTimerProject = useClockifyTimerProject()
-  const userQuery = useQuery<UserDtoV1>({
-    enabled: false,
-    queryKey: queryKeys.clockify.loggedUser,
-  })
-  const workspacesQuery = useQuery<WorkspaceDtoV1[]>({
-    enabled: false,
-    queryKey: queryKeys.clockify.workspaces,
-  })
+  const user = useCachedQueryData<UserDtoV1>(queryKeys.clockify.loggedUser, mcpServerEnabled)
+  const workspaces = useCachedQueryData<WorkspaceDtoV1[]>(queryKeys.clockify.workspaces, mcpServerEnabled)
   const selectedWorkspace = useMemo(() => {
-    const user = userQuery.data
-    const workspaces = workspacesQuery.data
-
     if (!user || !workspaces?.length) {
       return null
     }
@@ -63,41 +55,41 @@ export function useMcpServerBridge() {
       workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
       workspaces[0]
     )
-  }, [userQuery.data, workspacesQuery.data])
-  const userId = userQuery.data?.id
+  }, [user, workspaces])
+  const userId = user?.id
   const workspaceId = selectedWorkspace?.id
-  const runningEntryQuery = useQuery<TimeEntryWithRatesDtoV1[]>({
-    enabled: false,
-    queryKey: queryKeys.clockify.runningEntry({
+  const runningEntries = useCachedQueryData<TimeEntryWithRatesDtoV1[]>(
+    queryKeys.clockify.runningEntry({
       params: { userId, workspaceId },
     }),
-  })
-  const todayReportQuery = useQuery<TimeEntrySummaryReportDto>({
-    enabled: false,
-    queryKey: queryKeys.clockify.summaryReport({
+    mcpServerEnabled,
+  )
+  const todayReport = useCachedQueryData<TimeEntrySummaryReportDto>(
+    queryKeys.clockify.summaryReport({
       params: { period: 'today', userId, workspaceId },
     }),
-  })
-  const weekReportQuery = useQuery<TimeEntrySummaryReportDto>({
-    enabled: false,
-    queryKey: queryKeys.clockify.summaryReport({
+    mcpServerEnabled,
+  )
+  const weekReport = useCachedQueryData<TimeEntrySummaryReportDto>(
+    queryKeys.clockify.summaryReport({
       params: { period: 'week', userId, workspaceId },
     }),
-  })
-  const monthReportQuery = useQuery<TimeEntrySummaryReportDto>({
-    enabled: false,
-    queryKey: queryKeys.clockify.summaryReport({
+    mcpServerEnabled,
+  )
+  const monthReport = useCachedQueryData<TimeEntrySummaryReportDto>(
+    queryKeys.clockify.summaryReport({
       params: { period: 'month', userId, workspaceId },
     }),
-  })
-  const projectsQuery = useQuery<ProjectDtoImplV1[]>({
-    enabled: false,
-    queryKey: queryKeys.clockify.projects({ params: { workspaceId } }),
-  })
+    mcpServerEnabled,
+  )
+  const clockifyProjects = useCachedQueryData<ProjectDtoImplV1[]>(
+    queryKeys.clockify.projects({ params: { workspaceId } }),
+    mcpServerEnabled,
+  )
   const runningEntry = useMemo(() => {
-    const entries = runningEntryQuery.data ?? []
+    const entries = runningEntries ?? []
     return entries.find(entry => entry.userId === userId) ?? entries[0] ?? null
-  }, [runningEntryQuery.data, userId])
+  }, [runningEntries, userId])
   const linearTicketsQuery = useLiveQuery(
     query => {
       if (!mcpServerEnabled) {
@@ -136,11 +128,11 @@ export function useMcpServerBridge() {
     () =>
       buildMcpSnapshot({
         clockifyConnected,
-        clockifyProjects: projectsQuery.data ?? [],
+        clockifyProjects: clockifyProjects ?? [],
         clockifyReports: {
-          month: monthReportQuery.data,
-          today: todayReportQuery.data,
-          week: weekReportQuery.data,
+          month: monthReport,
+          today: todayReport,
+          week: weekReport,
         },
         clockifyTimerProject,
         clockifyUserId: userId,
@@ -161,23 +153,23 @@ export function useMcpServerBridge() {
     [
       clockifyConnected,
       clockifyEntriesQuery.data,
+      clockifyProjects,
       clockifyTimerProject,
       githubWorkItemsQuery.data,
       githubConnected,
       linearSync.lastSyncResult?.viewerId,
       linearConnected,
       linearTicketsQuery.data,
-      monthReportQuery.data,
-      projectsQuery.data,
+      monthReport,
       quickTimers,
       quickTimersActiveEntry,
       quickTimersCache,
       quickTimersEnabled,
       runningEntry,
       selectedWorkspace?.name,
-      todayReportQuery.data,
+      todayReport,
       userId,
-      weekReportQuery.data,
+      weekReport,
       workspaceId,
     ],
   )
@@ -242,6 +234,34 @@ export function useMcpServerBridge() {
       unlisten?.()
     }
   }, [mcpServerEnabled])
+}
+
+function useCachedQueryData<T>(queryKey: QueryKey, enabled: boolean) {
+  const queryClient = useQueryClient()
+  const queryHash = hashKey(queryKey)
+  const getSnapshot = useCallback(() => {
+    if (!enabled) {
+      return undefined
+    }
+
+    return queryClient.getQueryCache().get(queryHash)?.state.data as T | undefined
+  }, [enabled, queryClient, queryHash])
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      if (!enabled) {
+        return () => {}
+      }
+
+      return queryClient.getQueryCache().subscribe(event => {
+        if (event.query.queryHash === queryHash) {
+          onStoreChange()
+        }
+      })
+    },
+    [enabled, queryClient, queryHash],
+  )
+
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
 async function handleMcpCommand(incoming: IncomingMcpCommand, contextRef: { current: ExecuteMcpCommandContext }) {
