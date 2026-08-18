@@ -4,6 +4,10 @@ mod auth;
 mod auth_clockify;
 mod auth_github;
 mod auth_linear;
+mod mcp;
+mod mcp_bridge;
+mod mcp_http;
+mod mcp_protocol;
 mod storage_config;
 mod stronghold;
 mod stronghold_config;
@@ -45,6 +49,8 @@ pub fn run() {
     builder
         .manage(app_initialization::AppInitializationState::default())
         .manage(auth::ClockalongAuthState::default())
+        .manage(mcp::ClockalongMcpState::default())
+        .manage(mcp_bridge::McpBridgeState::default())
         .manage(stronghold::ClockalongStrongholdState::default())
         .setup(|app| {
             let salt_path = app
@@ -54,6 +60,13 @@ pub fn run() {
 
             app.handle()
                 .plugin(tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build())?;
+
+            let mcp_app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = mcp::initialize(mcp_app_handle).await {
+                    log::error!("MCP server initialization failed: {error}");
+                }
+            });
 
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -89,10 +102,20 @@ pub fn run() {
             auth::clockalong_auth_get_linear_credential,
             auth::clockalong_auth_get_state,
             auth::clockalong_auth_refresh_linear_credential,
+            mcp::clockalong_mcp_complete_command,
+            mcp::clockalong_mcp_get_state,
+            mcp::clockalong_mcp_publish_snapshot,
+            mcp::clockalong_mcp_set_enabled,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
+            if matches!(&event, tauri::RunEvent::Exit) {
+                if let Err(error) = mcp::stop(app) {
+                    log::error!("MCP server shutdown failed: {error}");
+                }
+            }
+
             #[cfg(target_os = "macos")]
             match event {
                 tauri::RunEvent::WindowEvent {
