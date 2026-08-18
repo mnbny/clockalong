@@ -62,7 +62,7 @@ type SettingsBackupKey = (typeof settingsBackupKeys)[number]
 export function AppSettings() {
   const [theme, setTheme] = useStorage('theme')
   const [menuBarVisible, setMenuBarVisible] = useStorage('menuBarVisible')
-  const [mcpServerEnabled] = useStorage('mcpServerEnabled')
+  const [mcpServerEnabled, setMcpServerEnabled] = useStorage('mcpServerEnabled')
   const settingsImportInputRef = useRef<HTMLInputElement>(null)
   const [appLogsDrawerOpen, setAppLogsDrawerOpen] = useState(false)
   const [importingSettings, setImportingSettings] = useState(false)
@@ -83,7 +83,10 @@ export function AppSettings() {
     },
   })
   const setMcpServerEnabledMutation = useMutation({
-    mutationFn: (enabled: boolean) => mcp.setEnabled(enabled),
+    mutationFn: async (enabled: boolean) => {
+      await mcp.setEnabled(enabled)
+      await setMcpServerEnabled(enabled)
+    },
     onError: error => {
       appToast.error('Could not update MCP server', {
         description: getErrorMessage(error),
