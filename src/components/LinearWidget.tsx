@@ -6,7 +6,7 @@ import { IconExternalLink, IconPlayerPlay, IconPlayerStop, IconRefresh } from '@
 import { and, eq, useLiveQuery } from '@tanstack/react-db'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
 import { useClockifyTimerProject } from '../hooks/useClockifyTimerProject'
@@ -36,7 +36,7 @@ import {
   linearTicketSortOrderOptions,
   normalizeLinearTicketSyncLimit,
 } from '../services/linear/ticket-settings'
-import { sortLinearTickets } from '../services/linear/tickets-sorting'
+import { isLinearTicketTerminal, sortLinearTickets } from '../services/linear/tickets-sorting'
 import { useStorage } from '../services/storage/useStorage'
 import { getContrastingColor } from '../utils/colors'
 import { getErrorMessage } from '../utils/errors'
@@ -156,6 +156,7 @@ function LinearWidgetContent() {
   const [clockifyDescriptionTemplateFallback] = useStorage('clockifyDescriptionTemplateFallback')
   const [linearTicketSyncLimit] = useStorage('linearTicketSyncLimit')
   const [linearTicketSortOrder, setLinearTicketSortOrder] = useStorage('linearTicketSortOrder')
+  const [showAllLinearTickets, setShowAllLinearTickets] = useState(false)
   const linearSync = useLinearSync()
   const {
     lastSyncResult: linearLastSyncResult,
@@ -284,11 +285,16 @@ function LinearWidgetContent() {
   const activeLinearIssueId = getClockifyEntryLinearTicket(runningEntry, linearTickets)?.id
   const tickets = useMemo(
     () =>
-      sortLinearTickets(ticketsWithTracking, {
-        activeLinearIssueId,
-        sortOrder: linearTicketSortOrder,
-      }),
-    [activeLinearIssueId, linearTicketSortOrder, ticketsWithTracking],
+      sortLinearTickets(
+        showAllLinearTickets
+          ? ticketsWithTracking
+          : ticketsWithTracking.filter(ticket => !isLinearTicketTerminal(ticket)),
+        {
+          activeLinearIssueId,
+          sortOrder: linearTicketSortOrder,
+        },
+      ),
+    [activeLinearIssueId, linearTicketSortOrder, showAllLinearTickets, ticketsWithTracking],
   )
   const startTrackingMutation = useMutation({
     mutationFn: async (ticket: LinearTicket) => {
@@ -487,6 +493,18 @@ function LinearWidgetContent() {
               onClick={refreshTickets}>
               <IconRefresh className="size-4" />
             </button>
+            <label
+              className="flex h-8 cursor-pointer items-center gap-2 text-xs"
+              title="Show completed, canceled, duplicate, and unknown-status tickets">
+              <input
+                aria-label="Show all Linear tickets, including terminal states"
+                checked={showAllLinearTickets}
+                className="toggle toggle-primary toggle-xs"
+                type="checkbox"
+                onChange={event => setShowAllLinearTickets(event.currentTarget.checked)}
+              />
+              <span className="whitespace-nowrap">Show all</span>
+            </label>
             <label className="w-36">
               <select
                 aria-label="Ticket sort order"

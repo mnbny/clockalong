@@ -80,6 +80,8 @@ Current columns:
 - `Value`: rate-derived tracked value when Clockify returns a usable hourly rate and currency.
 - external link: no visible heading. Opens the source item in Linear.
 
+The Linear header places the `Show all` toggle before the sort selector. By default, it hides terminal workflow types (`completed`, `canceled`, `duplicate`, and unknown types). Enable it to show every synced ticket. The filter only affects the dashboard; Linear syncs the same tickets either way.
+
 Make the active tracked row visible without changing table density. Use a subtle accent background animation on the row and switch that row's action button to stop. Keep the stop control visually consistent with the start control; use DaisyUI's error color for the icon/hover treatment rather than a filled destructive button.
 
 ## Clockify dashboard widget
