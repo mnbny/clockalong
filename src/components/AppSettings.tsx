@@ -36,6 +36,7 @@ const settingsBackupKeys = [
   'quickTimers',
   'quickTimersCache',
   'menuBarVisible',
+  'mcpServerEnabled',
   'linearTicketSyncLimit',
   'linearTicketSyncInterval',
   'linearTicketSyncOrderBy',
