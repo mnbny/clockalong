@@ -31,6 +31,8 @@ The server is opt-in. Clockalong disables it by default. Rust reads the stored p
 
 Each running instance binds one loopback port. Clockalong checks the ordered pool from 53700 through 53703. It uses the first free port. The `CLOCKALONG_MCP_PORT` environment value replaces the pool with one port. App settings displays the actual bound port.
 
+After the listener binds, App settings provides separate registration commands for Claude Code and Codex.
+
 When several instances run, each takes the next free port. A consumer registered for port 53700 reaches the instance that acquired the primary port first. It does not automatically follow another instance.
 
 ## Security boundary

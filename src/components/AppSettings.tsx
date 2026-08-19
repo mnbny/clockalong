@@ -92,7 +92,7 @@ export function AppSettings() {
     onSuccess: (_, enabled) => setMcpServerEnabled(enabled),
   })
 
-  const copyMcpRegistrationCommand = async () => {
+  const copyMcpRegistrationCommand = async (client: 'Claude Code' | 'Codex') => {
     const port = mcpServerStatus.value.port
 
     if (!mcpServerStatus.value.running || !port) {
@@ -100,10 +100,10 @@ export function AppSettings() {
     }
 
     try {
-      await navigator.clipboard.writeText(getMcpRegistrationCommand(port))
-      appToast.success('MCP registration command copied')
+      await navigator.clipboard.writeText(getMcpRegistrationCommand(client, port))
+      appToast.success(`${client} setup command copied`)
     } catch (error) {
-      appToast.error('Could not copy MCP registration command', {
+      appToast.error(`Could not copy ${client} setup command`, {
         description: getErrorMessage(error),
       })
     }
@@ -261,9 +261,17 @@ export function AppSettings() {
                   className="btn btn-outline btn-primary btn-sm"
                   type="button"
                   disabled={!mcpServerStatus.value.running || !mcpServerStatus.value.port}
-                  onClick={() => void copyMcpRegistrationCommand()}>
+                  onClick={() => void copyMcpRegistrationCommand('Claude Code')}>
                   <IconCopy className="size-4" />
-                  Copy setup command
+                  Copy for Claude Code
+                </button>
+                <button
+                  className="btn btn-outline btn-primary btn-sm"
+                  type="button"
+                  disabled={!mcpServerStatus.value.running || !mcpServerStatus.value.port}
+                  onClick={() => void copyMcpRegistrationCommand('Codex')}>
+                  <IconCopy className="size-4" />
+                  Copy for Codex
                 </button>
               </div>
             </div>
@@ -552,7 +560,11 @@ function getMcpServerStatusText(status: ReturnType<typeof useMcpServerStatus>) {
   return isTauri() ? 'Stopped' : 'Unavailable outside the desktop app'
 }
 
-function getMcpRegistrationCommand(port: number) {
+function getMcpRegistrationCommand(client: 'Claude Code' | 'Codex', port: number) {
+  if (client === 'Codex') {
+    return `codex mcp add clockalong --url http://127.0.0.1:${port}/mcp`
+  }
+
   return `claude mcp add --transport http clockalong http://127.0.0.1:${port}/mcp`
 }
 
