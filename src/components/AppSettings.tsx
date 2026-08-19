@@ -83,15 +83,13 @@ export function AppSettings() {
     },
   })
   const setMcpServerEnabledMutation = useMutation({
-    mutationFn: async (enabled: boolean) => {
-      await mcp.setEnabled(enabled)
-      await setMcpServerEnabled(enabled)
-    },
+    mutationFn: mcp.setEnabled,
     onError: error => {
       appToast.error('Could not update MCP server', {
         description: getErrorMessage(error),
       })
     },
+    onSuccess: (_, enabled) => setMcpServerEnabled(enabled),
   })
 
   const copyMcpRegistrationCommand = async () => {
