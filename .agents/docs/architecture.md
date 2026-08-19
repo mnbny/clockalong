@@ -48,6 +48,10 @@ Frontend providers are composed in `src/main.tsx` through `ProviderRegistry`. Ke
 
 Work-source sync providers also mount inside `QueryClientProvider`. `LinearSyncProvider` owns the background sync into the local Linear assigned-ticket collection, and `GithubSyncProvider` owns the background sync into the local GitHub work-item collection. Routes should consume those collections instead of starting provider pagination.
 
+The app header owns the single manual sync action. It requests each enabled provider sync and refreshes Clockify running-entry and summary data.
+
+Provider widgets do not expose refresh controls. Only the app header refresh icon shows global sync activity.
+
 ## Frontend surfaces
 
 Dashboard routes should stay thin composition shells. `src/routes/_app.dashboard.tsx` renders provider/source widgets and should not own provider fetches, sync state, table logic, or quick timer state.
@@ -56,7 +60,7 @@ Current dashboard widget boundaries:
 
 - `src/components/ClockifyWidget.tsx`: Clockify summary, running timer, overlap repair, optional dashboard project override, and Clockify-centric dashboard controls.
 - `src/components/QuickTimersWidget.tsx`: Quick Timer visibility, active preset lookup, preset CRUD, and preset start forms. It returns `null` when Quick Timers are disabled.
-- `src/components/GitHubWidget.tsx`: GitHub auth gate, synced work-item live query, Clockify summary merge, issue and pull request table, GitHub work-item refresh, and GitHub timer start/stop controls. It returns `null` when GitHub is unauthenticated.
+- `src/components/GitHubWidget.tsx`: GitHub auth gate, synced work-item live query, Clockify summary merge, issue and pull request table, and GitHub timer controls. It returns `null` when GitHub is unauthenticated.
 - `src/components/LinearWidget.tsx`: Linear auth gate, assigned-ticket live query, Clockify summary merge, Linear ticket table, ticket ordering, and Linear timer start/stop controls. It returns `null` when Linear is unauthenticated.
 
 Dashboard widget shells use `card card-border bg-base-200/10 dark:bg-base-200/40`. Use a `card-body` with `p-0` when the widget manages its own header, tables, or row dividers.

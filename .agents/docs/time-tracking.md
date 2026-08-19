@@ -140,7 +140,7 @@ Current behavior:
 - Produces summaries keyed by source item ID: `{ lastTrackedAt, totalTrackedSeconds, totalTrackedAmount, totalTrackedAmountCurrency }`.
 - Provider widgets merge those summaries into compact table rows before sorting and rendering.
 
-Provider table refresh buttons should refresh the provider sync, Clockify entry sync, and running timer state. Refreshing only the provider leaves `Tracked` and `Total` stale.
+The app header's sync action refreshes each enabled provider sync, the running Clockify entry, and Clockify summary reports. Provider widgets do not have refresh buttons. Only the app header refresh icon shows global sync activity.
 
 Existing Clockify entries that have been backfilled for Clockalong should contain the same `ref:*` markers as newly created entries. Do not reintroduce old description-shape matching for unmarked entries; unmarked entries are intentionally treated as unlinked until their descriptions carry an internal ref.
 
@@ -162,7 +162,7 @@ Current columns:
 - `Value`: rate-derived tracked value when Clockify returns a usable hourly rate and currency.
 - external link: no visible heading. Opens the source item in GitHub.
 
-The GitHub widget header has controls for refresh, multi-author filtering, additive label filtering, a transient `Show all` override, and closed-item visibility. The author filter always includes the connected GitHub viewer and can include persisted additional authors. The label picker lazily loads label catalogs from the configured repositories and matches selected label names against synced work items. Author, label, and Mentions filtering affect the dashboard only; `Show all` bypasses all three. Repository and work-item-type settings determine what enters the local cache.
+The GitHub widget header has controls for multi-author filtering, additive label filtering, a transient `Show all` override, and closed-item visibility. The author filter always includes the connected GitHub viewer and can include persisted additional authors. The label picker lazily loads label catalogs from the configured repositories and matches selected label names against synced work items. Author, label, and Mentions filtering affect the dashboard only. `Show all` bypasses all three. Repository and work-item-type settings determine what enters the local cache.
 
 ## Controls
 

@@ -60,7 +60,7 @@ Local caches must persist only the fields UI consumes. Each sync module declares
 
 Extend the matching list when UI needs another field. Do not persist raw provider responses. A raw Octokit pull request averages about 25 KB, and the generated Clockify schema is `passthrough`, so hydrated responses carry whole project, task, tag, and user objects that never appear in `TimeEntryWithRatesDtoV1`.
 
-Sync reconciliation should prune stale rows before writing new ones. Pruning first keeps the cache from peaking at old rows plus new rows during the write, and it keeps a failed write from skipping reconciliation entirely.
+A provider sync collects all successful pages in memory before it changes its local collection. It then reconciles inserts, updates, and stale deletions in one TanStack DB transaction. Do not persist individual rows or pages. Do not reconcile a partial or failed pagination run.
 
 ## Local Clockify entry cache
 
