@@ -1,6 +1,6 @@
 import type { PropsWithChildren } from 'react'
 
-import { createCollection, localStorageCollectionOptions } from '@tanstack/react-db'
+import { createCollection, createTransaction, localStorageCollectionOptions } from '@tanstack/react-db'
 import { useQuery } from '@tanstack/react-query'
 import { createContext, createElement, useCallback, useContext } from 'react'
 
@@ -106,6 +106,7 @@ export async function clearSyncedLinearTickets() {
 async function syncLinearTickets({ orderBy, syncLimit }: LinearTicketSyncOptions): Promise<LinearTicketSyncResult> {
   const syncedAt = new Date().toISOString()
   const fetchedTicketIds = new Set<string>()
+  const ticketsToSync: AssignedIssueNode[] = []
   let after: string | null = null
   let pagesFetched = 0
   let ticketsFetched = 0
@@ -133,14 +134,8 @@ async function syncLinearTickets({ orderBy, syncLimit }: LinearTicketSyncOptions
     for (const ticket of page.nodes) {
       fetchedTicketIds.add(ticket.id)
     }
-
-    const upsertResult = await upsertSyncedLinearTickets({
-      syncedAt,
-      tickets: page.nodes,
-      viewerId: responseViewerId,
-    })
+    ticketsToSync.push(...page.nodes)
     ticketsFetched += page.nodes.length
-    ticketsStored += upsertResult.stored
 
     if (!page.pageInfo.hasNextPage || !page.pageInfo.endCursor || page.nodes.length === 0) {
       break
@@ -149,7 +144,22 @@ async function syncLinearTickets({ orderBy, syncLimit }: LinearTicketSyncOptions
     after = page.pageInfo.endCursor
   }
 
-  const ticketsDeleted = viewerId ? await deleteStaleSyncedLinearTickets({ fetchedTicketIds, viewerId }) : 0
+  let ticketsDeleted = 0
+
+  if (viewerId) {
+    const staleTicketIds = linearTicketsCollection.toArray
+      .filter(syncedTicket => syncedTicket.viewerId === viewerId && !fetchedTicketIds.has(syncedTicket.id))
+      .map(syncedTicket => syncedTicket.id)
+    const upsertResult = await upsertSyncedLinearTickets({
+      staleTicketIds,
+      syncedAt,
+      tickets: ticketsToSync,
+      viewerId,
+    })
+
+    ticketsDeleted = upsertResult.deleted
+    ticketsStored = upsertResult.stored
+  }
 
   return {
     pagesFetched,
@@ -162,53 +172,61 @@ async function syncLinearTickets({ orderBy, syncLimit }: LinearTicketSyncOptions
 }
 
 async function upsertSyncedLinearTickets({
+  staleTicketIds,
   syncedAt,
   tickets,
   viewerId,
 }: {
+  staleTicketIds: string[]
   syncedAt: string
   tickets: AssignedIssueNode[]
   viewerId: string
 }) {
-  let stored = 0
+  const syncedTickets = tickets.map(
+    ticket =>
+      ({
+        id: ticket.id,
+        syncedAt,
+        ticket,
+        updatedAt: ticket.updatedAt,
+        viewerId,
+      }) satisfies SyncedLinearTicket,
+  )
+  const ticketsToInsert = syncedTickets.filter(ticket => !linearTicketsCollection.has(ticket.id))
+  const ticketsToUpdate = syncedTickets.filter(ticket => linearTicketsCollection.has(ticket.id))
 
-  for (const ticket of tickets) {
-    const syncedTicket = {
-      id: ticket.id,
-      syncedAt,
-      ticket,
-      updatedAt: ticket.updatedAt,
-      viewerId,
-    } satisfies SyncedLinearTicket
-    const transaction = linearTicketsCollection.has(syncedTicket.id)
-      ? linearTicketsCollection.update(syncedTicket.id, draft => {
-          Object.assign(draft, syncedTicket)
-        })
-      : linearTicketsCollection.insert(syncedTicket)
+  if (ticketsToInsert.length || ticketsToUpdate.length || staleTicketIds.length) {
+    const transaction = createTransaction({
+      mutationFn: async ({ transaction: mutations }) => {
+        linearTicketsCollection.utils.acceptMutations(mutations)
+      },
+    })
 
+    transaction.mutate(() => {
+      if (ticketsToInsert.length) {
+        linearTicketsCollection.insert(ticketsToInsert)
+      }
+
+      if (ticketsToUpdate.length) {
+        linearTicketsCollection.update(
+          ticketsToUpdate.map(ticket => ticket.id),
+          drafts => {
+            drafts.forEach((draft, index) => Object.assign(draft, ticketsToUpdate[index]))
+          },
+        )
+      }
+
+      if (staleTicketIds.length) {
+        linearTicketsCollection.delete(staleTicketIds)
+      }
+    })
     await transaction.isPersisted.promise
-    stored += 1
   }
 
-  return { stored }
-}
-
-async function deleteStaleSyncedLinearTickets({
-  fetchedTicketIds,
-  viewerId,
-}: {
-  fetchedTicketIds: Set<string>
-  viewerId: string
-}) {
-  const staleIds = linearTicketsCollection.toArray
-    .filter(syncedTicket => syncedTicket.viewerId === viewerId && !fetchedTicketIds.has(syncedTicket.id))
-    .map(syncedTicket => syncedTicket.id)
-
-  if (!staleIds.length) {
-    return 0
+  return {
+    deleted: staleTicketIds.length,
+    inserted: ticketsToInsert.length,
+    stored: syncedTickets.length,
+    updated: ticketsToUpdate.length,
   }
-
-  const transaction = linearTicketsCollection.delete(staleIds)
-  await transaction.isPersisted.promise
-  return staleIds.length
 }
