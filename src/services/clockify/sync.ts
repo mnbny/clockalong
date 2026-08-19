@@ -1,7 +1,7 @@
 import type { TimeEntryWithRatesDtoV1 } from './generated/clockify'
 import type { PropsWithChildren } from 'react'
 
-import { createCollection, localStorageCollectionOptions } from '@tanstack/react-db'
+import { createCollection, createTransaction, localStorageCollectionOptions } from '@tanstack/react-db'
 import { useQuery } from '@tanstack/react-query'
 import { createContext, createElement, useCallback, useContext, useMemo } from 'react'
 
@@ -163,6 +163,7 @@ async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOpt
     github: 0,
     linear: 0,
   }
+  const entriesToSync: TimeEntryWithRatesDtoV1[] = []
   const fetchedEntryIds = new Set<string>()
   let page = 1
   let entriesFetched = 0
@@ -207,6 +208,8 @@ async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOpt
       refCounts.github += pageRefCounts.github
       refCounts.linear += pageRefCounts.linear
 
+      entriesToSync.push(...entries)
+
       for (const entry of entries) {
         if (entry.id) {
           fetchedEntryIds.add(entry.id)
@@ -220,17 +223,6 @@ async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOpt
         sample: entries.slice(0, 5).map(getClockifyEntrySyncLog),
       })
 
-      const upsertResult = await upsertSyncedClockifyEntries({ entries, syncedAt, userId, workspaceId })
-      entriesInserted += upsertResult.inserted
-      entriesStored += upsertResult.stored
-      entriesUpdated += upsertResult.updated
-      skippedEntries += upsertResult.skipped
-
-      clockifySyncLog('entry sync page stored', {
-        page,
-        ...upsertResult,
-      })
-
       if (entries.length < clockifyEntrySyncPageSize) {
         break
       }
@@ -238,10 +230,20 @@ async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOpt
       page += 1
     }
 
-    const entriesDeleted = await deleteStaleSyncedClockifyEntries({
-      fetchedEntryIds,
-      prunableEntryIds,
+    const staleEntryIds = [...prunableEntryIds].filter(entryId => !fetchedEntryIds.has(entryId))
+    const upsertResult = await upsertSyncedClockifyEntries({
+      entries: entriesToSync,
+      staleEntryIds,
+      syncedAt,
+      userId,
+      workspaceId,
     })
+    entriesInserted += upsertResult.inserted
+    entriesStored += upsertResult.stored
+    entriesUpdated += upsertResult.updated
+    skippedEntries += upsertResult.skipped
+    const entriesDeleted = upsertResult.deleted
+
     const result = {
       entriesDeleted,
       entriesFetched,
@@ -274,19 +276,19 @@ async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOpt
 
 async function upsertSyncedClockifyEntries({
   entries,
+  staleEntryIds = [],
   syncedAt,
   userId,
   workspaceId,
 }: {
   entries: TimeEntryWithRatesDtoV1[]
+  staleEntryIds?: string[]
   syncedAt: string
   userId: string
   workspaceId: string
 }) {
-  let inserted = 0
-  let stored = 0
+  const syncedEntriesById = new Map<string, SyncedClockifyTimeEntry>()
   let skipped = 0
-  let updated = 0
 
   for (const entry of entries) {
     if (!entry.id) {
@@ -294,32 +296,55 @@ async function upsertSyncedClockifyEntries({
       continue
     }
 
-    const syncedEntry = {
+    syncedEntriesById.set(entry.id, {
       entry: pick(entry, ...storedClockifyEntryFields),
       id: entry.id,
       startedAt: entry.timeInterval?.start ?? '',
       syncedAt,
       userId: entry.userId ?? userId,
       workspaceId: entry.workspaceId ?? workspaceId,
-    } satisfies SyncedClockifyTimeEntry
-    const hasEntry = clockifyTimeEntriesCollection.has(syncedEntry.id)
-    const transaction = hasEntry
-      ? clockifyTimeEntriesCollection.update(syncedEntry.id, draft => {
-          Object.assign(draft, syncedEntry)
-        })
-      : clockifyTimeEntriesCollection.insert(syncedEntry)
-
-    await transaction.isPersisted.promise
-    stored += 1
-
-    if (hasEntry) {
-      updated += 1
-    } else {
-      inserted += 1
-    }
+    })
   }
 
-  return { inserted, skipped, stored, updated }
+  const syncedEntries = [...syncedEntriesById.values()]
+  const entriesToInsert = syncedEntries.filter(entry => !clockifyTimeEntriesCollection.has(entry.id))
+  const entriesToUpdate = syncedEntries.filter(entry => clockifyTimeEntriesCollection.has(entry.id))
+
+  if (entriesToInsert.length || entriesToUpdate.length || staleEntryIds.length) {
+    const transaction = createTransaction({
+      mutationFn: async ({ transaction: mutations }) => {
+        clockifyTimeEntriesCollection.utils.acceptMutations(mutations)
+      },
+    })
+
+    transaction.mutate(() => {
+      if (entriesToInsert.length) {
+        clockifyTimeEntriesCollection.insert(entriesToInsert)
+      }
+
+      if (entriesToUpdate.length) {
+        clockifyTimeEntriesCollection.update(
+          entriesToUpdate.map(entry => entry.id),
+          drafts => {
+            drafts.forEach((draft, index) => Object.assign(draft, entriesToUpdate[index]))
+          },
+        )
+      }
+
+      if (staleEntryIds.length) {
+        clockifyTimeEntriesCollection.delete(staleEntryIds)
+      }
+    })
+    await transaction.isPersisted.promise
+  }
+
+  return {
+    deleted: staleEntryIds.length,
+    inserted: entriesToInsert.length,
+    skipped,
+    stored: syncedEntries.length,
+    updated: entriesToUpdate.length,
+  }
 }
 
 export async function upsertSyncedClockifyEntry({
@@ -341,24 +366,6 @@ export async function upsertSyncedClockifyEntry({
     userId,
     workspaceId,
   })
-}
-
-async function deleteStaleSyncedClockifyEntries({
-  fetchedEntryIds,
-  prunableEntryIds,
-}: {
-  fetchedEntryIds: Set<string>
-  prunableEntryIds: Set<string>
-}) {
-  const staleEntryIds = [...prunableEntryIds].filter(entryId => !fetchedEntryIds.has(entryId))
-
-  if (!staleEntryIds.length) {
-    return 0
-  }
-
-  const transaction = clockifyTimeEntriesCollection.delete(staleEntryIds)
-  await transaction.isPersisted.promise
-  return staleEntryIds.length
 }
 
 function getClockifyEntrySyncStart(days: ClockifyEntrySyncDaysOption, now: Date) {

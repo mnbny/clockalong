@@ -9,6 +9,7 @@ import {
   IconX,
 } from '@tabler/icons-react'
 import { useMutation } from '@tanstack/react-query'
+import { isTauri } from '@tauri-apps/api/core'
 import { type ChangeEvent, useMemo, useRef, useState } from 'react'
 
 import { useAppLogs } from '../hooks/useAppLogs'
@@ -17,6 +18,7 @@ import { type StorageKey, type StorageValue } from '../services/storage/storage'
 import { useStorage } from '../services/storage/useStorage'
 import { app } from '../services/tauri/app-client'
 import { type AppUpdate, type AppUpdateDownloadProgress, appUpdates } from '../services/tauri/app-updates'
+import { mcp, useMcpServerStatus } from '../services/tauri/mcp-client'
 import { getErrorMessage } from '../utils/errors'
 import { appToast } from './AppToaster'
 import { PageHeader } from './PageHeader'
@@ -36,6 +38,7 @@ const settingsBackupKeys = [
   'quickTimers',
   'quickTimersCache',
   'menuBarVisible',
+  'mcpServerEnabled',
   'linearTicketSyncLimit',
   'linearTicketSyncInterval',
   'linearTicketSyncOrderBy',
@@ -59,11 +62,13 @@ type SettingsBackupKey = (typeof settingsBackupKeys)[number]
 export function AppSettings() {
   const [theme, setTheme] = useStorage('theme')
   const [menuBarVisible, setMenuBarVisible] = useStorage('menuBarVisible')
+  const [mcpServerEnabled, setMcpServerEnabled] = useStorage('mcpServerEnabled')
   const settingsImportInputRef = useRef<HTMLInputElement>(null)
   const [appLogsDrawerOpen, setAppLogsDrawerOpen] = useState(false)
   const [importingSettings, setImportingSettings] = useState(false)
   const [resettingSettings, setResettingSettings] = useState(false)
   const appLogs = useAppLogs({ enabled: appLogsDrawerOpen })
+  const mcpServerStatus = useMcpServerStatus()
   const displayedAppLogs = useMemo(() => filterDisplayedAppLogs(appLogs.value.contents), [appLogs.value.contents])
   const clearAppLogsMutation = useMutation({
     mutationFn: app.clearLogFile,
@@ -77,6 +82,32 @@ export function AppSettings() {
       void appLogs.refresh()
     },
   })
+  const setMcpServerEnabledMutation = useMutation({
+    mutationFn: mcp.setEnabled,
+    onError: error => {
+      appToast.error('Could not update MCP server', {
+        description: getErrorMessage(error),
+      })
+    },
+    onSuccess: (_, enabled) => setMcpServerEnabled(enabled),
+  })
+
+  const copyMcpRegistrationCommand = async (client: 'Claude Code' | 'Codex') => {
+    const port = mcpServerStatus.value.port
+
+    if (!mcpServerStatus.value.running || !port) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(getMcpRegistrationCommand(client, port))
+      appToast.success(`${client} setup command copied`)
+    } catch (error) {
+      appToast.error(`Could not copy ${client} setup command`, {
+        description: getErrorMessage(error),
+      })
+    }
+  }
 
   const copyAppLogs = async () => {
     if (!displayedAppLogs) {
@@ -133,6 +164,7 @@ export function AppSettings() {
     try {
       const snapshot = parseSettingsSnapshot(await file.text())
       const { importedKeys, skippedKeys } = await importSettingsBackup(snapshot)
+      await syncNativeMcpServerEnabled()
 
       appToast.success('Settings imported', {
         description: getSettingsImportDescription(importedKeys.length, skippedKeys.length),
@@ -152,6 +184,7 @@ export function AppSettings() {
     try {
       await downloadSettingsBackup()
       await resetSettingsBackup()
+      await syncNativeMcpServerEnabled()
       appToast.success('Settings reset', {
         description: 'A backup was saved to your Downloads folder.',
       })
@@ -204,6 +237,44 @@ export function AppSettings() {
               type="checkbox"
               onChange={event => void setMenuBarVisible(event.currentTarget.checked)}
             />
+          </SettingsRow>
+
+          <SettingsRow label="MCP server" description="Allow local agents to read work and control timers.">
+            <div className="flex w-full min-w-0 flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  aria-label="Enable MCP server"
+                  checked={mcpServerEnabled}
+                  className="toggle toggle-primary"
+                  type="checkbox"
+                  disabled={!isTauri() || mcpServerStatus.loading || setMcpServerEnabledMutation.isPending}
+                  onChange={event => setMcpServerEnabledMutation.mutate(event.currentTarget.checked)}
+                />
+                <span className="text-sm leading-6">{getMcpServerStatusText(mcpServerStatus)}</span>
+              </div>
+
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                {mcpServerStatus.value.running && mcpServerStatus.value.port ? (
+                  <code className="bg-base-200 rounded px-2 py-1 text-xs">Port {mcpServerStatus.value.port}</code>
+                ) : null}
+                <button
+                  className="btn btn-outline btn-primary btn-sm"
+                  type="button"
+                  disabled={!mcpServerStatus.value.running || !mcpServerStatus.value.port}
+                  onClick={() => void copyMcpRegistrationCommand('Claude Code')}>
+                  <IconCopy className="size-4" />
+                  Copy for Claude Code
+                </button>
+                <button
+                  className="btn btn-outline btn-primary btn-sm"
+                  type="button"
+                  disabled={!mcpServerStatus.value.running || !mcpServerStatus.value.port}
+                  onClick={() => void copyMcpRegistrationCommand('Codex')}>
+                  <IconCopy className="size-4" />
+                  Copy for Codex
+                </button>
+              </div>
+            </div>
           </SettingsRow>
 
           <SettingsRow label="Backup" description="Export, import, or reset app settings and Quick Timers.">
@@ -469,6 +540,34 @@ function getThemeLabel(theme: ThemeOption) {
   }
 }
 
+function getMcpServerStatusText(status: ReturnType<typeof useMcpServerStatus>) {
+  if (status.loading) {
+    return 'Checking status...'
+  }
+
+  if (status.value.lastError) {
+    return `Failed: ${status.value.lastError}`
+  }
+
+  if (status.error) {
+    return `Unavailable: ${status.error}`
+  }
+
+  if (status.value.running && status.value.port) {
+    return `Running on port ${status.value.port}`
+  }
+
+  return isTauri() ? 'Stopped' : 'Unavailable outside the desktop app'
+}
+
+function getMcpRegistrationCommand(client: 'Claude Code' | 'Codex', port: number) {
+  if (client === 'Codex') {
+    return `codex mcp add clockalong --url http://127.0.0.1:${port}/mcp`
+  }
+
+  return `claude mcp add --transport http clockalong http://127.0.0.1:${port}/mcp`
+}
+
 function getUpdateProgressPercent(progress: AppUpdateDownloadProgress | null) {
   if (!progress?.totalBytes) {
     return null
@@ -586,6 +685,14 @@ async function resetSettingsBackup() {
   }
 }
 
+async function syncNativeMcpServerEnabled() {
+  if (!isTauri()) {
+    return
+  }
+
+  await mcp.setEnabled(await storage.get('mcpServerEnabled'))
+}
+
 function isStorageValue<K extends StorageKey<typeof storage.config>>(
   key: K,
   value: unknown,
@@ -628,6 +735,7 @@ const customFrontendLogPrefixes = [
   '[clockify widget]',
   '[console logging]',
   '[clockalong auth]',
+  '[clockalong mcp]',
   '[dev tools]',
   '[github sync]',
   '[github widget]',
@@ -636,6 +744,7 @@ const customFrontendLogPrefixes = [
   '[linear widget]',
   '[LocalStorageCollection]',
   '[menu bar]',
+  '[mcp command]',
   '[quick timers]',
   '[sign in]',
   '[storage]',

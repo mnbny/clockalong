@@ -16,6 +16,7 @@ Clockalong follows the Streamlink Tauri logging pattern. Rust logs and forwarded
 - Keep the log filename centralized through `APP_LOG_FILE_NAME`.
 - Use normal Rust logging macros such as `log::info!`, `log::warn!`, and `log::error!`.
 - Keep sensitive values out of logs. For credentials, log presence, status, and length only when useful.
+- Native MCP diagnostics use the standard app log target. They report listener, snapshot, and command lifecycle state without provider data or credentials.
 - The app log file rotates at 5 MB and keeps four rotated files. The settings drawer reads only the current `app.log`.
 
 The app exposes two narrow commands for diagnostics UI:
@@ -45,6 +46,8 @@ The app exposes two narrow commands for diagnostics UI:
 - `[linear widget]`: Linear dashboard diagnostics for Clockify synced-entry inputs and computed summary counts.
 - `[github widget]`: GitHub dashboard diagnostics for Clockify synced-entry inputs and computed summary counts.
 - `[app updates]`: App-wide update hook diagnostics. Log lifecycle/error state only; do not log release manifest raw bodies or signature material.
+- `[clockalong mcp]`: MCP bridge lifecycle, snapshot row counts, and command outcomes. It may log request identifiers and tool names. Do not log snapshots, arguments, titles, descriptions, template values, or credentials.
+- `[mcp command]`: best-effort local cache failures after a timer stops. Do not log command arguments, provider payloads, or credentials.
 
 ## Settings UI
 

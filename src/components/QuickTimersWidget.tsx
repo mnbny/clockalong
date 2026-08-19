@@ -20,12 +20,17 @@ import { z } from 'zod'
 import { useClockifyTimerProject } from '../hooks/useClockifyTimerProject'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
-import { type CreateTimeEntryRequest } from '../services/clockify/generated/clockify'
 import { MissingClockifyProjectError } from '../services/clockify/time-entries'
+import {
+  createQuickTimerTimeEntry,
+  persistQuickTimerActiveEntry,
+  persistQuickTimerValues,
+  resolveQuickTimerValues,
+} from '../services/quick-timers/timers'
 import { useStorage } from '../services/storage/useStorage'
 import { cx } from '../utils/cx'
 import { getErrorMessage } from '../utils/errors'
-import { formatTemplate, parseTemplateTokens } from '../utils/templates'
+import { parseTemplateTokens } from '../utils/templates'
 import { appToast } from './AppToaster'
 
 type QuickTimerFormProps = {
@@ -456,22 +461,26 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
   const queryClient = useQueryClient()
   const [clockifyBillable] = useStorage('clockifyBillable')
   const clockifyTimerProject = useClockifyTimerProject()
-  const [, setQuickTimersActiveEntry] = useStorage('quickTimersActiveEntry')
   const [quickTimers] = useStorage('quickTimers')
-  const [quickTimersCache, setQuickTimersCache] = useStorage('quickTimersCache')
+  const [quickTimersCache] = useStorage('quickTimersCache')
   const quickTimer = quickTimers.find(timer => timer.id === quickTimerId)
-  const cachedValues = quickTimersCache.find(entry => entry.id === quickTimerId)
+  const quickTimerPreset = useMemo(
+    () =>
+      quickTimer ?? {
+        descriptionTemplate: '',
+        icon: '',
+        id: quickTimerId,
+        name: 'Quick Timer',
+      },
+    [quickTimer, quickTimerId],
+  )
   const templateTokens = useMemo(
-    () => parseTemplateTokens(quickTimer?.descriptionTemplate ?? ''),
-    [quickTimer?.descriptionTemplate],
+    () => parseTemplateTokens(quickTimerPreset.descriptionTemplate),
+    [quickTimerPreset.descriptionTemplate],
   )
   const defaultValues = useMemo(
-    () =>
-      Object.fromEntries(templateTokens.map(token => [token, getQuickTimerCachedValue(cachedValues, token)])) as Record<
-        string,
-        string
-      >,
-    [cachedValues, templateTokens],
+    () => resolveQuickTimerValues({ cache: quickTimersCache, preset: quickTimerPreset }),
+    [quickTimerPreset, quickTimersCache],
   )
   const { handleSubmit, register, reset } = useForm<Record<string, string>>({
     defaultValues,
@@ -488,27 +497,15 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
         throw new MissingClockifyProjectError()
       }
 
-      const body = {
+      return createQuickTimerTimeEntry({
         billable: clockifyBillable,
-        description: formatTemplate(quickTimer?.descriptionTemplate ?? '', values, {
-          fallback: '',
-          knownTokens: templateTokens,
-        }),
-        projectId: clockifyTimerProject.projectId,
-        start: new Date().toISOString(),
-        type: 'REGULAR',
-      } satisfies CreateTimeEntryRequest
-
-      return clockify.createTimeEntry(body, { params: { workspaceId: clockifyTimerProject.workspaceId } })
+        preset: quickTimerPreset,
+        project: clockifyTimerProject,
+        values,
+      })
     },
     onMutate: async values => {
-      await setQuickTimersCache(current => [
-        ...current.filter(entry => entry.id !== quickTimerId),
-        {
-          id: quickTimerId,
-          values: Object.fromEntries(templateTokens.map(token => [token, values[token] ?? ''])),
-        },
-      ])
+      await persistQuickTimerValues({ preset: quickTimerPreset, values })
     },
     onError: error => {
       if (error instanceof MissingClockifyProjectError) {
@@ -524,7 +521,7 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
     },
     onSuccess: async entry => {
       if (entry.id) {
-        await setQuickTimersActiveEntry({ entryId: entry.id, quickTimerId })
+        await persistQuickTimerActiveEntry({ entryId: entry.id, quickTimerId })
       }
 
       appToast.success(`Started timer for ${quickTimer?.name ?? 'Quick Timer'}`)
@@ -606,14 +603,6 @@ function normalizeQuickTimerColumns(columns: number) {
   }
 
   return Math.min(12, Math.max(1, Math.floor(columns)))
-}
-
-function getQuickTimerCachedValue(
-  cachedValues: ({ values?: Record<string, string> } & Record<string, unknown>) | undefined,
-  token: string,
-) {
-  const value = cachedValues?.values?.[token] ?? cachedValues?.[token]
-  return typeof value === 'string' ? value : ''
 }
 
 function getSafeSvgIcon(icon: string | undefined) {

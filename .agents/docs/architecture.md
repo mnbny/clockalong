@@ -13,6 +13,7 @@
 - Reusable frontend components live in `src/components/`; shared frontend helpers live in `src/utils/`.
 - Frontend-to-Rust bridge calls live in clients under `src/services/tauri/`; route code should use those clients instead of raw `invoke`.
 - External frontend API clients live under `src/services/<provider>/`; Clockify uses a generated Zodios client under `src/services/clockify/`.
+- The frontend MCP boundary lives under `src/services/mcp/`. It normalizes snapshots and runs timer commands through existing provider services.
 - Work sources can be external providers such as Linear and GitHub or local sources such as Quick Timers. Do not force a generic provider abstraction until multiple implemented sources prove the common shape.
 - Avoid broad service barrels; import concrete provider modules when that keeps dependencies clearer.
 - Native auth is split by responsibility:
@@ -21,6 +22,11 @@
   - `src-tauri/src/auth_linear.rs`: Linear OAuth, loopback callback, token refresh, and disconnect.
   - `src-tauri/src/auth_github.rs`: GitHub PAT validation, secure credential lifecycle, and disconnect.
   - `src-tauri/src/stronghold.rs`: narrow Stronghold read/write/remove helpers for native secrets.
+- Native MCP modules split responsibilities:
+  - `src-tauri/src/mcp.rs`: reads stored enablement, reports server status, and owns the Tauri commands.
+  - `src-tauri/src/mcp_http.rs`: owns the loopback listener and validates HTTP requests.
+  - `src-tauri/src/mcp_protocol.rs`: negotiates MCP, defines public tool schemas, validates arguments, and answers read tools.
+  - `src-tauri/src/mcp_bridge.rs`: owns the cached snapshot and tracks pending webview commands.
 - Auth routing uses Clockify as the app-level gate:
   - `/` waits for native app initialization, then navigates to `/dashboard`.
   - `_app` guards authenticated routes and redirects users to `/sign-in` only when Clockify is unauthenticated.
@@ -42,6 +48,10 @@ Frontend providers are composed in `src/main.tsx` through `ProviderRegistry`. Ke
 
 Work-source sync providers also mount inside `QueryClientProvider`. `LinearSyncProvider` owns the background sync into the local Linear assigned-ticket collection, and `GithubSyncProvider` owns the background sync into the local GitHub work-item collection. Routes should consume those collections instead of starting provider pagination.
 
+The app header owns the single manual sync action. It requests each enabled provider sync and refreshes Clockify running-entry and summary data.
+
+Provider widgets do not expose refresh controls. Only the app header refresh icon shows global sync activity.
+
 ## Frontend surfaces
 
 Dashboard routes should stay thin composition shells. `src/routes/_app.dashboard.tsx` renders provider/source widgets and should not own provider fetches, sync state, table logic, or quick timer state.
@@ -50,7 +60,7 @@ Current dashboard widget boundaries:
 
 - `src/components/ClockifyWidget.tsx`: Clockify summary, running timer, overlap repair, optional dashboard project override, and Clockify-centric dashboard controls.
 - `src/components/QuickTimersWidget.tsx`: Quick Timer visibility, active preset lookup, preset CRUD, and preset start forms. It returns `null` when Quick Timers are disabled.
-- `src/components/GitHubWidget.tsx`: GitHub auth gate, synced work-item live query, Clockify summary merge, issue and pull request table, GitHub work-item refresh, and GitHub timer start/stop controls. It returns `null` when GitHub is unauthenticated.
+- `src/components/GitHubWidget.tsx`: GitHub auth gate, synced work-item live query, Clockify summary merge, issue and pull request table, and GitHub timer controls. It returns `null` when GitHub is unauthenticated.
 - `src/components/LinearWidget.tsx`: Linear auth gate, assigned-ticket live query, Clockify summary merge, Linear ticket table, ticket ordering, and Linear timer start/stop controls. It returns `null` when Linear is unauthenticated.
 
 Dashboard widget shells use `card card-border bg-base-200/10 dark:bg-base-200/40`. Use a `card-body` with `p-0` when the widget manages its own header, tables, or row dividers.

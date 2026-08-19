@@ -1,7 +1,7 @@
 import type { RestEndpointMethodTypes } from '@octokit/rest'
 import type { PropsWithChildren } from 'react'
 
-import { createCollection, localStorageCollectionOptions } from '@tanstack/react-db'
+import { createCollection, createTransaction, localStorageCollectionOptions } from '@tanstack/react-db'
 import { useQuery } from '@tanstack/react-query'
 import { createContext, createElement, useCallback, useContext, useMemo } from 'react'
 
@@ -191,14 +191,15 @@ async function syncGithubWorkItems({ repositories, syncLimit, visibleWorkItemTyp
 
   try {
     if (!repositories.length || (!visibleWorkItemTypes.issues && !visibleWorkItemTypes.pullRequests)) {
-      const itemsDeleted = await deleteStaleSyncedGithubWorkItems({
+      const staleItemIds = getStaleSyncedGithubWorkItemIds({
         fetchedItemIds,
         repositories,
         visibleWorkItemTypes,
       })
+      const persistenceResult = await upsertSyncedGithubWorkItems({ items: [], staleItemIds })
       const emptyResult = {
         issuesFetched,
-        itemsDeleted,
+        itemsDeleted: persistenceResult.deleted,
         itemsStored,
         pullRequestsFetched,
         repositoriesSynced: repositories.length,
@@ -276,18 +277,17 @@ async function syncGithubWorkItems({ repositories, syncLimit, visibleWorkItemTyp
       fetchedItemIds.add(item.id)
     }
 
-    const itemsDeleted = await deleteStaleSyncedGithubWorkItems({
+    const staleItemIds = getStaleSyncedGithubWorkItemIds({
       fetchedItemIds,
       repositories,
       visibleWorkItemTypes,
     })
-
-    const upsertResult = await upsertSyncedGithubWorkItems(syncedWorkItems)
+    const upsertResult = await upsertSyncedGithubWorkItems({ items: syncedWorkItems, staleItemIds })
     itemsStored += upsertResult.stored
 
     const result = {
       issuesFetched,
-      itemsDeleted,
+      itemsDeleted: upsertResult.deleted,
       itemsStored,
       pullRequestsFetched,
       repositoriesSynced: repositories.length,
@@ -566,24 +566,53 @@ function toSyncedGithubPullRequest({
   ]
 }
 
-async function upsertSyncedGithubWorkItems(items: SyncedGithubWorkItem[]) {
-  let stored = 0
+async function upsertSyncedGithubWorkItems({
+  items,
+  staleItemIds,
+}: {
+  items: SyncedGithubWorkItem[]
+  staleItemIds: string[]
+}) {
+  const itemsToInsert = items.filter(item => !githubWorkItemsCollection.has(item.id))
+  const itemsToUpdate = items.filter(item => githubWorkItemsCollection.has(item.id))
 
-  for (const item of items) {
-    const transaction = githubWorkItemsCollection.has(item.id)
-      ? githubWorkItemsCollection.update(item.id, draft => {
-          Object.assign(draft, item)
-        })
-      : githubWorkItemsCollection.insert(item)
+  if (itemsToInsert.length || itemsToUpdate.length || staleItemIds.length) {
+    const transaction = createTransaction({
+      mutationFn: async ({ transaction: mutations }) => {
+        githubWorkItemsCollection.utils.acceptMutations(mutations)
+      },
+    })
 
+    transaction.mutate(() => {
+      if (itemsToInsert.length) {
+        githubWorkItemsCollection.insert(itemsToInsert)
+      }
+
+      if (itemsToUpdate.length) {
+        githubWorkItemsCollection.update(
+          itemsToUpdate.map(item => item.id),
+          drafts => {
+            drafts.forEach((draft, index) => Object.assign(draft, itemsToUpdate[index]))
+          },
+        )
+      }
+
+      if (staleItemIds.length) {
+        githubWorkItemsCollection.delete(staleItemIds)
+      }
+    })
     await transaction.isPersisted.promise
-    stored += 1
   }
 
-  return { stored }
+  return {
+    deleted: staleItemIds.length,
+    inserted: itemsToInsert.length,
+    stored: items.length,
+    updated: itemsToUpdate.length,
+  }
 }
 
-async function deleteStaleSyncedGithubWorkItems({
+function getStaleSyncedGithubWorkItemIds({
   fetchedItemIds,
   repositories,
   visibleWorkItemTypes,
@@ -597,7 +626,7 @@ async function deleteStaleSyncedGithubWorkItems({
     ...(visibleWorkItemTypes.issues ? (['issue'] as const) : []),
     ...(visibleWorkItemTypes.pullRequests ? (['pullRequest'] as const) : []),
   ])
-  const staleIds = githubWorkItemsCollection.toArray
+  return githubWorkItemsCollection.toArray
     .filter(
       item =>
         !repositoryFullNames.has(item.repositoryFullName) ||
@@ -605,14 +634,6 @@ async function deleteStaleSyncedGithubWorkItems({
         !fetchedItemIds.has(item.id),
     )
     .map(item => item.id)
-
-  if (!staleIds.length) {
-    return 0
-  }
-
-  const transaction = githubWorkItemsCollection.delete(staleIds)
-  await transaction.isPersisted.promise
-  return staleIds.length
 }
 
 function getGithubWorkItemId(repositoryFullName: string, type: GithubWorkItemType, number: number) {

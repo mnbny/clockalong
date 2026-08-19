@@ -141,6 +141,11 @@ const storageConfig = {
     default: true,
     version: 1,
   },
+  mcpServerEnabled: {
+    type: 'boolean',
+    default: false,
+    version: 1,
+  },
   linearTicketSyncLimit: {
     type: 'number',
     default: defaultLinearTicketSyncLimit,

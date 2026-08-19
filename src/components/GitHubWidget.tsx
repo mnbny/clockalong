@@ -4,7 +4,6 @@ import {
   IconExternalLink,
   IconPlayerPlay,
   IconPlayerStop,
-  IconRefresh,
   IconSearch,
   IconTagPlus,
   IconUserPlus,
@@ -19,16 +18,10 @@ import { useAppAuth } from '../hooks/useAppAuth'
 import { useClockifyTimerProject } from '../hooks/useClockifyTimerProject'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
-import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../services/clockify/generated/clockify'
+import { type TimeEntryDtoImplV1 } from '../services/clockify/generated/clockify'
 import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
 import { MissingClockifyProjectError } from '../services/clockify/time-entries'
 import { createGithubClient } from '../services/github/client'
-import {
-  formatGithubIssueDescriptionTemplate,
-  formatGithubPullRequestDescriptionTemplate,
-  type GithubIssueDescriptionTemplateValues,
-  type GithubPullRequestDescriptionTemplateValues,
-} from '../services/github/description-template'
 import { getGithubRepositoryLabels } from '../services/github/labels'
 import {
   getGithubWorkItemInvolvementReasons,
@@ -37,8 +30,12 @@ import {
   useGithubSync,
 } from '../services/github/sync'
 import {
+  formatGithubWorkItemDescription,
+  startClockifyTimerForGithubWorkItem,
+  stopClockifyTimerForEntry,
+} from '../services/github/timers'
+import {
   getClockifyEntryGithubWorkItem,
-  getGithubWorkItemInternalRef,
   type GithubWorkItemWithTracking,
   mergeGithubWorkItemTimeSummaries,
   summarizeClockifyGithubWorkItemTimeEntries,
@@ -51,7 +48,7 @@ import {
 import { useStorage } from '../services/storage/useStorage'
 import { cx } from '../utils/cx'
 import { getErrorMessage } from '../utils/errors'
-import { internalRefTemplateToken, parseInternalRefs } from '../utils/templates'
+import { parseInternalRefs } from '../utils/templates'
 import { appToast } from './AppToaster'
 import { LastTrackedCell, TotalTrackedAmountCell, TotalTrackedCell } from './TrackingSummaryCells'
 
@@ -185,8 +182,6 @@ function GitHubWidgetContent() {
   const githubSync = useGithubSync()
   const {
     queries: { syncQuery },
-    syncing,
-    syncNow,
   } = githubSync
   const syncedWorkItemsQuery = useLiveQuery(q =>
     q.from({ syncedWorkItem: githubWorkItemsCollection }).orderBy(({ syncedWorkItem }) => syncedWorkItem.updatedAt),
@@ -444,13 +439,6 @@ function GitHubWidgetContent() {
     },
     [stopTrackingMutation],
   )
-  const refreshWorkItems = useCallback(() => {
-    void Promise.all([
-      syncNow(),
-      queryClient.refetchQueries({ queryKey: queryKeys.clockify.runningEntry() }),
-      queryClient.refetchQueries({ queryKey: queryKeys.clockify.entrySync() }),
-    ])
-  }, [queryClient, syncNow])
   const table = useReactTable({
     data: workItemsWithTracking,
     columns: githubWorkItemColumns,
@@ -469,13 +457,7 @@ function GitHubWidgetContent() {
       <div className="card-body gap-0 p-0">
         <header className="border-base-content/5 flex min-w-0 flex-wrap items-center justify-between gap-4 border-b px-4 py-3">
           <div className="flex min-w-0 items-center gap-4">
-            {syncing ? (
-              <span className="text-primary grid size-6 place-items-center">
-                <span className="loading loading-spinner size-6" />
-              </span>
-            ) : (
-              <IconBrandGithub className="text-primary size-6" />
-            )}
+            <IconBrandGithub className="text-primary size-6" />
             <div className="min-w-0">
               <h2 className="text-base leading-6 font-semibold">GitHub</h2>
               <p className="text-base-content/60 truncate text-sm">Issues and pull requests from active repositories</p>
@@ -483,14 +465,6 @@ function GitHubWidgetContent() {
           </div>
 
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-4">
-            <button
-              className="btn btn-square btn-ghost btn-sm"
-              type="button"
-              aria-label="Refresh GitHub work items"
-              disabled={syncing}
-              onClick={refreshWorkItems}>
-              <IconRefresh className="size-4" />
-            </button>
             <GithubAuthorPicker
               availableAuthors={githubAvailableAuthors}
               currentAuthor={githubViewerAuthor}
@@ -1305,130 +1279,10 @@ function getGithubWorkItemTableCellClassName(columnId: string) {
   }
 }
 
-function formatGithubWorkItemDescription({
-  issueTemplate,
-  issueTemplateFallback,
-  item,
-  pullRequestTemplate,
-  pullRequestTemplateFallback,
-}: {
-  issueTemplate: string
-  issueTemplateFallback: string
-  item: SyncedGithubWorkItem
-  pullRequestTemplate: string
-  pullRequestTemplateFallback: string
-}) {
-  if (item.type === 'issue') {
-    const values = getGithubIssueDescriptionValues(item)
-
-    return formatGithubIssueDescriptionTemplate(issueTemplate, values, { fallback: issueTemplateFallback })
-  }
-
-  const values = getGithubPullRequestDescriptionValues(item)
-
-  return formatGithubPullRequestDescriptionTemplate(pullRequestTemplate, values, {
-    fallback: pullRequestTemplateFallback,
-  })
-}
-
-function getGithubIssueDescriptionValues(item: Extract<SyncedGithubWorkItem, { type: 'issue' }>) {
-  return {
-    author: item.author,
-    [internalRefTemplateToken]: getGithubWorkItemInternalRef(item),
-    number: item.number,
-    owner: item.repositoryOwner,
-    repository: item.repositoryFullName,
-    state: item.state,
-    title: item.title,
-    url: item.url,
-  } satisfies GithubIssueDescriptionTemplateValues
-}
-
-function getGithubPullRequestDescriptionValues(item: Extract<SyncedGithubWorkItem, { type: 'pullRequest' }>) {
-  return {
-    author: item.author,
-    baseBranch: item.baseBranch,
-    headBranch: item.headBranch,
-    [internalRefTemplateToken]: getGithubWorkItemInternalRef(item),
-    number: item.number,
-    owner: item.repositoryOwner,
-    repository: item.repositoryFullName,
-    state: item.state,
-    title: item.title,
-    url: item.url,
-  } satisfies GithubPullRequestDescriptionTemplateValues
-}
-
-async function startClockifyTimerForGithubWorkItem({
-  billable,
-  description,
-  item,
-  projectId,
-  workspaceId,
-}: {
-  billable: boolean
-  description: string
-  item: SyncedGithubWorkItem
-  projectId: string
-  workspaceId: string
-}): Promise<TimeEntryDtoImplV1> {
-  const body = {
-    billable,
-    description,
-    projectId,
-    start: new Date().toISOString(),
-    type: 'REGULAR',
-  } satisfies CreateTimeEntryRequest
-
-  githubTimerLog('create time entry request', {
-    billable,
-    descriptionLength: body.description.length,
-    itemId: item.id,
-    projectId,
-    urlPresent: Boolean(item.url),
-    workspaceId,
-  })
-
-  return clockify.createTimeEntry(body, { params: { workspaceId } })
-}
-
-async function stopClockifyTimerForEntry({
-  entry,
-  item,
-}: {
-  entry: TimeEntryDtoImplV1
-  item: SyncedGithubWorkItem
-}): Promise<TimeEntryDtoImplV1> {
-  if (!entry.userId || !entry.workspaceId) {
-    throw new Error('Running Clockify timer is missing user or workspace information.')
-  }
-
-  githubTimerLog('stop time entry request', {
-    clockifyEntryId: entry.id,
-    itemId: item.id,
-    userId: entry.userId,
-    workspaceId: entry.workspaceId,
-  })
-
-  return clockify.stopRunningTimeEntry(
-    { end: new Date().toISOString() },
-    { params: { userId: entry.userId, workspaceId: entry.workspaceId } },
-  )
-}
-
 class MissingRunningClockifyEntryError extends Error {
   constructor() {
     super('Missing running Clockify timer.')
   }
-}
-
-function githubTimerLog(message: string, details?: unknown) {
-  if (details === undefined) {
-    console.info(`[github api] timer ${message}`)
-    return
-  }
-
-  console.info(`[github api] timer ${message}`, details)
 }
 
 function summarizeGithubWidgetSyncedEntries(
