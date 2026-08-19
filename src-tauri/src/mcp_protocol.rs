@@ -38,10 +38,11 @@ pub async fn handle_message<R: Runtime>(
     let Some(id) = request_object.get("id").cloned() else {
         return McpProtocolReply::Accepted;
     };
-    if request_object.get("jsonrpc").and_then(Value::as_str) != Some("2.0")
+    if !id.is_string() && !id.is_number()
+        || request_object.get("jsonrpc").and_then(Value::as_str) != Some("2.0")
         || !request_object.get("method").is_some_and(Value::is_string)
     {
-        return McpProtocolReply::Json(error_response(id, -32600, "Invalid Request"));
+        return McpProtocolReply::Json(error_response(Value::Null, -32600, "Invalid Request"));
     }
 
     let method = request_object
@@ -55,8 +56,8 @@ pub async fn handle_message<R: Runtime>(
 
     let result = match method {
         "initialize" => initialize(&params),
-        "notifications/initialized" | "ping" => Ok(json!({})),
-        "tools/list" => validate_empty_params(&params).map(|()| json!({ "tools": tool_catalog() })),
+        "notifications/initialized" | "ping" => validate_request_params(&params).map(|_| json!({})),
+        "tools/list" => validate_list_tools(&params).map(|()| json!({ "tools": tool_catalog() })),
         "tools/call" => call_tool(app, state, &params).await,
         _ => {
             return McpProtocolReply::Json(error_response(id, -32601, "Method not found"));
@@ -69,17 +70,34 @@ pub async fn handle_message<R: Runtime>(
     })
 }
 
+#[derive(Debug)]
 struct ProtocolError {
     code: i64,
     message: &'static str,
 }
 
 fn initialize(params: &Value) -> Result<Value, ProtocolError> {
-    let params = params.as_object().ok_or(invalid_params())?;
+    let params = validate_request_params(params)?;
     let requested_version = params
         .get("protocolVersion")
         .and_then(Value::as_str)
-        .unwrap_or(CURRENT_PROTOCOL_VERSION);
+        .ok_or(invalid_params())?;
+    params
+        .get("capabilities")
+        .and_then(Value::as_object)
+        .ok_or(invalid_params())?;
+    let client_info = params
+        .get("clientInfo")
+        .and_then(Value::as_object)
+        .ok_or(invalid_params())?;
+    required_string(client_info, "name")?;
+    required_string(client_info, "version")?;
+    if client_info
+        .get("title")
+        .is_some_and(|title| !title.is_string())
+    {
+        return Err(invalid_params());
+    }
     let protocol_version = match requested_version {
         CURRENT_PROTOCOL_VERSION => CURRENT_PROTOCOL_VERSION,
         PREVIOUS_PROTOCOL_VERSION => PREVIOUS_PROTOCOL_VERSION,
@@ -103,18 +121,7 @@ async fn call_tool<R: Runtime>(
     state: &McpBridgeState,
     params: &Value,
 ) -> Result<Value, ProtocolError> {
-    let params = params.as_object().ok_or(invalid_params())?;
-    if params.keys().any(|key| key != "name" && key != "arguments") {
-        return Err(invalid_params());
-    }
-    let name = params
-        .get("name")
-        .and_then(Value::as_str)
-        .ok_or(invalid_params())?;
-    let arguments = params
-        .get("arguments")
-        .cloned()
-        .unwrap_or_else(|| json!({}));
+    let (name, arguments) = validate_call_tool(params)?;
 
     let output = match name {
         "list_trackable_work" => {
@@ -126,11 +133,11 @@ async fn call_tool<R: Runtime>(
             write_tool(app, state, name, arguments, true).await
         }
         "stop_timer" => {
-            validate_empty_params(&arguments)?;
+            validate_empty_arguments(&arguments)?;
             write_tool(app, state, name, arguments, false).await
         }
         "get_tracking_status" => {
-            validate_empty_params(&arguments)?;
+            validate_empty_arguments(&arguments)?;
             read_tool(state, tracking_status)
         }
         "list_recent_entries" => {
@@ -437,8 +444,52 @@ fn validate_list_clockify_projects(arguments: &Value) -> Result<Option<String>, 
     optional_string(arguments, "query")
 }
 
-fn validate_empty_params(params: &Value) -> Result<(), ProtocolError> {
-    validate_object_keys(params, &[]).map(|_| ())
+fn validate_request_params(params: &Value) -> Result<&Map<String, Value>, ProtocolError> {
+    let params = params.as_object().ok_or(invalid_params())?;
+    if let Some(meta) = params.get("_meta") {
+        let meta = meta.as_object().ok_or(invalid_params())?;
+        if meta
+            .get("progressToken")
+            .is_some_and(|token| !token.is_string() && !token.is_number())
+        {
+            return Err(invalid_params());
+        }
+    }
+
+    Ok(params)
+}
+
+fn validate_list_tools(params: &Value) -> Result<(), ProtocolError> {
+    let params = validate_request_params(params)?;
+    if params
+        .get("cursor")
+        .is_some_and(|cursor| !cursor.is_string())
+    {
+        return Err(invalid_params());
+    }
+
+    Ok(())
+}
+
+fn validate_call_tool(params: &Value) -> Result<(&str, Value), ProtocolError> {
+    let params = validate_request_params(params)?;
+    let name = params
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or(invalid_params())?;
+    let arguments = params
+        .get("arguments")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    if !arguments.is_object() {
+        return Err(invalid_params());
+    }
+
+    Ok((name, arguments))
+}
+
+fn validate_empty_arguments(arguments: &Value) -> Result<(), ProtocolError> {
+    validate_object_keys(arguments, &[]).map(|_| ())
 }
 
 fn validate_object_keys<'a>(
@@ -715,4 +766,59 @@ fn tool_catalog() -> Vec<Value> {
             },
         }),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_claude_call_metadata_and_request_extensions() {
+        let params = json!({
+            "name": "get_tracking_status",
+            "arguments": {},
+            "_meta": {
+                "claudecode/toolUseId": "tool-use-id",
+                "progressToken": "progress-token",
+                "clientExtension": true,
+            },
+            "futureRequestField": { "enabled": true },
+        });
+
+        let (name, arguments) = validate_call_tool(&params).unwrap();
+
+        assert_eq!(name, "get_tracking_status");
+        assert_eq!(arguments, json!({}));
+    }
+
+    #[test]
+    fn accepts_codex_list_metadata_and_pagination_cursor() {
+        let params = json!({
+            "cursor": "next-page",
+            "_meta": { "progressToken": 42 },
+            "futureRequestField": true,
+        });
+
+        assert!(validate_list_tools(&params).is_ok());
+    }
+
+    #[test]
+    fn rejects_non_string_list_cursor() {
+        assert!(validate_list_tools(&json!({ "cursor": 42 })).is_err());
+    }
+
+    #[test]
+    fn rejects_malformed_request_metadata() {
+        assert!(validate_request_params(&json!({ "_meta": null })).is_err());
+        assert!(validate_request_params(&json!({
+            "_meta": { "progressToken": false }
+        }))
+        .is_err());
+    }
+
+    #[test]
+    fn keeps_tool_arguments_strict() {
+        assert!(validate_empty_arguments(&json!({})).is_ok());
+        assert!(validate_empty_arguments(&json!({ "_meta": {} })).is_err());
+    }
 }
