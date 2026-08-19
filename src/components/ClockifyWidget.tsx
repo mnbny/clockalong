@@ -12,11 +12,10 @@ import {
   IconPencil,
   IconPlayerPlay,
   IconPlayerStop,
-  IconRefresh,
   IconWand,
 } from '@tabler/icons-react'
 import { and, eq, gte, lt, useLiveQuery } from '@tanstack/react-db'
-import { useIsFetching, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import humanizeDuration from 'humanize-duration'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
@@ -63,28 +62,6 @@ type ClockifyEntryEditDialogState = {
   entry: TimeEntryWithRatesDtoV1
   end: string
   start: string
-}
-
-function ClockifyRefreshButton({ fetching }: { fetching: boolean }) {
-  const queryClient = useQueryClient()
-
-  return (
-    <button
-      className="btn btn-square btn-ghost btn-sm"
-      type="button"
-      aria-label="Refresh Clockify"
-      disabled={fetching}
-      onClick={() => {
-        clockifyWidgetLog('manual refresh requested')
-        void Promise.all([
-          queryClient.refetchQueries({ queryKey: queryKeys.clockify.runningEntry() }),
-          queryClient.refetchQueries({ queryKey: queryKeys.clockify.summaryReport() }),
-          queryClient.refetchQueries({ queryKey: queryKeys.clockify.entrySync() }),
-        ])
-      }}>
-      <IconRefresh className="size-4" />
-    </button>
-  )
 }
 
 const formatShortDuration = humanizeDuration.humanizer({
@@ -242,7 +219,6 @@ export function ClockifyWidget() {
       staleTime: 60_000,
     })),
   })
-  const entrySyncFetching = useIsFetching({ queryKey: queryKeys.clockify.entrySync() }) > 0
   const todaySyncedEntries = useSyncedClockifyEntriesForPeriod('today', {
     userId: userQuery.data?.id,
     workspaceId: selectedWorkspace?.id,
@@ -290,12 +266,6 @@ export function ClockifyWidget() {
       workspaceId: selectedWorkspace?.id,
     })
   }, [monthSyncedEntries, selectedWorkspace?.id, todaySyncedEntries, userQuery.data?.id, weekSyncedEntries])
-  const fetching =
-    userQuery.isFetching ||
-    workspacesQuery.isFetching ||
-    runningEntryQuery.isFetching ||
-    entrySyncFetching ||
-    reportQueries.some(query => query.isFetching)
   const overlapFixes = overlapDialogState?.fixes ?? []
   const fixOverlapMutation = useMutation({
     mutationFn: async () => {
@@ -384,13 +354,7 @@ export function ClockifyWidget() {
         <div className="card-body gap-0 p-0">
           <header className="border-base-content/5 flex min-w-0 items-center justify-between gap-4 border-b px-4 py-3">
             <div className="flex min-w-0 items-center gap-4">
-              {fetching ? (
-                <span className="text-primary grid size-6 place-items-center">
-                  <span className="loading loading-spinner size-6" />
-                </span>
-              ) : (
-                <ClockifyIcon className="text-primary size-6" />
-              )}
+              <ClockifyIcon className="text-primary size-6" />
               <div className="min-w-0">
                 <h2 className="text-base leading-6 font-semibold">Clockify</h2>
                 <p className="text-base-content/60 truncate text-sm">Time tracker</p>
@@ -439,7 +403,6 @@ export function ClockifyWidget() {
                   {clockifyProjectsQuery.isFetching ? <span className="loading loading-spinner loading-xs" /> : null}
                 </div>
               ) : null}
-              <ClockifyRefreshButton fetching={fetching} />
               <button
                 className="btn btn-square btn-ghost btn-sm"
                 type="button"

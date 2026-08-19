@@ -2,7 +2,7 @@ import type { AssignedIssueNode, LinearTicket, LinearTicketStatus } from '../ser
 import type { ColumnDef } from '@tanstack/react-table'
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
 
-import { IconExternalLink, IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react'
+import { IconExternalLink, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react'
 import { and, eq, useLiveQuery } from '@tanstack/react-db'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
@@ -153,8 +153,6 @@ function LinearWidgetContent() {
   const {
     lastSyncResult: linearLastSyncResult,
     queries: { syncQuery: linearSyncQuery },
-    syncing: linearSyncing,
-    syncNow: syncLinearTickets,
   } = linearSync
   const normalizedLinearTicketSyncLimit = normalizeLinearTicketSyncLimit(linearTicketSyncLimit)
   const linearViewerId = linearLastSyncResult?.viewerId
@@ -443,14 +441,6 @@ function LinearWidgetContent() {
       }) satisfies TicketTableMeta,
     [activeLinearIssueId, handleStartTracking, handleStopTracking, pendingTicketId, stoppingTicketId],
   )
-  const refreshTickets = useCallback(() => {
-    void Promise.all([
-      syncLinearTickets(),
-      queryClient.refetchQueries({ queryKey: queryKeys.clockify.runningEntry() }),
-      queryClient.refetchQueries({ queryKey: queryKeys.clockify.entrySync() }),
-    ])
-  }, [queryClient, syncLinearTickets])
-  const ticketsRefreshing = linearSyncing
   const table = useReactTable({
     columns: ticketColumns,
     data: tickets,
@@ -463,13 +453,7 @@ function LinearWidgetContent() {
       <div className="card-body gap-0 p-0">
         <header className="border-base-content/5 flex min-w-0 flex-wrap items-center justify-between gap-4 border-b px-4 py-3">
           <div className="flex min-w-0 items-center gap-4">
-            {linearSyncing ? (
-              <span className="text-primary grid size-6 place-items-center">
-                <span className="loading loading-spinner size-6" />
-              </span>
-            ) : (
-              <LinearIcon className="text-primary size-6" />
-            )}
+            <LinearIcon className="text-primary size-6" />
             <div className="min-w-0">
               <h2 className="text-base leading-6 font-semibold">Linear</h2>
               <p className="text-base-content/60 truncate text-sm">Linear issues assigned to you</p>
@@ -477,14 +461,6 @@ function LinearWidgetContent() {
           </div>
 
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-4">
-            <button
-              className="btn btn-square btn-ghost btn-sm"
-              type="button"
-              aria-label="Refresh Linear tickets"
-              disabled={ticketsRefreshing}
-              onClick={refreshTickets}>
-              <IconRefresh className="size-4" />
-            </button>
             <label
               className="flex h-8 cursor-pointer items-center gap-2 text-xs"
               title="Show completed, canceled, duplicate, and unknown-status tickets">

@@ -4,7 +4,6 @@ import {
   IconExternalLink,
   IconPlayerPlay,
   IconPlayerStop,
-  IconRefresh,
   IconSearch,
   IconTagPlus,
   IconUserPlus,
@@ -183,8 +182,6 @@ function GitHubWidgetContent() {
   const githubSync = useGithubSync()
   const {
     queries: { syncQuery },
-    syncing,
-    syncNow,
   } = githubSync
   const syncedWorkItemsQuery = useLiveQuery(q =>
     q.from({ syncedWorkItem: githubWorkItemsCollection }).orderBy(({ syncedWorkItem }) => syncedWorkItem.updatedAt),
@@ -442,13 +439,6 @@ function GitHubWidgetContent() {
     },
     [stopTrackingMutation],
   )
-  const refreshWorkItems = useCallback(() => {
-    void Promise.all([
-      syncNow(),
-      queryClient.refetchQueries({ queryKey: queryKeys.clockify.runningEntry() }),
-      queryClient.refetchQueries({ queryKey: queryKeys.clockify.entrySync() }),
-    ])
-  }, [queryClient, syncNow])
   const table = useReactTable({
     data: workItemsWithTracking,
     columns: githubWorkItemColumns,
@@ -467,13 +457,7 @@ function GitHubWidgetContent() {
       <div className="card-body gap-0 p-0">
         <header className="border-base-content/5 flex min-w-0 flex-wrap items-center justify-between gap-4 border-b px-4 py-3">
           <div className="flex min-w-0 items-center gap-4">
-            {syncing ? (
-              <span className="text-primary grid size-6 place-items-center">
-                <span className="loading loading-spinner size-6" />
-              </span>
-            ) : (
-              <IconBrandGithub className="text-primary size-6" />
-            )}
+            <IconBrandGithub className="text-primary size-6" />
             <div className="min-w-0">
               <h2 className="text-base leading-6 font-semibold">GitHub</h2>
               <p className="text-base-content/60 truncate text-sm">Issues and pull requests from active repositories</p>
@@ -481,14 +465,6 @@ function GitHubWidgetContent() {
           </div>
 
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-4">
-            <button
-              className="btn btn-square btn-ghost btn-sm"
-              type="button"
-              aria-label="Refresh GitHub work items"
-              disabled={syncing}
-              onClick={refreshWorkItems}>
-              <IconRefresh className="size-4" />
-            </button>
             <GithubAuthorPicker
               availableAuthors={githubAvailableAuthors}
               currentAuthor={githubViewerAuthor}
