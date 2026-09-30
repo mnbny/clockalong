@@ -25,6 +25,7 @@
   "scripts": {
     "build": "tsr generate && tsc && vite build",
     "check:types": "pnpm typecheck",
+    "check:worktree": "tsx scripts/worktree-check.ts",
     "clockify:generate": "pnpm clockify:specs && pnpm clockify:generate:api && pnpm clockify:generate:reports",
     "clockify:generate:api": "node scripts/generate-clockify-client.mjs api",
     "clockify:generate:reports": "node scripts/generate-clockify-client.mjs reports",
@@ -38,10 +39,12 @@
     "release:check": "pnpm typecheck && pnpm build",
     "release:github": "scripts/publish-github-release.sh",
     "release:mac": "scripts/release-mac.sh",
-    "setup": "pnpm install && pnpm run tauri:prebuild",
+    "setup": "pnpm run worktree:setup",
     "tauri": "tauri",
     "tauri:prebuild": "cargo build --manifest-path src-tauri/Cargo.toml --no-default-features",
-    "typecheck": "tsr generate && tsc --noEmit"
+    "typecheck": "tsr generate && tsc --noEmit",
+    "worktree:run": "tsx scripts/worktree-run.ts",
+    "worktree:setup": "scripts/worktree-setup.sh"
   },
   "dependencies": {
     "@automattic/format-currency": "catalog:",
@@ -104,9 +107,11 @@
     "prettier-plugin-sh": "catalog:",
     "prettier-plugin-tailwindcss": "catalog:",
     "tailwindcss": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "zx": "catalog:"
   },
   "packageManager": "pnpm@11.1.2",
   "engines": {
