@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+cd "$(dirname "$0")/.."
+
 asdf install
 pnpm install --config.confirmModulesPurge=false
-pnpm run tauri:prebuild
+exec pnpm exec tsx scripts/worktree-setup.ts
