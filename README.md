@@ -87,10 +87,16 @@ pnpm run worktree:run
 
 The runner accepts `WORKTREE_PORT`, `PASEO_PORT`, `CONDUCTOR_PORT`, `PASEO_WORKTREE_PORT`, or `PORT`, in that order, and defaults to `1420`. It forwards extra arguments to `tauri dev`. Both scripts work from Paseo, Conductor, or a terminal.
 
-Typecheck:
+Run formatting, linting, and type checks:
 
 ```sh
-pnpm typecheck
+pnpm validate
+```
+
+Typecheck only:
+
+```sh
+pnpm validate:typecheck
 ```
 
 Build the frontend:
