@@ -1,7 +1,6 @@
 .DS_Store
+.env
 .context/
-.conductor/*
-!.conductor/settings.toml
 .eslintcache
 .playwright-mcp/
 .idea

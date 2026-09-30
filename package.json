@@ -24,24 +24,26 @@
   "type": "module",
   "scripts": {
     "build": "tsr generate && tsc && vite build",
-    "check:types": "pnpm typecheck",
     "clockify:generate": "pnpm clockify:specs && pnpm clockify:generate:api && pnpm clockify:generate:reports",
     "clockify:generate:api": "node scripts/generate-clockify-client.mjs api",
     "clockify:generate:reports": "node scripts/generate-clockify-client.mjs reports",
     "clockify:spec": "curl -L https://docs.clockify.me/openapi.json -o src/services/clockify/specs/clockify-openapi.json",
     "clockify:specs": "pnpm clockify:spec && node scripts/prepare-clockify-specs.mjs",
     "dev": "vite",
-    "format": "prettier --write . --ignore-unknown --cache --log-level=error && pnpm format:rust",
-    "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml",
-    "lint": "eslint --fix --cache --format=pretty .",
     "preview": "vite preview",
-    "release:check": "pnpm typecheck && pnpm build",
+    "release:check": "pnpm validate:typecheck && pnpm build",
     "release:github": "scripts/publish-github-release.sh",
     "release:mac": "scripts/release-mac.sh",
-    "setup": "pnpm install && pnpm run tauri:prebuild",
+    "setup": "pnpm run worktree:setup",
     "tauri": "tauri",
     "tauri:prebuild": "cargo build --manifest-path src-tauri/Cargo.toml --no-default-features",
-    "typecheck": "tsr generate && tsc --noEmit"
+    "validate": "tsx scripts/scripty.ts --sequential",
+    "validate:format": "SCRIPTY=1 prettier --write . --ignore-unknown --cache --log-level=error",
+    "validate:format:rust": "SCRIPTY=1 cargo fmt --manifest-path src-tauri/Cargo.toml",
+    "validate:lint": "SCRIPTY=2 eslint --fix --cache --format=pretty .",
+    "validate:typecheck": "SCRIPTY=3 tsr generate && tsc --noEmit",
+    "worktree:run": "tsx scripts/worktree-run.ts",
+    "worktree:setup": "scripts/worktree-setup.sh"
   },
   "dependencies": {
     "@automattic/format-currency": "catalog:",
@@ -104,9 +106,11 @@
     "prettier-plugin-sh": "catalog:",
     "prettier-plugin-tailwindcss": "catalog:",
     "tailwindcss": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "zx": "catalog:"
   },
   "packageManager": "pnpm@11.1.2",
   "engines": {

@@ -59,7 +59,7 @@ cd "${ROOT_DIR}"
 echo "Building ${APP_NAME} ${VERSION} for ${TARGET}"
 echo "Signing identity: ${APPLE_SIGNING_IDENTITY}"
 
-pnpm typecheck
+pnpm validate:typecheck
 env \
   -u APPLE_API_ISSUER \
   -u APPLE_API_KEY \
