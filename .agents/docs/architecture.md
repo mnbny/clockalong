@@ -98,11 +98,11 @@ Provider service files should export fetch functions and DTO types, not query ke
 - `pnpm run worktree:run`: launch Tauri with the worktree port and forward extra arguments to `tauri dev`.
 - `scripts/worktree-setup.sh` or `pnpm run worktree:setup`: install asdf tools and dependencies, copy missing local env files from the primary Git worktree, and prebuild the Rust backend.
 - `pnpm build`: run `tsr generate && tsc && vite build`.
-- `pnpm typecheck`: run `tsr generate && tsc --noEmit`.
-- `pnpm run check:worktree`: verify setup and run behavior in a temporary Git worktree with stubbed toolchain and Tauri commands.
 - `pnpm preview`: run the Vite preview server.
 - `pnpm release:mac`: run the local Apple Silicon release build, updater signing, DMG notarization, stapling, and verification flow.
 - `pnpm release:github`: build locally and create or update a draft GitHub Release through `gh`.
 - `pnpm tauri`: run the Tauri CLI.
+
+Validation runs formatting, linting, and TypeScript checks in a defined order. Scripty discovers validation steps from the package manifest and stops when a step fails.
 
 Worktree scripts follow the Toolkit TypeScript/zx pattern and are independent of the harness. The shell setup entrypoint installs dependencies before loading TypeScript, so it also works in a fresh checkout. `scripts/worktree-utils.ts` owns logging, Git worktree discovery, local-file copying, and port validation. Setup preserves existing `.env` and `.env.local` files. Run selects the first nonempty port from `WORKTREE_PORT`, `PASEO_PORT`, `CONDUCTOR_PORT`, `PASEO_WORKTREE_PORT`, and `PORT`, then falls back to `1420`. `conductor.json` and `paseo.json` call these same entrypoints.
