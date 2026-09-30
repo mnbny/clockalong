@@ -65,6 +65,14 @@ Install dependencies:
 pnpm install
 ```
 
+To prepare a new worktree with asdf, install the plugins listed in `.tool-versions`, then run:
+
+```sh
+scripts/worktree-setup.sh
+```
+
+This installs the toolchain and dependencies, copies missing `.env` and `.env.local` files from the primary Git worktree, and prebuilds the Rust backend. Existing local files are preserved. After pnpm is available, `pnpm run worktree:setup` runs the same setup.
+
 Run the frontend dev server:
 
 ```sh
@@ -74,8 +82,10 @@ pnpm dev
 Run the Tauri app:
 
 ```sh
-pnpm tauri dev
+pnpm run worktree:run
 ```
+
+The runner accepts `WORKTREE_PORT`, `PASEO_PORT`, `CONDUCTOR_PORT`, `PASEO_WORKTREE_PORT`, or `PORT`, in that order, and defaults to `1420`. It forwards extra arguments to `tauri dev`. Both scripts work from Paseo, Conductor, or a terminal.
 
 Typecheck:
 

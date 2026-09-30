@@ -48,7 +48,7 @@ Longer term, Clockalong should help reconcile tracked work with billable time. A
 - Avoid turning Clockalong into a broad Linear, GitHub, project-management, or invoicing client.
 - Avoid Streamlink-derived or unrelated domain concepts.
 - Placeholder UI is acceptable for product areas that are not wired yet, but provider auth should use real native flows once a provider is implemented.
-- Preserve the current Tauri, React, pnpm, Conductor, and agent-doc conventions unless a specific product requirement needs a change.
+- Preserve the current Tauri, React, pnpm, and agent-doc conventions unless a specific product requirement needs a change.
 
 ## Open research
 

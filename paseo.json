@@ -1,0 +1,14 @@
+{
+  "worktree": {
+    "setup": "scripts/worktree-setup.sh"
+  },
+  "scripts": {
+    "setup": {
+      "command": "scripts/worktree-setup.sh"
+    },
+    "run": {
+      "type": "service",
+      "command": "pnpm run worktree:run"
+    }
+  }
+}
