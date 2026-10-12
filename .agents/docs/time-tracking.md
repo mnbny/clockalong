@@ -114,6 +114,14 @@ The status badge has only two states:
 
 Do not add separate loading or unavailable labels to this badge. The fallback visual state is `Not Running`; use logs, spinners, or toasts for errors and loading when they help.
 
+## Manual time entries
+
+Right-click a play button to add completed time for a Linear ticket, GitHub work item, or existing Clockify entry. Right-click a Quick Timer card to add completed time from that preset. Shift+F10 and the context-menu key provide the same action when the control has focus. Left-click keeps the normal timer behavior.
+
+Manual entry and duration editing share one form. Minutes are the main input and can include fractions. New entries end at the time the form opens. A change to the duration moves the start time backward. Users can also change the start and end dates. When users edit an existing entry, a change to the duration keeps the start time and moves the end time.
+
+Saving creates a completed Clockify entry without changing the running timer. Entries can overlap other entries. Provider entries retain their configured descriptions and internal references. New provider entries use the selected Clockify project and billable preference. Copies of existing entries preserve the same fields as timer resume. The entry cache and summary reports refresh after a successful save.
+
 ## Clockify source matching
 
 Clockify is the system of record for time entries, but it does not provide first-class links to most external work-source items. Clockalong derives source ownership from provider-specific matching rules and, where available, small local registries.
