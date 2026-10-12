@@ -18,8 +18,8 @@ import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
 import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
 import {
+  createClockifyTimeEntryFromEntry,
   getClockifyTimeEntryTitle,
-  resumeClockifyTimeEntry,
   stopClockifyTimeEntry,
 } from '../services/clockify/time-entries'
 import { useStorage } from '../services/storage/useStorage'
@@ -175,7 +175,7 @@ export function useMenuBar() {
     },
   })
   const { mutate: resumeEntry } = useMutation({
-    mutationFn: (entry: TimeEntryWithRatesDtoV1) => resumeClockifyTimeEntry(entry, clockifyTimerProject),
+    mutationFn: (entry: TimeEntryWithRatesDtoV1) => createClockifyTimeEntryFromEntry(entry, clockifyTimerProject),
     onError: error => {
       console.warn('[menu bar] Could not start Clockify timer:', error)
       appToast.error('Could not start Clockify timer', { description: getErrorMessage(error) })
