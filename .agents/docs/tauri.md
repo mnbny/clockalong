@@ -1,5 +1,13 @@
 # Tauri
 
+## Startup appearance
+
+Clockalong reads the saved theme and applies its palette and native light or dark appearance before the frontend renders. The window stays hidden until the themed app shell mounts. Provider authentication and synchronization proceed independently.
+
+All bundled daisyUI themes are available in Light and Dark groups. The header palette icon and App settings use native selects. The theme shortcut focuses the header select. Missing or unsupported selections use Halloween. The theme upgrade resets existing selections to Halloween once. Later selections persist.
+
+Theme changes update the app palette, dark appearance styles, and native window appearance together. The shell and Quick Timer cards use theme surface colors.
+
 ## Reactifying Rust Vars
 
 Tauri managed state is not reactive by itself. Treat Rust as the owner of canonical app state, then expose React-friendly hooks through a snapshot command plus a change event.

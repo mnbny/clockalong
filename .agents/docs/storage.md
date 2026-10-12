@@ -43,7 +43,7 @@ Backups include Quick Timer presets and their last-used template values. They do
 - `quickTimers`: saved ad hoc Quick Timer presets.
 - `quickTimersActiveEntry`: local association between the active Quick Timer preset and its Clockify entry.
 - `quickTimersCache`: last submitted template variable values per Quick Timer preset. Each entry stores `{ id, values }`.
-- `theme`: active daisyUI theme and native window appearance.
+- `theme`: selected daisyUI theme and its native light or dark appearance. Halloween is the default. The theme storage version resets existing selections to Halloween once on upgrade. Later selections persist. The theme registry determines the appearance, including for imported settings.
 
 ## Native secrets
 
