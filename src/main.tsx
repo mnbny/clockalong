@@ -8,6 +8,9 @@ import { routeTree } from './routeTree.gen'
 import { ClockifySyncProvider } from './services/clockify/sync'
 import { GithubSyncProvider } from './services/github/sync'
 import { LinearSyncProvider } from './services/linear/sync'
+import { storage } from './services/storage/config'
+import { applyTheme, resolveTheme } from './services/theme'
+import { ThemeProvider } from './services/theme-provider'
 import { ProviderRegistry } from './utils/provider-registry'
 
 import './styles.css'
@@ -26,11 +29,25 @@ declare module '@tanstack/react-router' {
   }
 }
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <ProviderRegistry
-    registry={{ ClockifySyncProvider, GithubSyncProvider, LinearSyncProvider, QueryClientProvider }}
-    providers={['QueryClientProvider', 'LinearSyncProvider', 'GithubSyncProvider', 'ClockifySyncProvider']}
-    QueryClientProviderProps={{ client: queryClient }}>
-    <RouterProvider router={router} />
-  </ProviderRegistry>,
-)
+async function startApp() {
+  const initialTheme = resolveTheme(await storage.get('theme'))
+  await applyTheme(initialTheme)
+
+  ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+    <ProviderRegistry
+      registry={{ ThemeProvider, ClockifySyncProvider, GithubSyncProvider, LinearSyncProvider, QueryClientProvider }}
+      providers={[
+        'ThemeProvider',
+        'QueryClientProvider',
+        'LinearSyncProvider',
+        'GithubSyncProvider',
+        'ClockifySyncProvider',
+      ]}
+      ThemeProviderProps={{ initialTheme }}
+      QueryClientProviderProps={{ client: queryClient }}>
+      <RouterProvider router={router} />
+    </ProviderRegistry>,
+  )
+}
+
+void startApp()

@@ -14,7 +14,7 @@
     "windows": [
       {
         "title": "Clockalong",
-        "theme": "Dark",
+        "visible": false,
         "decorations": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
