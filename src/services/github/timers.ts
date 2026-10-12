@@ -3,6 +3,7 @@ import type { SyncedGithubWorkItem } from './sync'
 import { internalRefTemplateToken } from '../../utils/templates'
 import { clockify } from '../clockify/client'
 import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../clockify/generated/clockify'
+import { type ClockifyTimeEntryInterval, getClockifyTimeEntryTiming } from '../clockify/time-entry-interval'
 import {
   formatGithubIssueDescriptionTemplate,
   formatGithubPullRequestDescriptionTemplate,
@@ -65,13 +66,15 @@ export function getGithubPullRequestDescriptionValues(item: Extract<SyncedGithub
   } satisfies GithubPullRequestDescriptionTemplateValues
 }
 
-export async function startClockifyTimerForGithubWorkItem({
+export async function createClockifyTimeEntryForGithubWorkItem({
+  interval,
   billable,
   description,
   item,
   projectId,
   workspaceId,
 }: {
+  interval?: ClockifyTimeEntryInterval
   billable: boolean
   description: string
   item: SyncedGithubWorkItem
@@ -82,7 +85,7 @@ export async function startClockifyTimerForGithubWorkItem({
     billable,
     description,
     projectId,
-    start: new Date().toISOString(),
+    ...getClockifyTimeEntryTiming(interval),
     type: 'REGULAR',
   } satisfies CreateTimeEntryRequest
 
