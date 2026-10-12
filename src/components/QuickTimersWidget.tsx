@@ -14,7 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { capitalCase } from 'change-case'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { type SubmitHandler, useForm } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 
 import { useClockifyTimerProject } from '../hooks/useClockifyTimerProject'
@@ -32,6 +32,7 @@ import { cx } from '../utils/cx'
 import { getErrorMessage } from '../utils/errors'
 import { parseTemplateTokens } from '../utils/templates'
 import { appToast } from './AppToaster'
+import { ClockifyEntryTimeForm } from './ClockifyEntryTimeDialog'
 
 type QuickTimerFormProps = {
   quickTimerId: string | null
@@ -39,6 +40,7 @@ type QuickTimerFormProps = {
 }
 
 type QuickTimerStartFormProps = {
+  manual: boolean
   quickTimerId: string
   onCancel: () => void
 }
@@ -66,6 +68,7 @@ const quickTimerFormDefaultValues = {
 export function QuickTimersWidget() {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const startDialogRef = useRef<HTMLDialogElement>(null)
+  const [manualEntry, setManualEntry] = useState(false)
   const [startingQuickTimerId, setStartingQuickTimerId] = useState<string | null>(null)
   const [editingQuickTimers, setEditingQuickTimers] = useState(false)
   const [editingQuickTimerId, setEditingQuickTimerId] = useState<string | null>(null)
@@ -168,8 +171,9 @@ export function QuickTimersWidget() {
     dialogRef.current?.showModal()
   }
 
-  const startQuickTimer = (quickTimerId: string) => {
+  const startQuickTimer = (quickTimerId: string, manual = false) => {
     flushSync(() => {
+      setManualEntry(manual)
       setStartingQuickTimerId(quickTimerId)
       setStartFormResetKey(key => key + 1)
     })
@@ -224,6 +228,22 @@ export function QuickTimersWidget() {
                   aria-label={
                     editingQuickTimers ? `Edit ${quickTimer.name} Quick Timer` : `Start ${quickTimer.name} Quick Timer`
                   }
+                  title={editingQuickTimers ? undefined : 'Right-click or Shift+F10 to add time'}
+                  onContextMenu={event => {
+                    if (!editingQuickTimers) {
+                      event.preventDefault()
+                      startQuickTimer(quickTimer.id, true)
+                    }
+                  }}
+                  onKeyDown={event => {
+                    if (
+                      !editingQuickTimers &&
+                      (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))
+                    ) {
+                      event.preventDefault()
+                      startQuickTimer(quickTimer.id, true)
+                    }
+                  }}
                   onClick={() => {
                     if (editingQuickTimers) {
                       editQuickTimer(quickTimer.id)
@@ -262,14 +282,15 @@ export function QuickTimersWidget() {
       </dialog>
 
       <dialog ref={startDialogRef} className="modal" onClose={resetStartQuickTimerForm}>
-        <div className="modal-box max-w-md rounded-lg">
-          {startingQuickTimerId ? (
+        <div className={cx('modal-box rounded-lg', manualEntry ? 'max-w-2xl' : 'max-w-md')}>
+          {!!startingQuickTimerId && (
             <QuickTimerStartForm
               key={startFormResetKey}
+              manual={manualEntry}
               quickTimerId={startingQuickTimerId}
               onCancel={closeStartQuickTimerDialog}
             />
-          ) : null}
+          )}
         </div>
 
         <form className="modal-backdrop" method="dialog">
@@ -296,12 +317,7 @@ function QuickTimerForm({ onCancel, quickTimerId }: QuickTimerFormProps) {
   )
   const title = quickTimerId ? 'Edit Quick Timer' : 'New Quick Timer'
   const submitLabel = quickTimerId ? 'Save' : 'Create'
-  const {
-    formState: { errors },
-    handleSubmit,
-    register,
-    reset,
-  } = useForm<QuickTimerFormSchema>({
+  const form = useForm({
     defaultValues,
     mode: 'onChange',
     resolver: zodResolver(QuickTimerFormSchema),
@@ -309,10 +325,10 @@ function QuickTimerForm({ onCancel, quickTimerId }: QuickTimerFormProps) {
   })
 
   useEffect(() => {
-    reset(defaultValues)
-  }, [defaultValues, reset])
+    form.reset(defaultValues)
+  }, [defaultValues, form.reset])
 
-  const submitQuickTimer: SubmitHandler<QuickTimerFormSchema> = async values => {
+  const submitQuickTimer = async (values: QuickTimerFormSchema) => {
     await setQuickTimers(current => {
       if (!quickTimerId) {
         return [
@@ -350,7 +366,7 @@ function QuickTimerForm({ onCancel, quickTimerId }: QuickTimerFormProps) {
   }
 
   return (
-    <form aria-label={title} className="grid gap-5" onSubmit={event => void handleSubmit(submitQuickTimer)(event)}>
+    <form aria-label={title} className="grid gap-5" onSubmit={form.handleSubmit(submitQuickTimer)}>
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="min-w-0">
           <h3 className="text-lg leading-7 font-semibold">{title}</h3>
@@ -370,13 +386,13 @@ function QuickTimerForm({ onCancel, quickTimerId }: QuickTimerFormProps) {
           <legend className="fieldset-legend">Name</legend>
           <input
             aria-label="Quick Timer name"
-            className={cx('input input-primary w-full', errors.name && 'input-error')}
+            className={cx('input input-primary w-full', form.formState.errors.name && 'input-error')}
             placeholder="Meeting"
             type="text"
-            {...register('name')}
+            {...form.register('name')}
           />
-          {errors.name ? (
-            <p className="fieldset-label text-error">{errors.name.message}</p>
+          {form.formState.errors.name ? (
+            <p className="fieldset-label text-error">{form.formState.errors.name.message}</p>
           ) : (
             <p className="fieldset-label">Shown under the Quick Timer button.</p>
           )}
@@ -388,13 +404,13 @@ function QuickTimerForm({ onCancel, quickTimerId }: QuickTimerFormProps) {
             aria-label="Quick Timer description template"
             className={cx(
               'textarea textarea-primary min-h-20 w-full resize-y font-mono text-sm',
-              errors.descriptionTemplate && 'textarea-error',
+              form.formState.errors.descriptionTemplate && 'textarea-error',
             )}
             placeholder="Meeting with {name}"
-            {...register('descriptionTemplate')}
+            {...form.register('descriptionTemplate')}
           />
-          {errors.descriptionTemplate ? (
-            <p className="fieldset-label text-error">{errors.descriptionTemplate.message}</p>
+          {form.formState.errors.descriptionTemplate ? (
+            <p className="fieldset-label text-error">{form.formState.errors.descriptionTemplate.message}</p>
           ) : (
             <p className="fieldset-label">
               Clockify entry description.
@@ -408,13 +424,13 @@ function QuickTimerForm({ onCancel, quickTimerId }: QuickTimerFormProps) {
           <legend className="fieldset-legend">Icon SVG</legend>
           <input
             aria-label="Quick Timer icon SVG"
-            className={cx('input input-primary w-full font-mono text-xs', errors.icon && 'input-error')}
+            className={cx('input input-primary w-full font-mono text-xs', form.formState.errors.icon && 'input-error')}
             placeholder="<svg ...>...</svg>"
             type="text"
-            {...register('icon')}
+            {...form.register('icon')}
           />
-          {errors.icon ? (
-            <p className="fieldset-label text-error">{errors.icon.message}</p>
+          {form.formState.errors.icon ? (
+            <p className="fieldset-label text-error">{form.formState.errors.icon.message}</p>
           ) : (
             <p className="fieldset-label">
               SVG shown inside the Quick Timer button.{' '}
@@ -433,7 +449,7 @@ function QuickTimerForm({ onCancel, quickTimerId }: QuickTimerFormProps) {
 
       <div className="modal-action mt-0 flex items-center justify-between">
         <div>
-          {quickTimerId ? (
+          {!!quickTimerId && (
             <button
               className="btn btn-square btn-ghost text-error hover:bg-error/10"
               type="button"
@@ -441,7 +457,7 @@ function QuickTimerForm({ onCancel, quickTimerId }: QuickTimerFormProps) {
               onClick={() => void deleteQuickTimer()}>
               <IconTrash className="size-5" />
             </button>
-          ) : null}
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -457,7 +473,7 @@ function QuickTimerForm({ onCancel, quickTimerId }: QuickTimerFormProps) {
   )
 }
 
-function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProps) {
+function QuickTimerStartForm({ manual, onCancel, quickTimerId }: QuickTimerStartFormProps) {
   const queryClient = useQueryClient()
   const [clockifyBillable] = useStorage('clockifyBillable')
   const clockifyTimerProject = useClockifyTimerProject()
@@ -482,14 +498,14 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
     () => resolveQuickTimerValues({ cache: quickTimersCache, preset: quickTimerPreset }),
     [quickTimerPreset, quickTimersCache],
   )
-  const { handleSubmit, register, reset } = useForm<Record<string, string>>({
+  const form = useForm<Record<string, string>>({
     defaultValues,
     mode: 'onChange',
   })
 
   useEffect(() => {
-    reset(defaultValues)
-  }, [defaultValues, reset])
+    form.reset(defaultValues)
+  }, [defaultValues, form.reset])
 
   const startQuickTimerMutation = useMutation({
     mutationFn: (values: Record<string, string>) => {
@@ -532,15 +548,53 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
     },
   })
 
-  const submitQuickTimerValues: SubmitHandler<Record<string, string>> = values => {
+  const submitQuickTimerValues = (values: Record<string, string>) => {
     startQuickTimerMutation.mutate(values)
+  }
+
+  const templateFields = !!templateTokens.length && (
+    <div className="grid gap-4">
+      {templateTokens.map(token => (
+        <fieldset key={token} className="fieldset">
+          <legend className="fieldset-legend">{capitalCase(token)}</legend>
+          <input
+            aria-label={capitalCase(token)}
+            className="input input-primary w-full"
+            placeholder={capitalCase(token)}
+            type="text"
+            {...form.register(token)}
+          />
+        </fieldset>
+      ))}
+    </div>
+  )
+
+  if (manual) {
+    return (
+      <ClockifyEntryTimeForm
+        description={quickTimerPreset.name}
+        onCancel={onCancel}
+        onMutate={() => persistQuickTimerValues({ preset: quickTimerPreset, values: form.getValues() })}
+        onSave={interval => {
+          if (!clockifyTimerProject) throw new MissingClockifyProjectError()
+          return createQuickTimerTimeEntry({
+            billable: clockifyBillable,
+            interval,
+            preset: quickTimerPreset,
+            project: clockifyTimerProject,
+            values: form.getValues(),
+          })
+        }}>
+        {templateFields}
+      </ClockifyEntryTimeForm>
+    )
   }
 
   return (
     <form
       aria-label={`Start ${quickTimer?.name ?? 'Quick Timer'}`}
       className="grid gap-5"
-      onSubmit={event => void handleSubmit(submitQuickTimerValues)(event)}>
+      onSubmit={form.handleSubmit(submitQuickTimerValues)}>
       <div className="flex min-w-0 items-start justify-between gap-4">
         <div className="min-w-0">
           <h3 className="text-lg leading-7 font-semibold">{quickTimer?.name ?? 'Quick Timer'}</h3>
@@ -555,29 +609,14 @@ function QuickTimerStartForm({ onCancel, quickTimerId }: QuickTimerStartFormProp
         </button>
       </div>
 
-      {templateTokens.length > 0 ? (
-        <div className="grid gap-4">
-          {templateTokens.map(token => (
-            <fieldset key={token} className="fieldset">
-              <legend className="fieldset-legend">{capitalCase(token)}</legend>
-              <input
-                aria-label={capitalCase(token)}
-                className="input input-primary w-full"
-                placeholder={capitalCase(token)}
-                type="text"
-                {...register(token)}
-              />
-            </fieldset>
-          ))}
-        </div>
-      ) : null}
+      {templateFields}
 
       <div className="modal-action mt-0">
         <button className="btn btn-ghost" type="button" onClick={onCancel}>
           Cancel
         </button>
         <button className="btn btn-primary" type="submit" disabled={startQuickTimerMutation.isPending}>
-          {startQuickTimerMutation.isPending ? <span className="loading loading-spinner size-4" /> : null}
+          {startQuickTimerMutation.isPending && <span className="loading loading-spinner size-4" />}
           Start
         </button>
       </div>

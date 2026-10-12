@@ -12,6 +12,8 @@ The pencil button enters edit mode and only appears when at least one preset exi
 
 Clicking a preset outside edit mode opens the start form. That form parses the preset description template and creates one input per template variable.
 
+Right-clicking a preset outside edit mode opens the manual time form. The form includes minutes, start and end dates, and the same cached template values as the start form. Saving creates a completed entry and saves the submitted template values. It does not replace the active Quick Timer association or change a running timer.
+
 ## Preset storage
 
 Quick Timer presets are stored in the Tauri store under `quickTimers`.
@@ -66,7 +68,7 @@ Active preset cells use the same accent pulse treatment as active provider-backe
 
 ## Clockify start and stop
 
-Starting a Quick Timer calls `clockify.createTimeEntry` directly from the mutation function. The mutation function should only perform that Clockify write.
+Quick Timer start and manual entry forms use the shared Clockify entry service. The mutation function should only perform that Clockify write.
 
 Mutation side effects belong in callbacks:
 
