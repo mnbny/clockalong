@@ -10,15 +10,17 @@ import {
 } from '@tabler/icons-react'
 import { useMutation } from '@tanstack/react-query'
 import { isTauri } from '@tauri-apps/api/core'
+import { capitalCase } from 'change-case'
 import { type ChangeEvent, useMemo, useRef, useState } from 'react'
 
 import { useAppLogs } from '../hooks/useAppLogs'
-import { storage, type ThemeOption, themeOptions } from '../services/storage/config'
+import { storage, themeOptions } from '../services/storage/config'
 import { type StorageKey, type StorageValue } from '../services/storage/storage'
 import { useStorage } from '../services/storage/useStorage'
 import { app } from '../services/tauri/app-client'
 import { type AppUpdate, type AppUpdateDownloadProgress, appUpdates } from '../services/tauri/app-updates'
 import { mcp, useMcpServerStatus } from '../services/tauri/mcp-client'
+import { useTheme } from '../services/theme-provider'
 import { getErrorMessage } from '../utils/errors'
 import { appToast } from './AppToaster'
 import { PageHeader } from './PageHeader'
@@ -60,7 +62,7 @@ const settingsBackupKeys = [
 type SettingsBackupKey = (typeof settingsBackupKeys)[number]
 
 export function AppSettings() {
-  const [theme, setTheme] = useStorage('theme')
+  const { theme, setTheme } = useTheme()
   const [menuBarVisible, setMenuBarVisible] = useStorage('menuBarVisible')
   const [mcpServerEnabled, setMcpServerEnabled] = useStorage('mcpServerEnabled')
   const settingsImportInputRef = useRef<HTMLInputElement>(null)
@@ -213,20 +215,23 @@ export function AppSettings() {
       <div className="drawer-content">
         <SettingsSection title="App">
           <SettingsRow label="Theme" description="App color theme.">
-            <fieldset className="flex flex-wrap items-center gap-4" aria-label="Theme">
-              {themeOptions.map(option => (
-                <label key={option.theme} className="flex cursor-pointer items-center gap-2">
-                  <input
-                    checked={theme.theme === option.theme}
-                    className="radio radio-primary radio-sm"
-                    name="theme"
-                    type="radio"
-                    onChange={() => void setTheme(option)}
-                  />
-                  <span className="text-sm leading-6">{getThemeLabel(option)}</span>
-                </label>
+            <select
+              aria-label="Theme"
+              className="select select-primary w-full max-w-56"
+              value={theme.theme}
+              onChange={event => void setTheme(event.currentTarget.value)}>
+              {(['light', 'dark'] as const).map(appearance => (
+                <optgroup key={appearance} label={capitalCase(appearance)}>
+                  {themeOptions
+                    .filter(option => option.appearance === appearance)
+                    .map(option => (
+                      <option key={option.theme} value={option.theme}>
+                        {capitalCase(option.theme)}
+                      </option>
+                    ))}
+                </optgroup>
               ))}
-            </fieldset>
+            </select>
           </SettingsRow>
 
           <SettingsRow label="Menu bar" description="Show Clockalong in the macOS menu bar.">
@@ -239,7 +244,7 @@ export function AppSettings() {
             />
           </SettingsRow>
 
-          <SettingsRow label="MCP server" description="Allow local agents to read work and control timers.">
+          <SettingsRow label="MCP server" description="Allow local agents to read work, control timers, and add time.">
             <div className="flex w-full min-w-0 flex-col gap-3">
               <div className="flex flex-wrap items-center gap-3">
                 <input
@@ -529,15 +534,6 @@ function AppUpdatesControl() {
       ) : null}
     </div>
   )
-}
-
-function getThemeLabel(theme: ThemeOption) {
-  switch (theme.theme) {
-    case 'abyss':
-      return 'Dark'
-    case 'emerald':
-      return 'Light'
-  }
 }
 
 function getMcpServerStatusText(status: ReturnType<typeof useMcpServerStatus>) {

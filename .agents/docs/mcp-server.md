@@ -1,21 +1,26 @@
 # MCP server
 
-Clockalong exposes a local Model Context Protocol server for agents that need time-tracking context or timer control. Clockalong runs the server only while the app runs and the user enables it in App settings.
+Clockalong exposes a local Model Context Protocol server for agents that need tracking context, timer control, or manual time entry. Clockalong runs the server only while the app runs and the user enables it in App settings.
 
 ## Scope
 
-The server exposes six tools:
+The server exposes seven tools:
 
 - `list_trackable_work` returns available Linear tickets, GitHub issues and pull requests, and Quick Timer presets with local tracked totals.
 - `get_tracking_status` returns provider connections, the active Clockify project, tracked summaries, and the running timer.
 - `list_recent_entries` returns completed entries from the local Clockify cache for the requested calendar-day bucket.
 - `list_clockify_projects` returns cached projects from the selected Clockify workspace.
 - `start_timer` starts a Clockify timer for a listed work item.
+- `add_time_entry` adds completed Clockify time for a listed work item without changing the running timer.
 - `stop_timer` stops the current Clockify timer.
 
 Tool names and argument names form a public contract with registered consumers. Do not rename them casually. Keep the Rust catalog, protocol validation, and webview command types aligned when the contract changes.
 
-The server does not expose provider credentials, raw provider APIs, MCP resources, prompts, logging, or completions. It does not support resuming or editing entries, or starting a timer from an arbitrary description. Starts use existing provider templates so descriptions retain Clockalong internal references and continue to match tracked totals.
+The server does not expose provider credentials, raw provider APIs, MCP resources, prompts, logging, or completions. It does not support resuming or editing entries, or starting a timer from an arbitrary description. Both entry-creation tools use the existing provider templates so descriptions retain Clockalong internal references and continue to match tracked totals.
+
+Manual time entry requires a listed source and item ID, plus a positive duration in minutes. Fractional minutes are supported. An optional end timestamp, with an explicit timezone, supports backdated work. The end defaults to the current time. The start is calculated from the duration. Overlaps are allowed.
+
+Quick Timer entries accept template variables and use saved values for omitted variables. Manual entry saves the submitted values but preserves the active Quick Timer association. Entries use the selected Clockify project and billable preference. The result includes the created entry ID, description, start, end, duration, project name, and billable flag.
 
 ## Ownership
 
@@ -23,7 +28,7 @@ Rust owns the loopback listener and server status. It validates HTTP and MCP req
 
 The webview publishes one normalized snapshot when relevant cached data or settings change. Read tools use that snapshot and never fetch a provider. The snapshot contains only the data in existing frontend caches, so its freshness follows the app's normal sync intervals.
 
-Write tools cross the bridge as an event with a request identifier, tool name, and validated arguments. The webview completes the request after Clockify changes the timer. Rust waits up to 30 seconds and converts webview failures into MCP tool errors.
+Write tools cross the bridge as an event with a request identifier, tool name, and validated arguments. The webview completes the request after Clockify creates an entry or changes the timer. Rust waits up to 30 seconds and converts webview failures into MCP tool errors.
 
 ## Lifecycle and ports
 

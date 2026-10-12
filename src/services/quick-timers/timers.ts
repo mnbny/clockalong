@@ -1,6 +1,7 @@
 import { formatTemplate, parseTemplateTokens } from '../../utils/templates'
 import { clockify } from '../clockify/client'
 import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../clockify/generated/clockify'
+import { type ClockifyTimeEntryInterval, getClockifyTimeEntryTiming } from '../clockify/time-entry-interval'
 import {
   type ClockifyProject,
   type QuickTimerPreset,
@@ -14,11 +15,13 @@ type QuickTimerValues = Record<string, string>
 type QuickTimerCacheEntry = QuickTimersCacheEntry & Record<string, unknown>
 
 export async function createQuickTimerTimeEntry({
+  interval,
   billable,
   preset,
   project,
   values,
 }: {
+  interval?: ClockifyTimeEntryInterval
   billable: boolean
   preset: QuickTimerPreset
   project: ClockifyProject
@@ -32,7 +35,7 @@ export async function createQuickTimerTimeEntry({
       knownTokens: templateTokens,
     }),
     projectId: project.projectId,
-    start: new Date().toISOString(),
+    ...getClockifyTimeEntryTiming(interval),
     type: 'REGULAR',
   } satisfies CreateTimeEntryRequest
 

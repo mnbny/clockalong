@@ -16,11 +16,21 @@ export type McpStartTimerArguments = {
   variables?: Record<string, string>
 }
 
+export type McpAddTimeEntryArguments = McpStartTimerArguments & {
+  durationMinutes: number
+  endedAt?: string
+}
+
 export type McpCommandPayload =
   | {
       arguments: McpStartTimerArguments
       requestId: string
       tool: 'start_timer'
+    }
+  | {
+      arguments: McpAddTimeEntryArguments
+      requestId: string
+      tool: 'add_time_entry'
     }
   | {
       arguments: Record<string, never>
@@ -45,7 +55,12 @@ export type McpStopTimerResult = {
   startedAt: string
 }
 
-export type McpCommandResult = McpStartTimerResult | McpStopTimerResult
+export type McpAddTimeEntryResult = McpStopTimerResult & {
+  billable: boolean
+  projectName: string | null
+}
+
+export type McpCommandResult = McpStartTimerResult | McpStopTimerResult | McpAddTimeEntryResult
 
 export type McpCommandCompletion =
   | {

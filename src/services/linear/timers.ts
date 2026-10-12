@@ -12,8 +12,10 @@ import {
   type TimeEntryWithRatesDtoV1,
 } from '../clockify/generated/clockify'
 import { getLinearTicketInternalRef } from '../clockify/ticket-summaries'
+import { type ClockifyTimeEntryInterval, getClockifyTimeEntryTiming } from '../clockify/time-entry-interval'
 
-export async function startClockifyTimerForTicket({
+export async function createClockifyTimeEntryForTicket({
+  interval,
   billable,
   descriptionTemplate,
   descriptionTemplateFallback,
@@ -21,6 +23,7 @@ export async function startClockifyTimerForTicket({
   ticket,
   workspaceId,
 }: {
+  interval?: ClockifyTimeEntryInterval
   billable: boolean
   descriptionTemplate: string
   descriptionTemplateFallback: string
@@ -44,7 +47,7 @@ export async function startClockifyTimerForTicket({
       fallback: descriptionTemplateFallback,
     }),
     projectId,
-    start: new Date().toISOString(),
+    ...getClockifyTimeEntryTiming(interval),
     type: 'REGULAR',
   } satisfies CreateTimeEntryRequest
   const templateTokens = parseTemplateTokens(descriptionTemplate)

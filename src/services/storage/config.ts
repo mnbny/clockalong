@@ -19,9 +19,43 @@ import {
 import { type StorageConfig, StorageService } from './storage'
 
 export const storagePath = 'settings.json'
+export const defaultTheme = { theme: 'halloween', appearance: 'dark' } as const
 export const themeOptions = [
   { theme: 'abyss', appearance: 'dark' },
+  { theme: 'acid', appearance: 'light' },
+  { theme: 'aqua', appearance: 'dark' },
+  { theme: 'autumn', appearance: 'light' },
+  { theme: 'black', appearance: 'dark' },
+  { theme: 'bumblebee', appearance: 'light' },
+  { theme: 'business', appearance: 'dark' },
+  { theme: 'caramellatte', appearance: 'light' },
+  { theme: 'cmyk', appearance: 'light' },
+  { theme: 'coffee', appearance: 'dark' },
+  { theme: 'corporate', appearance: 'light' },
+  { theme: 'cupcake', appearance: 'light' },
+  { theme: 'cyberpunk', appearance: 'light' },
+  { theme: 'dark', appearance: 'dark' },
+  { theme: 'dim', appearance: 'dark' },
+  { theme: 'dracula', appearance: 'dark' },
   { theme: 'emerald', appearance: 'light' },
+  { theme: 'fantasy', appearance: 'light' },
+  { theme: 'forest', appearance: 'dark' },
+  { theme: 'garden', appearance: 'light' },
+  defaultTheme,
+  { theme: 'lemonade', appearance: 'light' },
+  { theme: 'light', appearance: 'light' },
+  { theme: 'lofi', appearance: 'light' },
+  { theme: 'luxury', appearance: 'dark' },
+  { theme: 'night', appearance: 'dark' },
+  { theme: 'nord', appearance: 'light' },
+  { theme: 'pastel', appearance: 'light' },
+  { theme: 'retro', appearance: 'light' },
+  { theme: 'silk', appearance: 'light' },
+  { theme: 'sunset', appearance: 'dark' },
+  { theme: 'synthwave', appearance: 'dark' },
+  { theme: 'valentine', appearance: 'light' },
+  { theme: 'winter', appearance: 'light' },
+  { theme: 'wireframe', appearance: 'light' },
 ] as const
 
 export type ClockifyProject = {
@@ -223,8 +257,8 @@ const storageConfig = {
   },
   theme: {
     type: 'object',
-    default: themeOptions[0] as ThemeOption,
-    version: 3,
+    default: defaultTheme as ThemeOption,
+    version: 4,
   },
 } satisfies StorageConfig
 

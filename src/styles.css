@@ -3,10 +3,17 @@
 @import 'tailwindcss';
 
 @plugin 'daisyui' {
-  themes:
-    abyss --default --prefersdark,
-    emerald;
+  themes: all;
 }
+
+@plugin 'daisyui/theme' {
+  name: 'halloween';
+  default: true;
+  prefersdark: true;
+  color-scheme: dark;
+}
+
+@custom-variant dark (&:where([data-appearance='dark'], [data-appearance='dark'] *));
 
 @theme {
   --font-sans:

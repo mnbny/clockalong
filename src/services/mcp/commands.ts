@@ -3,6 +3,7 @@ import type { SyncedLinearTicket } from '../linear/sync'
 import type { LinearTicket } from '../linear/tickets'
 import type { ClockifyProject } from '../storage/config'
 import type {
+  McpAddTimeEntryResult,
   McpCommandPayload,
   McpCommandResult,
   McpStartTimerArguments,
@@ -14,10 +15,14 @@ import { queryClient, queryKeys } from '../../lib/query-client'
 import { getErrorMessage } from '../../utils/errors'
 import { upsertSyncedClockifyEntry } from '../clockify/sync'
 import { stopClockifyTimeEntry } from '../clockify/time-entries'
+import {
+  type ClockifyTimeEntryInterval,
+  getClockifyTimeEntryIntervalFromMinutes,
+} from '../clockify/time-entry-interval'
 import { githubWorkItemsCollection } from '../github/sync'
-import { formatGithubWorkItemDescription, startClockifyTimerForGithubWorkItem } from '../github/timers'
+import { createClockifyTimeEntryForGithubWorkItem, formatGithubWorkItemDescription } from '../github/timers'
 import { linearTicketsCollection } from '../linear/sync'
-import { startClockifyTimerForTicket } from '../linear/timers'
+import { createClockifyTimeEntryForTicket } from '../linear/timers'
 import {
   createQuickTimerTimeEntry,
   persistQuickTimerActiveEntry,
@@ -72,7 +77,15 @@ export async function executeMcpCommand(
   try {
     switch (command.tool) {
       case 'start_timer': {
-        const execution = await executeStartTimer(command.arguments, context)
+        const execution = await executeCreateTimeEntry(command.arguments, context)
+        return execution
+      }
+      case 'add_time_entry': {
+        const interval = getClockifyTimeEntryIntervalFromMinutes(
+          command.arguments.durationMinutes,
+          command.arguments.endedAt === undefined ? new Date() : new Date(command.arguments.endedAt),
+        )
+        const execution = await executeCreateTimeEntry(command.arguments, context, interval)
         return execution
       }
       case 'stop_timer': {
@@ -87,9 +100,10 @@ export async function executeMcpCommand(
   }
 }
 
-async function executeStartTimer(
+async function executeCreateTimeEntry(
   arguments_: McpStartTimerArguments,
   context: ExecuteMcpCommandContext,
+  interval?: ClockifyTimeEntryInterval,
 ): Promise<McpCommandExecution> {
   const project = context.clockifyTimerProject
 
@@ -113,8 +127,9 @@ async function executeStartTimer(
         storage.get('clockifyDescriptionTemplate'),
         storage.get('clockifyDescriptionTemplateFallback'),
       ])
-      entry = await startClockifyTimerForTicket({
+      entry = await createClockifyTimeEntryForTicket({
         billable,
+        interval,
         descriptionTemplate,
         descriptionTemplateFallback,
         projectId: project.projectId,
@@ -144,8 +159,9 @@ async function executeStartTimer(
         pullRequestTemplate,
         pullRequestTemplateFallback,
       })
-      entry = await startClockifyTimerForGithubWorkItem({
+      entry = await createClockifyTimeEntryForGithubWorkItem({
         billable,
+        interval,
         description,
         item: workItem,
         projectId: project.projectId,
@@ -169,17 +185,17 @@ async function executeStartTimer(
         preset,
         values: arguments_.variables,
       })
-      entry = await createQuickTimerTimeEntry({ billable, preset, project, values })
+      entry = await createQuickTimerTimeEntry({ billable, interval, preset, project, values })
       await persistQuickTimerValues({ preset, values })
 
-      if (entry.id) {
+      if (entry.id && !interval) {
         await persistQuickTimerActiveEntry({ entryId: entry.id, quickTimerId: preset.id })
       }
       break
     }
   }
 
-  const result = getStartTimerResult(entry, project, stoppedPrevious)
+  const result = interval ? getAddTimeEntryResult(entry, project) : getStartTimerResult(entry, project, stoppedPrevious)
   invalidateClockifyTimerData()
 
   return { ok: true, result }
@@ -288,6 +304,18 @@ function getStopTimerResult(entry: TimeEntryWithRatesDtoV1): McpStopTimerResult 
     endedAt,
     entryId,
     startedAt,
+  }
+}
+
+function getAddTimeEntryResult(entry: TimeEntryWithRatesDtoV1 | null, project: ClockifyProject): McpAddTimeEntryResult {
+  if (!entry?.id || !entry.timeInterval?.start || !entry.timeInterval.end) {
+    throw new Error('Clockify returned an incomplete completed entry.')
+  }
+
+  return {
+    ...getStopTimerResult(entry),
+    billable: entry.billable ?? false,
+    projectName: project.projectName,
   }
 }
 

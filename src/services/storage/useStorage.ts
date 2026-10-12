@@ -6,6 +6,7 @@ import { storage } from './config'
 
 export function useStorage<K extends StorageKey<typeof storage.config>>(
   key: K,
+  initialValue: StorageValue<typeof storage.config, K> = storage.config[key].default,
 ): [
   StorageValue<typeof storage.config, K>,
   (value: StorageSetterValue<typeof storage.config, K>) => Promise<void>,
@@ -13,7 +14,7 @@ export function useStorage<K extends StorageKey<typeof storage.config>>(
 ] {
   type Value = StorageValue<typeof storage.config, K>
   const defaultValue = storage.config[key]?.default as Value
-  const [value, setValue] = useState<Value>(defaultValue)
+  const [value, setValue] = useState<Value>(initialValue)
 
   useEffect(() => {
     let cancelled = false

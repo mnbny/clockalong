@@ -48,8 +48,8 @@ Add each document using this format:
 
 #### [tauri.md](./tauri.md)
 
-- Description: Native application state, frontend integration, updates, and menu bar behavior.
-- Tags: `tauri`, `rust`, `native`, `events`, `reactivity`, `updater`, `menu-bar`
+- Description: Native application state, startup appearance, frontend integration, updates, and menu bar behavior.
+- Tags: `tauri`, `rust`, `native`, `events`, `reactivity`, `updater`, `menu-bar`, `themes`
 
 #### [logging.md](./logging.md)
 

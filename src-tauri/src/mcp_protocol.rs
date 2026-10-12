@@ -5,7 +5,7 @@ use tauri::{AppHandle, Runtime};
 
 const CURRENT_PROTOCOL_VERSION: &str = "2025-06-18";
 const PREVIOUS_PROTOCOL_VERSION: &str = "2025-03-26";
-const SERVER_INSTRUCTIONS: &str = "Clockalong tracks time in Clockify against Linear tickets, GitHub issues and pull requests, and local Quick Timer presets. Call `list_trackable_work` to see what can be tracked, `start_timer` to begin billing against one of those items, and `stop_timer` to end it. Clockify runs one timer at a time, so starting a new timer stops the one already running.";
+const SERVER_INSTRUCTIONS: &str = "Clockalong tracks time in Clockify against Linear tickets, GitHub issues and pull requests, and local Quick Timer presets. Call `list_trackable_work` to see what can be tracked, `start_timer` to begin billing against one of those items, and `stop_timer` to end it. Clockify runs one timer at a time, so starting a new timer stops the one already running. Use `add_time_entry` to add completed time in minutes for a listed item without changing the running timer. Overlaps are allowed.";
 const STARTUP_ERROR: &str = "Clockalong is still starting up. Try again in a moment.";
 const TIMEOUT_ERROR: &str = "Clockalong did not respond in time.";
 const CLOCKIFY_ERROR: &str =
@@ -130,11 +130,15 @@ async fn call_tool<R: Runtime>(
         }
         "start_timer" => {
             validate_start_timer(&arguments)?;
-            write_tool(app, state, name, arguments, true).await
+            write_tool(app, state, name, arguments).await
+        }
+        "add_time_entry" => {
+            validate_add_time_entry(&arguments)?;
+            write_tool(app, state, name, arguments).await
         }
         "stop_timer" => {
             validate_empty_arguments(&arguments)?;
-            write_tool(app, state, name, arguments, false).await
+            write_tool(app, state, name, arguments).await
         }
         "get_tracking_status" => {
             validate_empty_arguments(&arguments)?;
@@ -170,14 +174,13 @@ async fn write_tool<R: Runtime>(
     state: &McpBridgeState,
     name: &str,
     arguments: Value,
-    starting: bool,
 ) -> Result<Value, String> {
     let snapshot = state.snapshot().map_err(bridge_error_message)?;
     let status = tracking_status(&snapshot)?;
     if status.get("clockifyConnected").and_then(Value::as_bool) != Some(true) {
         return Err(CLOCKIFY_ERROR.to_string());
     }
-    if starting {
+    if name != "stop_timer" {
         if status.get("projectName").is_none_or(Value::is_null) {
             return Err(PROJECT_ERROR.to_string());
         }
@@ -400,6 +403,31 @@ fn validate_list_trackable_work(
 
 fn validate_start_timer(arguments: &Value) -> Result<(), ProtocolError> {
     let arguments = validate_object_keys(arguments, &["source", "id", "variables"])?;
+    validate_work_target(arguments)
+}
+
+fn validate_add_time_entry(arguments: &Value) -> Result<(), ProtocolError> {
+    let arguments = validate_object_keys(
+        arguments,
+        &["source", "id", "variables", "durationMinutes", "endedAt"],
+    )?;
+    validate_work_target(arguments)?;
+    let minutes = arguments
+        .get("durationMinutes")
+        .and_then(Value::as_f64)
+        .ok_or(invalid_params())?;
+    if !minutes.is_finite() || minutes <= 0.0 {
+        return Err(invalid_params());
+    }
+    if let Some(ended_at) = optional_string(arguments, "endedAt")? {
+        if parse_rfc3339_seconds(&ended_at).is_none() {
+            return Err(invalid_params());
+        }
+    }
+    Ok(())
+}
+
+fn validate_work_target(arguments: &Map<String, Value>) -> Result<(), ProtocolError> {
     let source = required_string(arguments, "source")?;
     if !matches!(source, "linear" | "github" | "quick_timer") {
         return Err(invalid_params());
@@ -620,7 +648,7 @@ fn parse_rfc3339_seconds(value: &str) -> Option<i64> {
         || !(1..=31).contains(&day)
         || hour > 23
         || minute > 59
-        || second > 60
+        || second > 59
     {
         return None;
     }
@@ -629,6 +657,14 @@ fn parse_rfc3339_seconds(value: &str) -> Option<i64> {
         .iter()
         .position(|byte| matches!(byte, b'Z' | b'+' | b'-'))?
         + 19;
+    let fraction = &bytes[19..timezone_index];
+    if !fraction.is_empty()
+        && (fraction[0] != b'.'
+            || fraction.len() == 1
+            || !fraction[1..].iter().all(u8::is_ascii_digit))
+    {
+        return None;
+    }
     let offset = match bytes[timezone_index] {
         b'Z' if timezone_index + 1 == bytes.len() => 0,
         sign @ (b'+' | b'-') if timezone_index + 6 == bytes.len() => {
@@ -708,7 +744,7 @@ fn tool_catalog() -> Vec<Value> {
     vec![
         json!({
             "name": "list_trackable_work",
-            "description": "Lists work items that a timer can be started against, with their tracked totals.",
+            "description": "Lists work items for starting timers or adding completed time, with their tracked totals.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -731,6 +767,22 @@ fn tool_catalog() -> Vec<Value> {
                     "variables": { "type": "object", "additionalProperties": { "type": "string" } },
                 },
                 "required": ["source", "id"],
+                "additionalProperties": false,
+            },
+        }),
+        json!({
+            "name": "add_time_entry",
+            "description": "Adds a completed Clockify entry for an item from list_trackable_work. Supply durationMinutes; endedAt defaults to now. Uses the selected Clockify project and billable preference. Allows overlaps and does not change the running timer.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "source": { "type": "string", "enum": ["linear", "github", "quick_timer"] },
+                    "id": { "type": "string" },
+                    "durationMinutes": { "type": "number", "exclusiveMinimum": 0, "description": "Positive duration in minutes; fractional minutes are supported." },
+                    "endedAt": { "type": "string", "format": "date-time", "description": "Optional RFC 3339 end timestamp with a timezone, for example 2026-10-12T17:00:00Z. Defaults to now; start is calculated from durationMinutes." },
+                    "variables": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Quick Timer template values. Omitted values use the saved preset values." },
+                },
+                "required": ["source", "id", "durationMinutes"],
                 "additionalProperties": false,
             },
         }),
@@ -820,5 +872,77 @@ mod tests {
     fn keeps_tool_arguments_strict() {
         assert!(validate_empty_arguments(&json!({})).is_ok());
         assert!(validate_empty_arguments(&json!({ "_meta": {} })).is_err());
+    }
+
+    #[test]
+    fn accepts_completed_time_for_each_work_source() {
+        for source in ["linear", "github", "quick_timer"] {
+            assert!(validate_add_time_entry(&json!({
+                "source": source, "id": "work-id", "durationMinutes": 1,
+            }))
+            .is_ok());
+        }
+        assert!(validate_add_time_entry(&json!({
+            "source": "quick_timer", "id": "preset-id", "durationMinutes": 1.5,
+            "endedAt": "2026-10-12T14:00:00.125-07:00", "variables": { "topic": "Planning" },
+        }))
+        .is_ok());
+        let catalog = tool_catalog();
+        let tool = catalog
+            .iter()
+            .find(|tool| tool["name"] == "add_time_entry")
+            .unwrap();
+        assert_eq!(
+            tool["inputSchema"]["required"],
+            json!(["source", "id", "durationMinutes"])
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_completed_time_arguments() {
+        let valid = json!({ "source": "linear", "id": "work-id", "durationMinutes": 1 });
+        for duration in [json!(0), json!(-1), json!("1"), json!(null), json!(true)] {
+            let mut arguments = valid.clone();
+            arguments["durationMinutes"] = duration;
+            assert!(validate_add_time_entry(&arguments).is_err());
+        }
+        for (key, value) in [
+            ("source", json!("other")),
+            ("id", json!("")),
+            ("variables", json!({ "topic": 1 })),
+            ("description", json!("Unlinked work")),
+            ("endedAt", json!(null)),
+        ] {
+            let mut arguments = valid.clone();
+            arguments[key] = value;
+            assert!(validate_add_time_entry(&arguments).is_err());
+        }
+        assert!(validate_add_time_entry(&json!({ "source": "linear", "id": "work-id" })).is_err());
+        assert!(validate_start_timer(&valid).is_err());
+    }
+
+    #[test]
+    fn completed_time_requires_a_valid_timestamp_with_timezone() {
+        for ended_at in [
+            "",
+            "2026-10-12",
+            "2026-10-12T14:00:00",
+            "2026-02-30T14:00:00Z",
+            "2026-10-12T14:00:00junkZ",
+            "2026-10-12T14:00:00.Z",
+            "2026-10-12T14:00:60Z",
+        ] {
+            assert!(
+                validate_add_time_entry(&json!({
+                    "source": "linear", "id": "work-id", "durationMinutes": 1, "endedAt": ended_at,
+                }))
+                .is_err(),
+                "Accepted invalid endedAt: {ended_at}"
+            );
+        }
+        assert_eq!(
+            parse_rfc3339_seconds("2026-10-12T14:00:00.125-07:00"),
+            parse_rfc3339_seconds("2026-10-12T21:00:00Z")
+        );
     }
 }
