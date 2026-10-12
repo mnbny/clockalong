@@ -13,7 +13,7 @@
 - Reusable frontend components live in `src/components/`; shared frontend helpers live in `src/utils/`.
 - Frontend-to-Rust bridge calls live in clients under `src/services/tauri/`; route code should use those clients instead of raw `invoke`.
 - External frontend API clients live under `src/services/<provider>/`; Clockify uses a generated Zodios client under `src/services/clockify/`.
-- The frontend MCP boundary lives under `src/services/mcp/`. It normalizes snapshots and runs timer commands through existing provider services.
+- The frontend MCP boundary lives under `src/services/mcp/`. It normalizes snapshots, controls timers, and creates completed entries through existing provider services.
 - Work sources can be external providers such as Linear and GitHub or local sources such as Quick Timers. Do not force a generic provider abstraction until multiple implemented sources prove the common shape.
 - Avoid broad service barrels; import concrete provider modules when that keeps dependencies clearer.
 - Native auth is split by responsibility:
