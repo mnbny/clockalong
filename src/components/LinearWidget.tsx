@@ -28,17 +28,19 @@ import {
   normalizeLinearTicketSyncLimit,
 } from '../services/linear/ticket-settings'
 import { isLinearTicketTerminal, sortLinearTickets } from '../services/linear/tickets-sorting'
-import { startClockifyTimerForTicket, stopClockifyTimerForEntry } from '../services/linear/timers'
+import { createClockifyTimeEntryForTicket, stopClockifyTimerForEntry } from '../services/linear/timers'
 import { useStorage } from '../services/storage/useStorage'
 import { getContrastingColor } from '../utils/colors'
 import { getErrorMessage } from '../utils/errors'
 import { parseInternalRefs } from '../utils/templates'
 import { appToast } from './AppToaster'
+import { ClockifyEntryTimeDialog } from './ClockifyEntryTimeDialog'
 import { LinearIcon } from './icons/LinearIcon'
 import { LastTrackedCell, TotalTrackedAmountCell, TotalTrackedCell } from './TrackingSummaryCells'
 
 type TicketTableMeta = {
   activeLinearIssueId: string | undefined
+  onAddTime: (ticket: LinearTicket) => void
   onStartTracking: (ticket: LinearTicket) => void
   onStopTracking: (ticket: LinearTicket) => void
   pendingTicketId: string | null | undefined
@@ -59,6 +61,7 @@ const ticketColumns: Array<ColumnDef<LinearTicket>> = [
           pending={meta.pendingTicketId === ticket.id}
           stopping={meta.stoppingTicketId === ticket.id}
           ticket={ticket}
+          onAddTime={meta.onAddTime}
           onStartTracking={meta.onStartTracking}
           onStopTracking={meta.onStopTracking}
         />
@@ -142,6 +145,7 @@ export function LinearWidget() {
 
 function LinearWidgetContent() {
   const queryClient = useQueryClient()
+  const [manualTicket, setManualTicket] = useState<LinearTicket | null>(null)
   const [clockifyBillable] = useStorage('clockifyBillable')
   const clockifyTimerProject = useClockifyTimerProject()
   const [clockifyDescriptionTemplate] = useStorage('clockifyDescriptionTemplate')
@@ -300,7 +304,7 @@ function LinearWidgetContent() {
         throw new MissingClockifyProjectError()
       }
 
-      const entry = await startClockifyTimerForTicket({
+      const entry = await createClockifyTimeEntryForTicket({
         billable: clockifyBillable,
         descriptionTemplate: clockifyDescriptionTemplate,
         descriptionTemplateFallback: clockifyDescriptionTemplateFallback,
@@ -434,6 +438,7 @@ function LinearWidgetContent() {
     () =>
       ({
         activeLinearIssueId,
+        onAddTime: setManualTicket,
         onStartTracking: handleStartTracking,
         onStopTracking: handleStopTracking,
         pendingTicketId,
@@ -552,6 +557,25 @@ function LinearWidgetContent() {
           </div>
         ) : null}
       </div>
+
+      {!!manualTicket && (
+        <ClockifyEntryTimeDialog
+          description={`${manualTicket.identifier}: ${manualTicket.title}`}
+          onCancel={() => setManualTicket(null)}
+          onSave={interval => {
+            if (!clockifyTimerProject) throw new MissingClockifyProjectError()
+            return createClockifyTimeEntryForTicket({
+              billable: clockifyBillable,
+              descriptionTemplate: clockifyDescriptionTemplate,
+              descriptionTemplateFallback: clockifyDescriptionTemplateFallback,
+              interval,
+              ticket: manualTicket,
+              workspaceId: clockifyTimerProject.workspaceId,
+              projectId: clockifyTimerProject.projectId,
+            })
+          }}
+        />
+      )}
     </section>
   )
 }
@@ -562,6 +586,7 @@ function getTicketTableMeta(meta: unknown) {
 
 function StartTrackingButton({
   active,
+  onAddTime,
   onStartTracking,
   onStopTracking,
   pending,
@@ -569,6 +594,7 @@ function StartTrackingButton({
   ticket,
 }: {
   active: boolean
+  onAddTime: (ticket: LinearTicket) => void
   onStartTracking: (ticket: LinearTicket) => void
   onStopTracking: (ticket: LinearTicket) => void
   pending: boolean
@@ -577,7 +603,7 @@ function StartTrackingButton({
 }) {
   const pressButton = active ? onStopTracking : onStartTracking
   const handleMouseDown = (event: MouseEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) {
+    if (event.button !== 0 || event.ctrlKey) {
       return
     }
 
@@ -586,6 +612,12 @@ function StartTrackingButton({
     pressButton(ticket)
   }
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!active && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+      event.preventDefault()
+      onAddTime(ticket)
+      return
+    }
+
     if (event.key !== 'Enter' && event.key !== ' ') {
       return
     }
@@ -619,8 +651,12 @@ function StartTrackingButton({
       aria-label={`Start tracking time for ${ticket.identifier}`}
       className="time-tracking-action-button btn btn-square btn-ghost text-primary hover:bg-primary/10 size-10 min-h-10"
       data-time-tracking-action={ticket.identifier}
-      title={`Start tracking time for ${ticket.identifier}`}
+      title={`Start tracking time for ${ticket.identifier} · Right-click or Shift+F10 to add time`}
       type="button"
+      onContextMenu={event => {
+        event.preventDefault()
+        onAddTime(ticket)
+      }}
       onKeyDown={handleKeyDown}
       onMouseDown={handleMouseDown}>
       {pending ? (
