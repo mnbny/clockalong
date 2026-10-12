@@ -30,8 +30,8 @@ import {
   useGithubSync,
 } from '../services/github/sync'
 import {
+  createClockifyTimeEntryForGithubWorkItem,
   formatGithubWorkItemDescription,
-  startClockifyTimerForGithubWorkItem,
   stopClockifyTimerForEntry,
 } from '../services/github/timers'
 import {
@@ -50,10 +50,12 @@ import { cx } from '../utils/cx'
 import { getErrorMessage } from '../utils/errors'
 import { parseInternalRefs } from '../utils/templates'
 import { appToast } from './AppToaster'
+import { ClockifyEntryTimeDialog } from './ClockifyEntryTimeDialog'
 import { LastTrackedCell, TotalTrackedAmountCell, TotalTrackedCell } from './TrackingSummaryCells'
 
 type GithubWorkItemTableMeta = {
   activeGithubWorkItemId: string | null
+  onAddTime: (workItem: SyncedGithubWorkItem) => void
   onStartTracking: (workItem: SyncedGithubWorkItem) => void
   onStopTracking: (workItem: SyncedGithubWorkItem) => void
   pendingWorkItemId: string | null | undefined
@@ -74,6 +76,7 @@ const githubWorkItemColumns: Array<ColumnDef<GithubWorkItemWithTracking>> = [
           pending={meta.pendingWorkItemId === workItem.id}
           stopping={meta.stoppingWorkItemId === workItem.id}
           workItem={workItem}
+          onAddTime={meta.onAddTime}
           onStartTracking={meta.onStartTracking}
           onStopTracking={meta.onStopTracking}
         />
@@ -167,6 +170,7 @@ export function GitHubWidget() {
 
 function GitHubWidgetContent() {
   const queryClient = useQueryClient()
+  const [manualWorkItem, setManualWorkItem] = useState<SyncedGithubWorkItem | null>(null)
   const [clockifyBillable] = useStorage('clockifyBillable')
   const clockifyTimerProject = useClockifyTimerProject()
   const [githubIssueDescriptionTemplate] = useStorage('githubIssueDescriptionTemplate')
@@ -371,7 +375,7 @@ function GitHubWidgetContent() {
         throw new MissingClockifyProjectError()
       }
 
-      const entry = await startClockifyTimerForGithubWorkItem({
+      const entry = await createClockifyTimeEntryForGithubWorkItem({
         billable: clockifyBillable,
         description: workItemDescriptions.get(item.id) ?? '',
         item,
@@ -445,6 +449,7 @@ function GitHubWidgetContent() {
     getCoreRowModel: githubWorkItemTableCoreRowModel,
     meta: {
       activeGithubWorkItemId,
+      onAddTime: setManualWorkItem,
       onStartTracking: handleStartTracking,
       onStopTracking: handleStopTracking,
       pendingWorkItemId,
@@ -573,6 +578,30 @@ function GitHubWidgetContent() {
           </div>
         ) : null}
       </div>
+
+      {!!manualWorkItem && (
+        <ClockifyEntryTimeDialog
+          description={`${getGithubWorkItemLabel(manualWorkItem)}: ${manualWorkItem.title}`}
+          onCancel={() => setManualWorkItem(null)}
+          onSave={interval => {
+            if (!clockifyTimerProject) throw new MissingClockifyProjectError()
+            return createClockifyTimeEntryForGithubWorkItem({
+              billable: clockifyBillable,
+              description: formatGithubWorkItemDescription({
+                item: manualWorkItem,
+                issueTemplate: githubIssueDescriptionTemplate,
+                issueTemplateFallback: githubIssueDescriptionTemplateFallback,
+                pullRequestTemplate: githubPullRequestDescriptionTemplate,
+                pullRequestTemplateFallback: githubPullRequestDescriptionTemplateFallback,
+              }),
+              interval,
+              item: manualWorkItem,
+              workspaceId: clockifyTimerProject.workspaceId,
+              projectId: clockifyTimerProject.projectId,
+            })
+          }}
+        />
+      )}
     </section>
   )
 }
@@ -583,6 +612,7 @@ function getGithubWorkItemTableMeta(meta: unknown) {
 
 function StartTrackingButton({
   active,
+  onAddTime,
   onStartTracking,
   onStopTracking,
   pending,
@@ -590,6 +620,7 @@ function StartTrackingButton({
   workItem,
 }: {
   active: boolean
+  onAddTime: (workItem: SyncedGithubWorkItem) => void
   onStartTracking: (workItem: SyncedGithubWorkItem) => void
   onStopTracking: (workItem: SyncedGithubWorkItem) => void
   pending: boolean
@@ -598,7 +629,7 @@ function StartTrackingButton({
 }) {
   const pressButton = active ? onStopTracking : onStartTracking
   const handleMouseDown = (event: MouseEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) {
+    if (event.button !== 0 || event.ctrlKey) {
       return
     }
 
@@ -607,6 +638,12 @@ function StartTrackingButton({
     pressButton(workItem)
   }
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!active && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+      event.preventDefault()
+      onAddTime(workItem)
+      return
+    }
+
     if (event.key !== 'Enter' && event.key !== ' ') {
       return
     }
@@ -640,8 +677,12 @@ function StartTrackingButton({
       aria-label={`Start tracking time for ${getGithubWorkItemLabel(workItem)}`}
       className="time-tracking-action-button btn btn-square btn-ghost text-primary hover:bg-primary/10 size-10 min-h-10"
       data-time-tracking-action={workItem.id}
-      title={`Start tracking time for ${getGithubWorkItemLabel(workItem)}`}
+      title={`Start tracking time for ${getGithubWorkItemLabel(workItem)} · Right-click or Shift+F10 to add time`}
       type="button"
+      onContextMenu={event => {
+        event.preventDefault()
+        onAddTime(workItem)
+      }}
       onKeyDown={handleKeyDown}
       onMouseDown={handleMouseDown}>
       {pending ? (
