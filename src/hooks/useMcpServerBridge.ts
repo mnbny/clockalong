@@ -275,7 +275,7 @@ async function handleMcpCommand(incoming: IncomingMcpCommand, contextRef: { curr
 
   mcpBridgeLog('command received', { requestId, tool })
 
-  if (tool !== 'start_timer' && tool !== 'stop_timer') {
+  if (tool !== 'start_timer' && tool !== 'stop_timer' && tool !== 'add_time_entry') {
     await completeMcpCommand({
       error: `Unsupported MCP command: ${tool}`,
       requestId,
