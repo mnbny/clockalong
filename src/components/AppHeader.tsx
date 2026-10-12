@@ -1,23 +1,24 @@
 import { useHotkeys } from '@mantine/hooks'
-import { IconLogout, IconMoon, IconRefresh, IconSettings, IconSun } from '@tabler/icons-react'
+import { IconLogout, IconPalette, IconRefresh, IconSettings } from '@tabler/icons-react'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { isTauri } from '@tauri-apps/api/core'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useCallback, useEffect } from 'react'
+import { capitalCase } from 'change-case'
+import { useRef } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
 import { queryKeys } from '../lib/query-client'
 import { useClockifySync } from '../services/clockify/sync'
 import { useGithubSync } from '../services/github/sync'
 import { useLinearSync } from '../services/linear/sync'
-import { useStorage } from '../services/storage/useStorage'
+import { themeOptions } from '../services/storage/config'
+import { useTheme } from '../services/theme-provider'
 import { MoonBunnyLogo } from './MoonBunnyLogo'
 
 export function AppHeader() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [theme, setTheme] = useStorage('theme')
+  const { theme, setTheme } = useTheme()
+  const themeSelectRef = useRef<HTMLSelectElement>(null)
   const authState = useAppAuth()
   const clockifySync = useClockifySync()
   const githubSync = useGithubSync()
@@ -30,27 +31,7 @@ export function AppHeader() {
   const providersSyncing =
     clockifySync.syncing || githubSync.syncing || linearSync.syncing || clockifySupportingQueriesSyncing
 
-  const toggleTheme = useCallback(() => {
-    void setTheme(current =>
-      current.theme === 'abyss' ? { theme: 'emerald', appearance: 'light' } : { theme: 'abyss', appearance: 'dark' },
-    )
-  }, [setTheme])
-
-  useHotkeys([['mod+shift+A', toggleTheme, { preventDefault: true }]])
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme.theme
-
-    if (!isTauri()) {
-      return
-    }
-
-    void getCurrentWindow()
-      .setTheme(theme.appearance)
-      .catch(error => {
-        console.warn('Error setting native window theme:', error)
-      })
-  }, [theme])
+  useHotkeys([['mod+shift+A', () => themeSelectRef.current?.focus(), { preventDefault: true }]])
 
   const goToSignIn = async () => {
     console.info('[clockalong auth] goToSignIn: requested from header')
@@ -114,10 +95,28 @@ export function AppHeader() {
             </button>
           </>
         ) : null}
-        <label className="swap swap-rotate btn btn-square btn-ghost">
-          <input aria-label="Toggle theme" checked={theme.theme === 'abyss'} type="checkbox" onChange={toggleTheme} />
-          <IconSun className="swap-off size-5" />
-          <IconMoon className="swap-on size-5" />
+        <label
+          className="btn btn-square btn-ghost relative has-focus-visible:outline-2 has-focus-visible:outline-offset-2"
+          title={`Theme: ${capitalCase(theme.theme)} (⌘⇧A)`}>
+          <IconPalette className="pointer-events-none size-5" aria-hidden />
+          <select
+            ref={themeSelectRef}
+            aria-label="App theme"
+            className="select absolute inset-0 size-full cursor-pointer opacity-0"
+            value={theme.theme}
+            onChange={event => void setTheme(event.currentTarget.value)}>
+            {(['light', 'dark'] as const).map(appearance => (
+              <optgroup key={appearance} label={capitalCase(appearance)}>
+                {themeOptions
+                  .filter(option => option.appearance === appearance)
+                  .map(option => (
+                    <option key={option.theme} value={option.theme}>
+                      {capitalCase(option.theme)}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
         </label>
       </div>
     </div>
