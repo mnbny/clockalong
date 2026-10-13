@@ -1,6 +1,6 @@
 import { useHotkeys } from '@mantine/hooks'
 import { IconLogout, IconPalette, IconRefresh, IconSettings } from '@tabler/icons-react'
-import { useIsFetching, useQueryClient } from '@tanstack/react-query'
+import { useIsFetching } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { capitalCase } from 'change-case'
 import { useRef } from 'react'
@@ -11,12 +11,14 @@ import { useClockifySync } from '../services/clockify/sync'
 import { useGithubSync } from '../services/github/sync'
 import { useLinearSync } from '../services/linear/sync'
 import { themeOptions } from '../services/storage/config'
+import { syncProviders } from '../services/sync'
 import { useTheme } from '../services/theme-provider'
+import { getErrorMessage } from '../utils/errors'
+import { appToast } from './AppToaster'
 import { MoonBunnyLogo } from './MoonBunnyLogo'
 
 export function AppHeader() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const { theme, setTheme } = useTheme()
   const themeSelectRef = useRef<HTMLSelectElement>(null)
   const authState = useAppAuth()
@@ -36,27 +38,6 @@ export function AppHeader() {
   const goToSignIn = async () => {
     console.info('[clockalong auth] goToSignIn: requested from header')
     await navigate({ to: '/sign-in' })
-  }
-
-  const syncProviders = async () => {
-    const syncRequests: Array<Promise<unknown>> = [
-      queryClient.refetchQueries({ queryKey: queryKeys.clockify.runningEntry() }),
-      queryClient.refetchQueries({ queryKey: queryKeys.clockify.summaryReport() }),
-    ]
-
-    if (clockifySync.queries.syncQuery.isEnabled) {
-      syncRequests.push(clockifySync.syncNow())
-    }
-
-    if (githubSync.queries.syncQuery.isEnabled) {
-      syncRequests.push(githubSync.syncNow())
-    }
-
-    if (linearSync.queries.syncQuery.isEnabled) {
-      syncRequests.push(linearSync.syncNow())
-    }
-
-    await Promise.all(syncRequests)
   }
 
   return (
@@ -80,7 +61,7 @@ export function AppHeader() {
               aria-label="Sync all providers"
               disabled={providersSyncing}
               title="Sync all providers"
-              onClick={() => void syncProviders()}>
+              onClick={() => void syncProviders().catch(error => appToast.error(getErrorMessage(error)))}>
               <IconRefresh className={`size-5 ${providersSyncing ? 'animate-spin' : ''}`} />
             </button>
             <Link to="/settings" className="btn btn-square btn-ghost" aria-label="Settings">
