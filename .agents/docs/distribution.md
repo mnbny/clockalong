@@ -19,13 +19,7 @@ The Developer ID Application certificate must be installed in the local login ke
 security find-identity -v -p codesigning
 ```
 
-For a local Apple Silicon DMG build:
-
-```sh
-export APPLE_SIGNING_IDENTITY="Developer ID Application: Yulian Glukhenko (XRRAJG7BU8)"
-export TAURI_SIGNING_PRIVATE_KEY_PATH="$HOME/Documents/clockalong-updater.key"
-pnpm release:mac
-```
+Local Apple Silicon DMG builds require explicit paths for the updater signing key and the App Store Connect API key. Supply both paths through environment variables. Neither key has a default location.
 
 `pnpm release:mac` builds the app, submits the DMG to Apple notarization, staples the notarization ticket, then verifies the stapled DMG with Gatekeeper and `hdiutil`.
 
