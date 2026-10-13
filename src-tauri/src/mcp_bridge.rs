@@ -14,6 +14,7 @@ use tokio::sync::oneshot;
 
 pub const CLOCKALONG_MCP_COMMAND_EVENT: &str = "clockalong-mcp:command";
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+const REFRESH_TIMEOUT: Duration = Duration::from_secs(120);
 
 type CommandCompletion = Result<Value, String>;
 type PendingCommands = HashMap<String, oneshot::Sender<CommandCompletion>>;
@@ -148,7 +149,12 @@ impl McpBridgeState {
         )
         .map_err(|error| McpBridgeError::Internal(error.to_string()))?;
 
-        let completion = tokio::time::timeout(COMMAND_TIMEOUT, receiver).await;
+        let timeout = if tool == "refresh" {
+            REFRESH_TIMEOUT
+        } else {
+            COMMAND_TIMEOUT
+        };
+        let completion = tokio::time::timeout(timeout, receiver).await;
         drop(pending_guard);
 
         match completion {

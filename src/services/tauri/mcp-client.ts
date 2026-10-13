@@ -37,6 +37,11 @@ export type McpCommandPayload =
       requestId: string
       tool: 'stop_timer'
     }
+  | {
+      arguments: Record<string, never>
+      requestId: string
+      tool: 'refresh'
+    }
 
 export type McpStartTimerResult = {
   billable: boolean
@@ -60,7 +65,12 @@ export type McpAddTimeEntryResult = McpStopTimerResult & {
   projectName: string | null
 }
 
-export type McpCommandResult = McpStartTimerResult | McpStopTimerResult | McpAddTimeEntryResult
+export type McpRefreshResult = {
+  capturedAt: string
+  synced: string[]
+}
+
+export type McpCommandResult = McpStartTimerResult | McpStopTimerResult | McpAddTimeEntryResult | McpRefreshResult
 
 export type McpCommandCompletion =
   | {
