@@ -148,7 +148,7 @@ Current behavior:
 - Produces summaries keyed by source item ID: `{ lastTrackedAt, totalTrackedSeconds, totalTrackedAmount, totalTrackedAmountCurrency }`.
 - Provider widgets merge those summaries into compact table rows before sorting and rendering.
 
-The app header's sync action refreshes each enabled provider sync, the running Clockify entry, and Clockify summary reports. Provider widgets do not have refresh buttons. Only the app header refresh icon shows global sync activity.
+The app header's sync action refreshes each enabled provider sync, the running Clockify entry, and Clockify summary reports. MCP refresh and work listings use this same action. Work listings can request cached results instead. Provider widgets do not have refresh buttons. Only the app header refresh icon shows global sync activity.
 
 Existing Clockify entries that have been backfilled for Clockalong should contain the same `ref:*` markers as newly created entries. Do not reintroduce old description-shape matching for unmarked entries; unmarked entries are intentionally treated as unlinked until their descriptions carry an internal ref.
 
