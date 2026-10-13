@@ -4,9 +4,10 @@ Clockalong exposes a local Model Context Protocol server for agents that need tr
 
 ## Scope
 
-The server exposes seven tools:
+The server exposes eight tools:
 
-- `list_trackable_work` returns available Linear tickets, GitHub issues and pull requests, and Quick Timer presets with local tracked totals.
+- `list_trackable_work` syncs connected providers. It returns available Linear tickets, GitHub issues and pull requests, and Quick Timer presets with tracked totals. Set `refresh` to false to use the cached snapshot.
+- `refresh` runs the full app sync without listing work. It returns the synced data groups and the snapshot capture time.
 - `get_tracking_status` returns provider connections, the active Clockify project, tracked summaries, and the running timer.
 - `list_recent_entries` returns completed entries from the local Clockify cache for the requested calendar-day bucket.
 - `list_clockify_projects` returns cached projects from the selected Clockify workspace.
@@ -24,11 +25,19 @@ Quick Timer entries accept template variables and use saved values for omitted v
 
 ## Ownership
 
-Rust owns the loopback listener and server status. It validates HTTP and MCP requests. It caches snapshots and owns read responses and pending write requests. The webview normalizes and publishes snapshots. It owns all Clockify writes. It reuses the same provider timer behavior, settings, local caches, and query refreshes as the dashboard.
+Rust owns the loopback listener and server status. It validates HTTP and MCP requests. It caches snapshots and owns read responses and pending webview commands. The webview normalizes and publishes snapshots. It owns all Clockify writes. It reuses the same provider timer behavior, settings, local caches, and query refreshes as the dashboard.
 
-The webview publishes one normalized snapshot when relevant cached data or settings change. Read tools use that snapshot and never fetch a provider. The snapshot contains only the data in existing frontend caches, so its freshness follows the app's normal sync intervals.
+The webview publishes one normalized snapshot when relevant cached data or settings change. Rust reads that snapshot to answer read tools. Tracking status, recent entries, projects, and cached work listings do not fetch provider data.
 
-Write tools cross the bridge as an event with a request identifier, tool name, and validated arguments. The webview completes the request after Clockify creates an entry or changes the timer. Rust waits up to 30 seconds and converts webview failures into MCP tool errors.
+Refresh uses the same full sync as the app header. It refreshes Clockify entries, the running timer, and summaries, plus connected Linear and GitHub sources. Concurrent callers share the sync and reuse provider requests already in progress. Manual sync settings do not prevent an explicit refresh.
+
+After connectivity returns, an explicit refresh restarts paused provider requests even when the app window remains hidden.
+
+The webview reads the updated caches and publishes the snapshot before it completes a refresh request. A provider failure, an offline pause, or a publication failure returns an MCP tool error. A failed refresh does not return a cached work list as fresh data. Agents can request a cached list separately.
+
+Repository selections, provider sync limits, and list filters still apply after refresh. The snapshot capture time records when the snapshot was assembled. It does not record the last successful fetch for each provider.
+
+Timer changes, completed entries, and refresh requests cross the bridge as events. Each event carries a request identifier, tool name, and validated arguments. Rust waits up to 30 seconds for time-entry commands and two minutes for a full refresh. Webview failures become MCP tool errors. Refresh does not require a selected Clockify project. It does not change time entries or the running timer.
 
 ## Lifecycle and ports
 

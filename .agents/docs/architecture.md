@@ -50,7 +50,7 @@ The theme provider receives the saved theme before the app renders. It keeps the
 
 Work-source sync providers also mount inside `QueryClientProvider`. `LinearSyncProvider` owns the background sync into the local Linear assigned-ticket collection, and `GithubSyncProvider` owns the background sync into the local GitHub work-item collection. Routes should consume those collections instead of starting provider pagination.
 
-The app header owns the single manual sync action. It requests each enabled provider sync and refreshes Clockify running-entry and summary data.
+The app header and MCP use one shared full sync action. It requests each enabled provider sync and refreshes Clockify running-entry and summary data. Concurrent callers share the work. Failed or paused requests produce an explicit sync error.
 
 Provider widgets do not expose refresh controls. Only the app header refresh icon shows global sync activity.
 

@@ -5,6 +5,7 @@ import type {
   WorkspaceDtoV1,
 } from '../services/clockify/generated/clockify'
 import type { TimeEntrySummaryReportDto } from '../services/clockify/generated/reports'
+import type { BuildMcpSnapshotInput } from '../services/mcp/snapshot'
 import type { McpCommandPayload, McpCommandResult } from '../services/tauri/mcp-client'
 import type { QueryKey } from '@tanstack/react-query'
 
@@ -19,9 +20,10 @@ import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
 import { githubWorkItemsCollection } from '../services/github/sync'
 import { linearTicketsCollection, useLinearSync } from '../services/linear/sync'
 import { executeMcpCommand, type ExecuteMcpCommandContext } from '../services/mcp/commands'
-import { buildMcpSnapshot } from '../services/mcp/snapshot'
+import { publishMcpSnapshot, refreshMcpSnapshot } from '../services/mcp/refresh'
 import { useStorage } from '../services/storage/useStorage'
 import { clockalongMcpCommandEvent, mcp } from '../services/tauri/mcp-client'
+import { getErrorMessage } from '../utils/errors'
 import { useAppAuth } from './useAppAuth'
 import { useAppInit } from './useAppInit'
 import { useClockifyTimerProject } from './useClockifyTimerProject'
@@ -124,9 +126,9 @@ export function useMcpServerBridge() {
   const clockifyConnected = appReady && authState.value.clockifyAuthenticated
   const githubConnected = clockifyConnected && authState.value.githubAuthenticated
   const linearConnected = clockifyConnected && authState.value.linearAuthenticated
-  const snapshot = useMemo(
+  const snapshotInput = useMemo(
     () =>
-      buildMcpSnapshot({
+      ({
         clockifyConnected,
         clockifyProjects: clockifyProjects ?? [],
         clockifyReports: {
@@ -149,7 +151,7 @@ export function useMcpServerBridge() {
         quickTimersEnabled,
         runningEntry,
         syncedClockifyEntries: clockifyEntriesQuery.data ?? [],
-      }),
+      }) satisfies BuildMcpSnapshotInput,
     [
       clockifyConnected,
       clockifyEntriesQuery.data,
@@ -184,21 +186,26 @@ export function useMcpServerBridge() {
   ) satisfies ExecuteMcpCommandContext
   const commandContextRef = useRef(commandContext)
   commandContextRef.current = commandContext
+  const snapshotInputRef = useRef(snapshotInput)
+  snapshotInputRef.current = snapshotInput
 
   useEffect(() => {
     if (!mcpServerEnabled || !commandListenerReady) {
       return
     }
 
-    mcpBridgeLog('publishing snapshot', {
-      githubRows: snapshot.trackableWork.filter(row => row.source === 'github').length,
-      linearRows: snapshot.trackableWork.filter(row => row.source === 'linear').length,
-      quickTimerRows: snapshot.trackableWork.filter(row => row.source === 'quick_timer').length,
-    })
-    void mcp.publishSnapshot(snapshot.capturedAt, snapshot).catch(() => {
-      mcpBridgeLog('snapshot publish failed')
-    })
-  }, [commandListenerReady, mcpServerEnabled, snapshot])
+    void publishMcpSnapshot(snapshotInput)
+      .then(snapshot => {
+        mcpBridgeLog('published snapshot', {
+          githubRows: snapshot.trackableWork.filter(row => row.source === 'github').length,
+          linearRows: snapshot.trackableWork.filter(row => row.source === 'linear').length,
+          quickTimerRows: snapshot.trackableWork.filter(row => row.source === 'quick_timer').length,
+        })
+      })
+      .catch(() => {
+        mcpBridgeLog('snapshot publish failed')
+      })
+  }, [commandListenerReady, mcpServerEnabled, snapshotInput])
 
   useEffect(() => {
     if (!mcpServerEnabled || !isTauri()) {
@@ -215,7 +222,7 @@ export function useMcpServerBridge() {
         return
       }
 
-      void handleMcpCommand(event.payload, commandContextRef)
+      void handleMcpCommand(event.payload, commandContextRef, snapshotInputRef)
     })
       .then(nextUnlisten => {
         if (active) {
@@ -264,7 +271,11 @@ function useCachedQueryData<T>(queryKey: QueryKey, enabled: boolean) {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
-async function handleMcpCommand(incoming: IncomingMcpCommand, contextRef: { current: ExecuteMcpCommandContext }) {
+async function handleMcpCommand(
+  incoming: IncomingMcpCommand,
+  contextRef: { current: ExecuteMcpCommandContext },
+  snapshotInputRef: { current: BuildMcpSnapshotInput },
+) {
   if (typeof incoming.requestId !== 'string') {
     mcpBridgeLog('ignored command without request id')
     return
@@ -274,6 +285,16 @@ async function handleMcpCommand(incoming: IncomingMcpCommand, contextRef: { curr
   const tool = typeof incoming.tool === 'string' ? incoming.tool : 'unknown'
 
   mcpBridgeLog('command received', { requestId, tool })
+
+  if (tool === 'refresh') {
+    try {
+      const result = await refreshMcpSnapshot(() => snapshotInputRef.current)
+      await completeMcpCommand({ requestId, result, tool })
+    } catch (error) {
+      await completeMcpCommand({ error: getErrorMessage(error), requestId, tool })
+    }
+    return
+  }
 
   if (tool !== 'start_timer' && tool !== 'stop_timer' && tool !== 'add_time_entry') {
     await completeMcpCommand({

@@ -5,7 +5,7 @@ use tauri::{AppHandle, Runtime};
 
 const CURRENT_PROTOCOL_VERSION: &str = "2025-06-18";
 const PREVIOUS_PROTOCOL_VERSION: &str = "2025-03-26";
-const SERVER_INSTRUCTIONS: &str = "Clockalong tracks time in Clockify against Linear tickets, GitHub issues and pull requests, and local Quick Timer presets. Call `list_trackable_work` to see what can be tracked, `start_timer` to begin billing against one of those items, and `stop_timer` to end it. Clockify runs one timer at a time, so starting a new timer stops the one already running. Use `add_time_entry` to add completed time in minutes for a listed item without changing the running timer. Overlaps are allowed.";
+const SERVER_INSTRUCTIONS: &str = "Clockalong tracks time in Clockify against Linear tickets, GitHub issues and pull requests, and local Quick Timer presets. Call `list_trackable_work` to sync all connected providers and see what can be tracked; pass refresh: false for cached results. Use `refresh` to sync without listing work, including before reading tracking status or recent entries. Use `start_timer` to begin billing against a listed item and `stop_timer` to end it. Clockify runs one timer at a time, so starting a new timer stops the one already running. Use `add_time_entry` to add completed time in minutes for a listed item without changing the running timer. Overlaps are allowed.";
 const STARTUP_ERROR: &str = "Clockalong is still starting up. Try again in a moment.";
 const TIMEOUT_ERROR: &str = "Clockalong did not respond in time.";
 const CLOCKIFY_ERROR: &str =
@@ -126,7 +126,11 @@ async fn call_tool<R: Runtime>(
     let output = match name {
         "list_trackable_work" => {
             let arguments = validate_list_trackable_work(&arguments)?;
-            read_tool(state, |snapshot| list_trackable_work(snapshot, arguments))
+            list_work_with_refresh(state, arguments, || refresh_tool(app, state)).await
+        }
+        "refresh" => {
+            validate_empty_arguments(&arguments)?;
+            refresh_tool(app, state).await
         }
         "start_timer" => {
             validate_start_timer(&arguments)?;
@@ -167,6 +171,33 @@ fn read_tool(
 ) -> Result<Value, String> {
     let snapshot = state.snapshot().map_err(bridge_error_message)?;
     read(&snapshot)
+}
+
+async fn refresh_tool<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &McpBridgeState,
+) -> Result<Value, String> {
+    // A published snapshot means the webview command listener is ready.
+    state.snapshot().map_err(bridge_error_message)?;
+    state
+        .dispatch_command(app, "refresh".to_string(), json!({}))
+        .await
+        .map_err(bridge_error_message)
+}
+
+async fn list_work_with_refresh<F, Fut>(
+    state: &McpBridgeState,
+    arguments: ListTrackableWorkArguments,
+    refresh: F,
+) -> Result<Value, String>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<Value, String>>,
+{
+    if arguments.refresh {
+        refresh().await?;
+    }
+    read_tool(state, |snapshot| list_trackable_work(snapshot, arguments))
 }
 
 async fn write_tool<R: Runtime>(
@@ -372,13 +403,16 @@ struct ListTrackableWorkArguments {
     query: Option<String>,
     include_closed: bool,
     limit: usize,
+    refresh: bool,
 }
 
 fn validate_list_trackable_work(
     arguments: &Value,
 ) -> Result<ListTrackableWorkArguments, ProtocolError> {
-    let arguments =
-        validate_object_keys(arguments, &["source", "query", "includeClosed", "limit"])?;
+    let arguments = validate_object_keys(
+        arguments,
+        &["source", "query", "includeClosed", "limit", "refresh"],
+    )?;
     let source = optional_string(arguments, "source")?;
     if source
         .as_deref()
@@ -389,6 +423,7 @@ fn validate_list_trackable_work(
     let query = optional_string(arguments, "query")?;
     let include_closed = optional_bool(arguments, "includeClosed")?.unwrap_or(false);
     let limit = optional_integer(arguments, "limit")?.unwrap_or(50);
+    let refresh = optional_bool(arguments, "refresh")?.unwrap_or(true);
     if !(1..=200).contains(&limit) {
         return Err(invalid_params());
     }
@@ -398,6 +433,7 @@ fn validate_list_trackable_work(
         query,
         include_closed,
         limit: limit as usize,
+        refresh,
     })
 }
 
@@ -744,7 +780,7 @@ fn tool_catalog() -> Vec<Value> {
     vec![
         json!({
             "name": "list_trackable_work",
-            "description": "Lists work items for starting timers or adding completed time, with their tracked totals.",
+            "description": "Syncs all connected providers, then lists work items for starting timers or adding completed time, with their tracked totals. Set refresh to false for cached results. Repository settings, sync limits, and result filters still apply.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -752,7 +788,17 @@ fn tool_catalog() -> Vec<Value> {
                     "query": { "type": "string" },
                     "includeClosed": { "type": "boolean", "default": false },
                     "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 },
+                    "refresh": { "type": "boolean", "default": true },
                 },
+                "additionalProperties": false,
+            },
+        }),
+        json!({
+            "name": "refresh",
+            "description": "Runs the app's full sync: Clockify entries, running timer and summaries, plus connected Linear and GitHub sources. Waits for the updated snapshot and returns synced data groups and capturedAt. Reports an error if sync fails. Does not change the running timer or create time entries.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
                 "additionalProperties": false,
             },
         }),
@@ -823,6 +869,90 @@ fn tool_catalog() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn refresh_contract_defaults_to_full_sync_and_allows_cached_reads() {
+        assert!(validate_list_trackable_work(&json!({})).unwrap().refresh);
+        assert!(
+            !validate_list_trackable_work(&json!({ "refresh": false }))
+                .unwrap()
+                .refresh
+        );
+        for value in [json!(null), json!("false"), json!(0)] {
+            assert!(validate_list_trackable_work(&json!({ "refresh": value })).is_err());
+        }
+        let catalog = tool_catalog();
+        assert_eq!(
+            catalog
+                .iter()
+                .filter(|tool| tool["name"] == "refresh")
+                .count(),
+            1
+        );
+        let list = catalog
+            .iter()
+            .find(|tool| tool["name"] == "list_trackable_work")
+            .unwrap();
+        assert_eq!(
+            list["inputSchema"]["properties"]["refresh"]["default"],
+            true
+        );
+    }
+
+    #[test]
+    fn list_waits_for_refreshed_snapshot_and_preserves_filters() {
+        tauri::async_runtime::block_on(async {
+            let state = McpBridgeState::default();
+            state
+                .publish_snapshot("old".to_string(), json!({ "trackableWork": [] }))
+                .unwrap();
+            let arguments =
+                validate_list_trackable_work(&json!({ "source": "github", "query": "new" }))
+                    .unwrap();
+            let result = list_work_with_refresh(&state, arguments, || async {
+                tokio::task::yield_now().await;
+                state
+                    .publish_snapshot(
+                        "fresh".to_string(),
+                        json!({ "trackableWork": [
+                    { "source": "linear", "title": "New ticket" },
+                    { "source": "github", "title": "New PR", "status": "open" },
+                    { "source": "github", "title": "New closed PR", "status": "closed" },
+                ] }),
+                    )
+                    .unwrap();
+                Ok(json!({}))
+            })
+            .await
+            .unwrap();
+            assert_eq!(result["capturedAt"], "fresh");
+            assert_eq!(
+                result["rows"],
+                json!([{ "source": "github", "title": "New PR", "status": "open" }])
+            );
+        });
+    }
+
+    #[test]
+    fn cached_list_skips_refresh_and_refresh_failures_do_not_return_stale_rows() {
+        tauri::async_runtime::block_on(async {
+            let state = McpBridgeState::default();
+            state
+                .publish_snapshot("old".to_string(), json!({ "trackableWork": [] }))
+                .unwrap();
+            let cached = validate_list_trackable_work(&json!({ "refresh": false })).unwrap();
+            let result =
+                list_work_with_refresh(&state, cached, || async { panic!("Must not refresh") })
+                    .await
+                    .unwrap();
+            assert_eq!(result["capturedAt"], "old");
+            let fresh = validate_list_trackable_work(&json!({})).unwrap();
+            let result =
+                list_work_with_refresh(&state, fresh, || async { Err("Sync failed".to_string()) })
+                    .await;
+            assert_eq!(result.unwrap_err(), "Sync failed");
+        });
+    }
 
     #[test]
     fn accepts_claude_call_metadata_and_request_extensions() {

@@ -18,6 +18,7 @@ const MCP_PORTS: [u16; 4] = [53700, 53701, 53702, 53703];
 const HEADER_SIZE_LIMIT: usize = 8 * 1024;
 const BODY_SIZE_LIMIT: usize = 1024 * 1024;
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(35);
+const RESPONSE_TIMEOUT: Duration = Duration::from_secs(125);
 const ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 pub struct McpHttpListener {
@@ -292,7 +293,7 @@ fn route_request<R: Runtime>(app: AppHandle<R>, request: HttpRequest) -> HttpRes
         let _ = sender.send(reply);
     });
 
-    match receiver.recv_timeout(CONNECTION_TIMEOUT) {
+    match receiver.recv_timeout(RESPONSE_TIMEOUT) {
         Ok(McpProtocolReply::Json(body)) => {
             response(200, "OK", "application/json", &body.to_string())
         }
