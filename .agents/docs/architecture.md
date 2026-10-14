@@ -85,6 +85,8 @@ Shared settings row/section layout lives in `src/components/settings/SettingsSec
 
 Settings groups use the same card treatment through `SettingsSection`; do not wrap individual rows in extra cards.
 
+Settings reuse the existing control styles. Disconnect and Unlink use danger buttons. Connection states use success or error badges. Inputs use the primary style. Action icons and loading indicators match the other settings controls.
+
 The Clockify description template for Linear issues is rendered from `src/components/LinearSettings.tsx`, not Clockify settings, because the template variables are Linear-specific even though the created entry belongs to Clockify.
 
 ## Frontend query keys
