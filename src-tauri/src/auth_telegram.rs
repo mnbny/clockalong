@@ -40,6 +40,7 @@ pub fn connect<R: Runtime>(app: AppHandle<R>, session: String) -> Result<(), Str
 }
 
 pub fn disconnect<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    crate::telegram_group::remove(&app)?;
     stronghold::remove_value(&app, SESSION_KEY)
         .map_err(|_| "Could not remove the saved Telegram session.".to_string())?;
     set_authenticated(&app, false)

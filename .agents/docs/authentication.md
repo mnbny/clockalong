@@ -202,7 +202,7 @@ GitHub API calls should use a frontend GitHub client such as Octokit. Rust shoul
 
 ## Telegram
 
-Telegram is optional and supports login only. The frontend performs MTProto authentication; Rust stores the session and owns the public connected flag. Telegram failure does not affect the Clockify route gate.
+Telegram is optional and supports login and one selected group. Group verification is separate from account authentication. The frontend performs MTProto authentication; Rust stores the session and owns the public connected flag. Telegram failure does not affect the Clockify route gate.
 
 The [Telegram brief](./telegram.md) defines QR and password login, restore, disconnect, build configuration, and supported use.
 
