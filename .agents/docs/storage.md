@@ -49,6 +49,8 @@ Backups include Quick Timer presets and their last-used template values. They do
 
 Clockify stores the user API key in native Stronghold storage, not in the Tauri JSON store. Linear stores OAuth token data in Stronghold as well. On startup, Rust reads those saved credentials and validates or refreshes them before setting provider auth state.
 
+Telegram stores one opaque session in Stronghold. Its frontend MTProto client uses memory storage, with no IndexedDB or localStorage credentials. QR tokens and two-step passwords remain temporary. Settings backups exclude the session.
+
 ## Local cache field budgets
 
 The webview enforces a per-origin localStorage quota of about 5 MB, shared by every local cache. The packaged app and the Vite dev server are separate origins, so quota exhaustion usually appears in the installed app first.

@@ -35,6 +35,8 @@ The app exposes two narrow commands for diagnostics UI:
 - Clockify entry sync diagnostics use `[clockify sync]`. Log sync ranges, page counts, fetched/stored/skipped counts, insert/update counts, ref counts, and short entry samples. Do not log credentials.
 - Widget diagnostics use scoped prefixes such as `[clockify widget]`, `[linear widget]`, and `[github widget]` to show what the local synced-entry live queries expose to each dashboard widget.
 
+Telegram disables library protocol logging and maps failures to fixed user messages. Raw errors, sessions, QR tokens, and passwords must not enter logs or error causes.
+
 ## Frontend prefixes
 
 - `[linear tickets]`: Linear ticket fetch and client-side ordering diagnostics. Log request parameters, page counts, aggregate counts, cursor presence, state-type counts, linked-ticket counts, and top identifiers. Do not log issue titles, descriptions, assignee names, or credential values.
