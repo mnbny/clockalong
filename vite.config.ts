@@ -18,6 +18,8 @@ export default defineConfig(async () => ({
     react(),
   ],
 
+  // mtcute resolves its WASM assets relative to import.meta.url.
+  optimizeDeps: { exclude: ['@mtcute/wasm'] },
   clearScreen: false,
   server: {
     port: 1420,

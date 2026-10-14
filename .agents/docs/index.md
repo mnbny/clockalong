@@ -44,12 +44,12 @@ Add each document using this format:
 #### [architecture.md](./architecture.md)
 
 - Description: Application structure, ownership boundaries, and development conventions.
-- Tags: `architecture`, `frontend`, `backend`, `routing`, `providers`, `queries`, `worktrees`, `scripts`, `validation`, `scripty`
+- Tags: `architecture`, `frontend`, `backend`, `routing`, `providers`, `queries`, `worktrees`, `scripts`, `validation`, `testing`, `scripty`
 
 #### [tauri.md](./tauri.md)
 
-- Description: Native application state, startup appearance, frontend integration, updates, and menu bar behavior.
-- Tags: `tauri`, `rust`, `native`, `events`, `reactivity`, `updater`, `menu-bar`, `themes`
+- Description: Native application state, frontend integration, downloads, updates, and window behavior.
+- Tags: `tauri`, `rust`, `native`, `events`, `reactivity`, `downloads`, `updater`, `menu-bar`, `themes`
 
 #### [logging.md](./logging.md)
 
@@ -69,7 +69,12 @@ Add each document using this format:
 #### [authentication.md](./authentication.md)
 
 - Description: Provider connections, credential ownership, startup checks, and disconnect behavior.
-- Tags: `authentication`, `clockify`, `linear`, `github`, `oauth`, `pkce`, `stronghold`
+- Tags: `authentication`, `clockify`, `linear`, `github`, `telegram`, `oauth`, `pkce`, `stronghold`
+
+#### [telegram.md](./telegram.md)
+
+- Description: Telegram connections, selected-group chat, attachments, and data boundaries.
+- Tags: `telegram`, `authentication`, `groups`, `chat`, `realtime`, `files`, `cache`
 
 #### [linear.md](./linear.md)
 

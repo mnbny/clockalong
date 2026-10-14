@@ -55,6 +55,7 @@ export function AppHeader() {
       <div className="flex items-center gap-1 justify-self-end">
         {authenticated ? (
           <>
+            <div id="telegram-chat-launcher" className="contents" />
             <button
               className="btn btn-square btn-ghost"
               type="button"

@@ -1,8 +1,7 @@
 import { createFileRoute, Navigate } from '@tanstack/react-router'
-import { listen } from '@tauri-apps/api/event'
 import { useEffect, useState } from 'react'
 
-import { appInitializationStateChangedEvent, getAppInitializationState } from '../hooks/useAppInit'
+import { useAppInit } from '../hooks/useAppInit'
 
 export const Route = createFileRoute('/')({
   component: IndexScreen,
@@ -11,50 +10,15 @@ export const Route = createFileRoute('/')({
 const MINIMUM_LOADER_MS = 700
 
 function IndexScreen() {
+  const initialization = useAppInit()
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    let cancelled = false
-    let unlisten: (() => void) | undefined
-
-    const minimumDelay = new Promise<void>(resolve => {
-      window.setTimeout(resolve, MINIMUM_LOADER_MS)
-    })
-
-    const initializationDone = (async () => {
-      const initial = await getAppInitializationState()
-      if (!initial.appInitializing) {
-        return
-      }
-
-      await new Promise<void>(resolve => {
-        void listen<{ appInitializing: boolean }>(appInitializationStateChangedEvent, event => {
-          if (!event.payload.appInitializing) {
-            resolve()
-          }
-        }).then(nextUnlisten => {
-          if (cancelled) {
-            nextUnlisten()
-            return
-          }
-          unlisten = nextUnlisten
-        })
-      })
-    })()
-
-    void Promise.all([minimumDelay, initializationDone]).then(() => {
-      if (!cancelled) {
-        setReady(true)
-      }
-    })
-
-    return () => {
-      cancelled = true
-      unlisten?.()
-    }
+    const timer = window.setTimeout(() => setReady(true), MINIMUM_LOADER_MS)
+    return () => window.clearTimeout(timer)
   }, [])
 
-  if (!ready) {
+  if (!ready || initialization.value.appInitializing) {
     return (
       <section className="grid h-full place-items-center">
         <span className="loading loading-ring text-primary size-16" />

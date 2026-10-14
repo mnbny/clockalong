@@ -32,11 +32,13 @@
     "dev": "vite",
     "preview": "vite preview",
     "release:check": "pnpm validate:typecheck && pnpm build",
-    "release:github": "scripts/publish-github-release.sh",
-    "release:mac": "scripts/release-mac.sh",
+    "release:github": "tsx scripts/release.ts github",
+    "release:mac": "tsx scripts/release.ts mac",
     "setup": "pnpm run worktree:setup",
     "tauri": "tauri",
     "tauri:prebuild": "cargo build --manifest-path src-tauri/Cargo.toml --no-default-features",
+    "test": "vitest run --config .tools/tests/vitest.config.ts",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "validate": "tsx scripts/scripty.ts --sequential",
     "validate:format": "SCRIPTY=1 prettier --write . --ignore-unknown --cache --log-level=error",
     "validate:format:rust": "SCRIPTY=1 cargo fmt --manifest-path src-tauri/Cargo.toml",
@@ -52,6 +54,7 @@
     "@hookform/resolvers": "catalog:",
     "@linear/sdk": "catalog:",
     "@mantine/hooks": "catalog:",
+    "@mtcute/web": "catalog:",
     "@octokit/rest": "catalog:",
     "@tabler/icons-react": "catalog:",
     "@tanstack/react-db": "catalog:",
@@ -70,6 +73,7 @@
     "clsx": "catalog:",
     "dayjs": "catalog:",
     "humanize-duration": "catalog:",
+    "qrcode.react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-hook-form": "catalog:",
@@ -110,11 +114,12 @@
     "typescript": "catalog:",
     "typescript-eslint": "catalog:",
     "vite": "catalog:",
+    "vitest": "catalog:",
     "zx": "catalog:"
   },
-  "packageManager": "pnpm@11.1.2",
+  "packageManager": "pnpm@12.11.2",
   "engines": {
-    "node": ">=20.19.0",
-    "pnpm": ">=11.1.2"
+    "node": ">=26.11.1",
+    "pnpm": ">=12.11.2"
   }
 }

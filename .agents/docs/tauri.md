@@ -66,8 +66,22 @@ Clockalong uses Tauri's updater plugin for direct-download macOS updates. The up
 
 On macOS, closing the main window hides it so the status item and timer remain available. The Dock restores the hidden window, while the native menu's Quit item explicitly exits the app.
 
+## Downloads
+
+Telegram attachment downloads use a narrow native writer for the system Downloads folder. The frontend supplies a filename and streams binary chunks through an opaque transfer handle. Rust owns filename restrictions, collision handling, completion checks, and partial-file cleanup. It accepts no arbitrary destination path and grants no general frontend filesystem access.
+
+File work runs off the main thread. Normal app exit waits for partial-file cleanup. Hiding the macOS window leaves active transfers running.
+
+The Telegram media viewer uses a separate native writer and an isolated temporary directory. Native code generates all paths and limits asset-protocol access to that directory. The viewer downloads a complete file before playback. It detaches the media source before release. Closure and scope teardown release temporary files.
+
+Normal exit removes registered files, and startup removes crash leftovers. Completed Downloads remain separate user files.
+
+Small Telegram avatars and previews use a separate persistent native image cache. Rust owns paths, storage limits, eviction, and access handles. Reads and writes use bounded binary IPC and run off the main thread. Restoring the same group retains completed images and removes partial writes. Unlink and disconnect invalidate handles and delete cached images. The frontend cannot select filesystem paths or reuse invalidated handles.
+
 ## Auth gate
 
-Rust owns the startup authentication snapshot. `src-tauri/src/auth.rs` exposes the command/event surface and delegates provider-specific credential work to `auth_linear.rs` and `auth_clockify.rs`. Those modules read provider credentials from Stronghold during setup, validate or refresh them as needed, emit `clockalong-auth:state-changed`, and leave app initialization blocked until that native check completes.
+Rust owns the public authentication snapshot. Native startup validates Clockify before app initialization completes. Linear and GitHub checks run independently and do not block initialization.
 
-Linear starts through the native OAuth command. Clockify uses a native API-key connection command that validates the key before saving it. The frontend should keep route decisions tied to the native auth snapshot instead of trying to infer auth state from local UI state.
+Telegram performs MTProto authentication in the frontend. Its provider waits for native initialization before restore, because startup replaces the initial auth snapshot. Rust owns Telegram session storage and connected-state events. Telegram failure does not block the app or change the Clockify route gate.
+
+Linear uses native OAuth. Clockify and GitHub use native credential validation. Frontend route decisions use the native auth snapshot.

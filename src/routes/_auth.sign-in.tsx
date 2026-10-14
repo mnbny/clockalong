@@ -1,4 +1,4 @@
-import { IconArrowRight, IconBrandGithub, IconCheck, IconLoader2 } from '@tabler/icons-react'
+import { IconArrowRight, IconBrandGithub, IconBrandTelegram, IconCheck, IconLoader2 } from '@tabler/icons-react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { type ReactNode, useRef, useState } from 'react'
 
@@ -7,6 +7,7 @@ import { ClockifyAuthDialog } from '../components/ClockifyAuthDialog'
 import { GitHubAuthDialog } from '../components/GitHubAuthDialog'
 import { ClockifyIcon } from '../components/icons/ClockifyIcon'
 import { LinearIcon } from '../components/icons/LinearIcon'
+import { TelegramAuthDialog, type TelegramAuthDialogHandle } from '../components/TelegramAuthDialog'
 import { useAppAuth } from '../hooks/useAppAuth'
 import { queryClient, queryKeys } from '../lib/query-client'
 import { clearSyncedClockifyTimeEntries } from '../services/clockify/sync'
@@ -14,6 +15,7 @@ import { clearSyncedGithubWorkItems } from '../services/github/sync'
 import { clearSyncedLinearTickets } from '../services/linear/sync'
 import { storage } from '../services/storage/config'
 import { auth, type ClockalongAuthProvider } from '../services/tauri/auth-client'
+import { useTelegram } from '../services/telegram/session-provider'
 import { getErrorMessage } from '../utils/errors'
 
 export const Route = createFileRoute('/_auth/sign-in')({
@@ -23,6 +25,8 @@ export const Route = createFileRoute('/_auth/sign-in')({
 function SignInScreen() {
   const navigate = useNavigate()
   const authState = useAppAuth()
+  const telegram = useTelegram()
+  const telegramDialogRef = useRef<TelegramAuthDialogHandle>(null)
   const clockifyDialogRef = useRef<HTMLDialogElement>(null)
   const githubDialogRef = useRef<HTMLDialogElement>(null)
   const [pendingProvider, setPendingProvider] = useState<ClockalongAuthProvider | null>(null)
@@ -128,6 +132,18 @@ function SignInScreen() {
             onDisconnect={() => void disconnectProvider('github')}
             onClick={openGithubDialog}
           />
+          <AuthenticationButton
+            connected={authState.value.telegramAuthenticated}
+            icon={<IconBrandTelegram className="size-5" />}
+            label="Telegram"
+            loading={telegram.busy}
+            disabled={!!telegram.unavailableReason}
+            onDisconnect={() => void telegram.disconnect()}
+            onClick={() => telegramDialogRef.current?.open()}
+          />
+          {!!telegram.unavailableReason && (
+            <p className="text-base-content/60 px-4 text-xs">{telegram.unavailableReason}</p>
+          )}
           <button
             className="btn btn-primary mt-4 h-12 self-center rounded-lg"
             disabled={!clockifyAuthenticated || Boolean(pendingProvider)}
@@ -139,6 +155,7 @@ function SignInScreen() {
         </div>
       </div>
 
+      <TelegramAuthDialog ref={telegramDialogRef} />
       <ClockifyAuthDialog
         ref={clockifyDialogRef}
         onConnected={() => {
@@ -156,6 +173,7 @@ function SignInScreen() {
 
 type AuthenticationButtonProps = {
   connected: boolean
+  disabled?: boolean
   icon: ReactNode
   label: string
   loading: boolean
@@ -163,7 +181,15 @@ type AuthenticationButtonProps = {
   onClick: () => void
 }
 
-function AuthenticationButton({ connected, icon, label, loading, onClick, onDisconnect }: AuthenticationButtonProps) {
+function AuthenticationButton({
+  connected,
+  disabled,
+  icon,
+  label,
+  loading,
+  onClick,
+  onDisconnect,
+}: AuthenticationButtonProps) {
   if (connected) {
     return (
       <div className="relative">
@@ -177,14 +203,14 @@ function AuthenticationButton({ connected, icon, label, loading, onClick, onDisc
           </span>
           {loading ? <IconLoader2 className="size-5 animate-spin" /> : <IconCheck className="text-primary size-5" />}
         </button>
-        {!loading ? (
+        {!loading && (
           <button
             className="badge badge-error absolute top-1/2 right-12 h-7 -translate-y-1/2 px-3"
             type="button"
             onClick={onDisconnect}>
             Disconnect
           </button>
-        ) : null}
+        )}
       </div>
     )
   }
@@ -192,7 +218,7 @@ function AuthenticationButton({ connected, icon, label, loading, onClick, onDisc
   return (
     <button
       className="btn btn-ghost border-base-300 bg-base-200/60 hover:bg-base-200 h-14 w-full justify-between rounded-lg border px-4 text-base"
-      disabled={loading}
+      disabled={loading || disabled}
       type="button"
       onClick={onClick}>
       <span className="flex min-w-0 items-center gap-3">

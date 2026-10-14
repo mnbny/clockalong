@@ -13,7 +13,14 @@ process.env.LC_ALL = 'en_US.UTF-8'
 const shell = $({ cwd: repoRoot, stdio: 'inherit' })
 const log = createLogger('clockalong setup')
 
-const filesToCopyFromPrimaryWorktree = ['.env', '.env.local'] as const
+const filesToCopyFromPrimaryWorktree = [
+  '.env',
+  '.env.local',
+  '.env.development',
+  '.env.development.local',
+  '.env.production',
+  '.env.production.local',
+] as const
 
 log.info('Copying local files from primary worktree')
 await copyLocalFilesFromPrimaryWorktree(repoRoot, filesToCopyFromPrimaryWorktree, log)

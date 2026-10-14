@@ -4,6 +4,7 @@ mod auth;
 mod auth_clockify;
 mod auth_github;
 mod auth_linear;
+mod auth_telegram;
 mod mcp;
 mod mcp_bridge;
 mod mcp_http;
@@ -11,6 +12,10 @@ mod mcp_protocol;
 mod storage_config;
 mod stronghold;
 mod stronghold_config;
+mod telegram_download;
+mod telegram_group;
+mod telegram_image_cache;
+mod telegram_media;
 
 use tauri::Manager;
 
@@ -31,6 +36,8 @@ pub fn run() {
             tauri_plugin_log::Builder::new()
                 .clear_targets()
                 .level(log::LevelFilter::Debug)
+                // Tauri's asset handler includes local paths in 403/404 diagnostics.
+                .level_for("tauri::protocol::asset", log::LevelFilter::Off)
                 .max_file_size(5_000_000)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(4))
                 .target(tauri_plugin_log::Target::new(
@@ -52,7 +59,13 @@ pub fn run() {
         .manage(mcp::ClockalongMcpState::default())
         .manage(mcp_bridge::McpBridgeState::default())
         .manage(stronghold::ClockalongStrongholdState::default())
+        .manage(telegram_download::TelegramDownloadState::default())
+        .manage(telegram_image_cache::TelegramImageCacheState::default())
+        .manage(telegram_media::TelegramMediaState::default())
         .setup(|app| {
+            if telegram_media::initialize(app.handle()).is_err() {
+                log::warn!("Telegram temporary media initialization failed");
+            }
             let salt_path = app
                 .path()
                 .app_local_data_dir()?
@@ -101,6 +114,24 @@ pub fn run() {
             auth::clockalong_auth_get_github_credential,
             auth::clockalong_auth_get_linear_credential,
             auth::clockalong_auth_get_state,
+            auth::clockalong_auth_get_telegram_credential,
+            auth::clockalong_auth_connect_telegram,
+            auth::clockalong_auth_set_telegram_unavailable,
+            auth::clockalong_auth_disconnect_telegram,
+            telegram_group::telegram_group_read,
+            telegram_group::telegram_group_save,
+            telegram_group::telegram_group_remove,
+            telegram_image_cache::telegram_image_cache_scope,
+            telegram_image_cache::telegram_image_cache_read,
+            telegram_image_cache::telegram_image_cache_write,
+            telegram_download::telegram_download_begin,
+            telegram_download::telegram_download_append,
+            telegram_download::telegram_download_finish,
+            telegram_download::telegram_download_cancel,
+            telegram_media::telegram_media_begin,
+            telegram_media::telegram_media_append,
+            telegram_media::telegram_media_finish,
+            telegram_media::telegram_media_release,
             auth::clockalong_auth_refresh_linear_credential,
             mcp::clockalong_mcp_complete_command,
             mcp::clockalong_mcp_get_state,
@@ -111,6 +142,8 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if matches!(&event, tauri::RunEvent::Exit) {
+                telegram_download::cleanup(app);
+                telegram_media::cleanup(app);
                 if let Err(error) = mcp::stop(app) {
                     log::error!("MCP server shutdown failed: {error}");
                 }

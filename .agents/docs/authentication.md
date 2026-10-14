@@ -4,11 +4,13 @@ Clockalong treats authentication as a short provider checklist. Users connect Cl
 
 Do not turn authentication into a large setup wizard. The visible UI should mostly be the existing provider buttons, loading feedback while an action is running, and a connected indicator once a provider is ready.
 
+Helper text should explain what the user needs to do. Keep implementation status and planned features in documentation, outside the authentication UI.
+
 ## Current direction
 
 - Clockify is the core required provider for time tracking.
 - External work-source providers such as Linear and GitHub are optional unless a specific workflow requires them.
-- Rust owns credential lifecycle and storage.
+- Rust owns durable credentials and the public authentication snapshot. Telegram performs its protocol login in the frontend.
 - The frontend owns the visible authentication screen, toasts, routing, and API clients.
 - Provider API calls should happen in TypeScript when a provider has a practical frontend client.
 - Rust should not become a broad API proxy unless a provider forces that design.
@@ -146,12 +148,14 @@ Linear is an external work-source provider, not the whole product model. Keep Li
 
 Shipping rules:
 
-- Ship the Linear OAuth client ID. The current public client ID is `b1f808a5cc24f7bf5cae1df43b4d7cf7`.
+- Embed the Linear OAuth client ID from the native build environment. There is no committed fallback ID.
 - Ship the registered redirect URI pool.
 - Do not ship a Linear personal API key.
 - Do not ship an OAuth client secret.
 - Do not ship client-credentials secrets.
 - Do not make personal API keys the default Linear setup path.
+
+Missing Linear app configuration stops connection, credential access, and startup validation before any provider request. Saved user tokens remain untouched, and no refresh task starts. Clockify initialization continues independently.
 
 Clockalong ships this redirect URI pool:
 
@@ -195,6 +199,12 @@ The GitHub token may be passed from Rust to the frontend while the app is runnin
 The frontend bridge should use `auth.getGithubCredential()`, whose snapshot shape is `{ accessToken }`.
 
 GitHub API calls should use a frontend GitHub client such as Octokit. Rust should not become a general GitHub API proxy. Its GitHub role is token storage, token validation, token clearing, startup auth checks, auth-state events, and returning the token to the frontend on demand.
+
+## Telegram
+
+Telegram is optional and supports login and one selected group. Group verification is separate from account authentication. The frontend performs MTProto authentication; Rust stores the session and owns the public connected flag. Telegram failure does not affect the Clockify route gate.
+
+A revoked Telegram session stops group activity and clears conversation data before native credential cleanup. Cleanup blocks a new login until it finishes. Errors from an old client cannot clear a newer connection. Group access failure retains the account and offers a separate group retry.
 
 ## Token refresh
 

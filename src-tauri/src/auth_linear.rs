@@ -24,7 +24,6 @@ use crate::{
 };
 
 const LINEAR_AUTHORIZE_URL: &str = "https://linear.app/oauth/authorize";
-const LINEAR_CLIENT_ID: &str = "b1f808a5cc24f7bf5cae1df43b4d7cf7";
 const LINEAR_REVOKE_URL: &str = "https://api.linear.app/oauth/revoke";
 const LINEAR_TOKEN_URL: &str = "https://api.linear.app/oauth/token";
 const LINEAR_CALLBACK_PORTS: [u16; 3] = [53682, 53683, 53684];
@@ -68,7 +67,7 @@ pub async fn connect<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<ClockalongAuthConnectionResult, String> {
     auth_log("clockalong_auth_connect_linear: starting OAuth flow");
-    let client_id = linear_client_id();
+    let client_id = linear_client_id()?;
     let (redirect_uri, callback_config, listener) = open_linear_callback_listener()?;
     auth_log(&format!(
         "clockalong_auth_connect_linear: callback listener ready redirect_uri={redirect_uri}"
@@ -78,7 +77,7 @@ pub async fn connect<R: Runtime>(
     let code_verifier = generate_oauth_token();
     let code_challenge = pkce_s256_challenge(&code_verifier);
     let authorize_url =
-        build_linear_authorize_url(&client_id, &redirect_uri, &oauth_state, &code_challenge)?;
+        build_linear_authorize_url(client_id, &redirect_uri, &oauth_state, &code_challenge)?;
 
     app.opener()
         .open_url(authorize_url.as_str(), None::<&str>)
@@ -96,7 +95,7 @@ pub async fn connect<R: Runtime>(
 
     auth_log("clockalong_auth_connect_linear: exchanging authorization code");
     let token_response = exchange_linear_authorization_code(
-        &client_id,
+        client_id,
         &redirect_uri,
         &code_verifier,
         &callback.code,
@@ -115,6 +114,7 @@ pub async fn credential_snapshot<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<ClockalongLinearCredentialSnapshot, String> {
     auth_log("clockalong_auth_get_linear_credential: token requested");
+    linear_client_id()?;
 
     match linear_access_token_snapshot(&app).await {
         Ok(snapshot) => {
@@ -150,6 +150,7 @@ pub async fn refresh_credential<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<ClockalongLinearCredentialSnapshot, String> {
     auth_log("clockalong_auth_refresh_linear_credential: refresh requested");
+    linear_client_id()?;
 
     match refresh_from_storage_and_schedule(app.clone()).await {
         Ok(snapshot) => Ok(snapshot),
@@ -207,6 +208,8 @@ pub async fn disconnect<R: Runtime>(
 }
 
 pub async fn validate_stored<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
+    // Missing app configuration is not evidence that saved user tokens are invalid.
+    linear_client_id()?;
     let Some(tokens) = read_linear_tokens(app)? else {
         auth_log("validate_stored_linear_tokens: no stored tokens");
         return Ok(false);
@@ -280,8 +283,13 @@ async fn linear_access_token_snapshot<R: Runtime>(
     Ok(linear_credential_snapshot(Some(access_token)))
 }
 
-fn linear_client_id() -> String {
-    LINEAR_CLIENT_ID.to_string()
+fn linear_client_id() -> Result<&'static str, String> {
+    option_env!("CLOCKALONG_LINEAR_CLIENT_ID")
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            "Linear is not configured in this build. Contact the app maintainer.".to_string()
+        })
 }
 
 fn linear_redirect_uri_override() -> Option<String> {
@@ -589,10 +597,10 @@ async fn exchange_linear_authorization_code(
 async fn refresh_linear_tokens(
     refresh_token: &str,
 ) -> Result<LinearTokenResponse, LinearAuthError> {
-    let client_id = linear_client_id();
+    let client_id = linear_client_id().map_err(LinearAuthError::transient)?;
     let params = [
         ("grant_type", "refresh_token"),
-        ("client_id", client_id.as_str()),
+        ("client_id", client_id),
         ("refresh_token", refresh_token),
     ];
 

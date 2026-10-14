@@ -27,7 +27,7 @@ export function SettingsSection({ allowOverflow = false, title, children }: Sett
 
 type SettingsRowProps = {
   label: string
-  description: string
+  description?: string
   children: ReactNode
 }
 
@@ -36,7 +36,7 @@ export function SettingsRow({ label, description, children }: SettingsRowProps) 
     <div className="grid gap-3 p-4 sm:grid-cols-2 sm:items-center sm:gap-10">
       <div className="min-w-0 sm:text-right">
         <div className="text-sm leading-6 font-medium">{label}</div>
-        <p className="text-xs leading-5">{description}</p>
+        {!!description && <p className="text-xs leading-5">{description}</p>}
       </div>
 
       <div className="flex min-w-0 items-center">{children}</div>

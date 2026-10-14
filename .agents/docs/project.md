@@ -35,6 +35,7 @@ Vocabulary:
 - Linear: existing external provider for assigned issues and issue-based time tracking.
 - Quick Timers: existing local source for reusable ad hoc Clockify timers that do not depend on external work data.
 - GitHub: existing external provider for repository-scoped issues, pull requests, and PR-centered tracking workflows.
+- Telegram: optional account connection and chat for one selected group. Dashboard chat supports topics, replies, attachments, and media viewing. Telegram is not a source of trackable work items.
 
 ## Billing context
 

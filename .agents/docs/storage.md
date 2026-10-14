@@ -49,6 +49,26 @@ Backups include Quick Timer presets and their last-used template values. They do
 
 Clockify stores the user API key in native Stronghold storage, not in the Tauri JSON store. Linear stores OAuth token data in Stronghold as well. On startup, Rust reads those saved credentials and validates or refreshes them before setting provider auth state.
 
+Telegram stores one opaque session and one group reference bound to the account in Stronghold. The group reference includes private supergroup access data. Neither record enters Settings backups. Its frontend MTProto client uses memory storage, with no IndexedDB or localStorage credentials. QR tokens and two-step passwords remain temporary.
+
+## Telegram conversation cache
+
+Telegram history, topics, unread counts, and selected-group sender data live only in TanStack Query memory. The cache retains compact message records and scoped transfer references. It does not retain whole SDK messages or unrelated account peers. TanStack Query also holds small avatar and preview blobs. Full attachments stream to Downloads or to native temporary files for media viewing.
+
+Avatar and preview bytes also use a native disk cache that survives restarts. It stores no messages, credentials, or transfer references. Account, group, and image identity determine reuse. Storage is limited to 64 MiB and 1,024 images, with a 512 KiB limit per image. Eviction removes the least recently used images. Native code owns all paths and restricts directory and file access to the current user on Unix.
+
+Unlink, disconnect, and invalid-session cleanup remove cached images and invalidate access handles before late downloads can write. Account or group changes discard the previous image cache. Normal teardown retains cached images. Cache failure falls back to a download.
+
+Temporary media stays outside Query and Settings backups. Viewer closure releases it, normal exit removes registered files, and startup removes crash leftovers.
+
+Each account and group connection has a separate Query cache scope. Unlink, disconnect, invalid-session cleanup, and teardown cancel operations and remove that memory scope. Late responses cannot restore it.
+
+The authenticated layout retains topic selection and per-topic text, reply, and file drafts in memory. Drawer closure and Settings visits preserve these drafts. A new chat scope or departure from the authenticated layout clears them.
+
+Outgoing messages and retry inputs stay in the scoped Query cache until confirmation, dismissal, or scope cleanup. Failed sends survive drawer closure and Settings visits. Confirmed sends release their local attachment inputs. Outgoing state is not persistent.
+
+Conversation data is excluded from Settings backups, browser persistence, and MCP snapshots. Completed downloads are ordinary user files outside the cache. Unlink and disconnect leave those files intact.
+
 ## Local cache field budgets
 
 The webview enforces a per-origin localStorage quota of about 5 MB, shared by every local cache. The packaged app and the Vite dev server are separate origins, so quota exhaustion usually appears in the installed app first.

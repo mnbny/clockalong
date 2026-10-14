@@ -1,5 +1,7 @@
 .DS_Store
 .env
+.env.development
+.env.production
 .context/
 .eslintcache
 .playwright-mcp/
@@ -16,6 +18,7 @@
 *.sw?
 dist
 dist-ssr
+/.agents/research/
 src/routeTree.gen.ts
 lerna-debug.log*
 logs

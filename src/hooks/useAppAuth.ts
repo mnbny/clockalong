@@ -10,6 +10,7 @@ export async function getClockalongAuthState() {
     linearAuthenticated: false,
     githubAuthenticated: false,
     clockifyAuthenticated: false,
+    telegramAuthenticated: false,
   }
 
   if (!isTauri()) {
@@ -24,6 +25,7 @@ export const useAppAuth = createTauriReactiveStateHook({
     linearAuthenticated: false,
     githubAuthenticated: false,
     clockifyAuthenticated: false,
+    telegramAuthenticated: false,
   },
   eventName: clockalongAuthStateChangedEvent,
   getSnapshot: getClockalongAuthState,
@@ -31,6 +33,7 @@ export const useAppAuth = createTauriReactiveStateHook({
     linearAuthenticated: false,
     githubAuthenticated: false,
     clockifyAuthenticated: false,
+    telegramAuthenticated: false,
   },
   logScope: 'clockalong auth',
   stateName: 'useAppAuth',
