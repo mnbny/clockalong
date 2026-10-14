@@ -53,9 +53,21 @@ Telegram stores one opaque session and one group reference bound to the account 
 
 ## Telegram conversation cache
 
-Telegram history, topics, unread counts, and selected-group sender data live only in TanStack Query memory. The cache retains compact message records and scoped transfer references. It does not retain whole SDK messages or unrelated account peers. Small avatars and previews may enter the cache; full attachments stream to a native writer in the system Downloads folder.
+Telegram history, topics, unread counts, and selected-group sender data live only in TanStack Query memory. The cache retains compact message records and scoped transfer references. It does not retain whole SDK messages or unrelated account peers. TanStack Query also holds small avatar and preview blobs. Full attachments stream to Downloads or to native temporary files for media viewing.
 
-Each account and group connection has a separate cache scope. Unlink, disconnect, invalid-session cleanup, and teardown cancel operations and remove that scope. Late responses cannot restore it. Send hooks release attachment inputs after success. Failed sends can retain inputs for an explicit retry while the consumer remains mounted. Conversation data is excluded from Settings backups, browser persistence, and MCP snapshots. Completed downloads are ordinary user files outside the cache. Unlink and disconnect leave those files intact.
+Avatar and preview bytes also use a native disk cache that survives restarts. It stores no messages, credentials, or transfer references. Account, group, and image identity determine reuse. Storage is limited to 64 MiB and 1,024 images, with a 512 KiB limit per image. Eviction removes the least recently used images. Native code owns all paths and restricts directory and file access to the current user on Unix.
+
+Unlink, disconnect, and invalid-session cleanup remove cached images and invalidate access handles before late downloads can write. Account or group changes discard the previous image cache. Normal teardown retains cached images. Cache failure falls back to a download.
+
+Temporary media stays outside Query and Settings backups. Viewer closure releases it, normal exit removes registered files, and startup removes crash leftovers.
+
+Each account and group connection has a separate Query cache scope. Unlink, disconnect, invalid-session cleanup, and teardown cancel operations and remove that memory scope. Late responses cannot restore it.
+
+The authenticated layout retains topic selection and per-topic text, reply, and file drafts in memory. Drawer closure and Settings visits preserve these drafts. A new chat scope or departure from the authenticated layout clears them.
+
+Outgoing messages and retry inputs stay in the scoped Query cache until confirmation, dismissal, or scope cleanup. Failed sends survive drawer closure and Settings visits. Confirmed sends release their local attachment inputs. Outgoing state is not persistent.
+
+Conversation data is excluded from Settings backups, browser persistence, and MCP snapshots. Completed downloads are ordinary user files outside the cache. Unlink and disconnect leave those files intact.
 
 ## Local cache field budgets
 

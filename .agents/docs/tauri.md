@@ -72,6 +72,12 @@ Telegram attachment downloads use a narrow native writer for the system Download
 
 File work runs off the main thread. Normal app exit waits for partial-file cleanup. Hiding the macOS window leaves active transfers running.
 
+The Telegram media viewer uses a separate native writer and an isolated temporary directory. Native code generates all paths and limits asset-protocol access to that directory. The viewer downloads a complete file before playback. It detaches the media source before release. Closure and scope teardown release temporary files.
+
+Normal exit removes registered files, and startup removes crash leftovers. Completed Downloads remain separate user files.
+
+Small Telegram avatars and previews use a separate persistent native image cache. Rust owns paths, storage limits, eviction, and access handles. Reads and writes use bounded binary IPC and run off the main thread. Restoring the same group retains completed images and removes partial writes. Unlink and disconnect invalidate handles and delete cached images. The frontend cannot select filesystem paths or reuse invalidated handles.
+
 ## Auth gate
 
 Rust owns the public authentication snapshot. Native startup validates Clockify before app initialization completes. Linear and GitHub checks run independently and do not block initialization.
