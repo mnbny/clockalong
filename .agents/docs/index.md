@@ -69,7 +69,12 @@ Add each document using this format:
 #### [authentication.md](./authentication.md)
 
 - Description: Provider connections, credential ownership, startup checks, and disconnect behavior.
-- Tags: `authentication`, `clockify`, `linear`, `github`, `oauth`, `pkce`, `stronghold`
+- Tags: `authentication`, `clockify`, `linear`, `github`, `telegram`, `oauth`, `pkce`, `stronghold`
+
+#### [telegram.md](./telegram.md)
+
+- Description: Telegram login, session ownership, app configuration, and supported use.
+- Tags: `telegram`, `authentication`, `mtproto`, `qr`, `sessions`
 
 #### [linear.md](./linear.md)
 
