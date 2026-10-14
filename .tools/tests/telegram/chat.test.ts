@@ -1,18 +1,37 @@
-import { Long, PeersIndex, tl } from '@mtcute/web'
-import { InfiniteQueryObserver, QueryClient, QueryObserver } from '@tanstack/react-query'
-import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import type { HistoryCursor, HistoryPage } from '../../../src/services/telegram/chat-data'
+import type { SavedTelegramGroup } from '../../../src/services/telegram/group'
 
-import { TelegramChat } from '../src/services/telegram/chat.ts'
-import { projectMessage, topicFor } from '../src/services/telegram/chat-data.ts'
-import { telegramReadOptions, telegramSendOptions } from '../src/services/telegram/chat-queries.ts'
-import { subscribeChatUpdates } from '../src/services/telegram/chat-updates.ts'
+import {
+  type BaseTelegramClient,
+  type ConnectionState,
+  Long,
+  PeersIndex,
+  type RawUpdateInfo,
+  type RpcCallOptions,
+  tl,
+} from '@mtcute/web'
+import { type InfiniteData, InfiniteQueryObserver, QueryClient, QueryObserver } from '@tanstack/react-query'
+import { expect, onTestFinished, test } from 'vitest'
 
-const basic = { version: 1, accountId: '1', kind: 'basic', id: '123', title: 'Group' }
-const forum = { ...basic, kind: 'supergroup', accessHash: '9', forum: true }
-const chatRaw = { _: 'chat', id: 123, title: 'Group' }
-const user = { _: 'user', id: 1, firstName: 'One', accessHash: Long.ONE }
-const message = (id, extra = {}) => ({
+import { TelegramChat } from '../../../src/services/telegram/chat'
+import { projectMessage, topicFor } from '../../../src/services/telegram/chat-data'
+import { telegramReadOptions, telegramSendOptions } from '../../../src/services/telegram/chat-queries'
+import { subscribeChatUpdates } from '../../../src/services/telegram/chat-updates'
+import { deferred } from './fixtures'
+
+const basic: SavedTelegramGroup = { version: 1, accountId: '1', kind: 'basic', id: '123', title: 'Group' }
+const forum: SavedTelegramGroup = { ...basic, kind: 'supergroup', accessHash: '9', forum: true }
+const chatRaw: tl.RawChat = {
+  _: 'chat',
+  id: 123,
+  title: 'Group',
+  photo: { _: 'chatPhotoEmpty' },
+  participantsCount: 2,
+  date: 0,
+  version: 1,
+}
+const user: tl.RawUser = { _: 'user', id: 1, firstName: 'One', accessHash: Long.ONE }
+const message = (id: number, extra: Partial<tl.RawMessage> = {}): tl.RawMessage => ({
   _: 'message',
   id,
   peerId: { _: 'peerChat', chatId: 123 },
@@ -24,25 +43,20 @@ const message = (id, extra = {}) => ({
 const peers = () =>
   PeersIndex.from({
     users: [user, { _: 'user', id: 999, firstName: 'UNRELATED' }],
-    chats: [chatRaw, { _: 'chat', id: 999, title: 'UNRELATED' }],
+    chats: [chatRaw, { ...chatRaw, id: 999, title: 'UNRELATED' }],
   })
-const record = (id, extra = {}) => projectMessage(basic, message(id, extra), peers())
-const page = (...ids) => ({ items: ids.map(id => record(id)), nextBefore: { id: ids[ids.length - 1], date: 100 } })
+const record = (id: number, extra: Partial<tl.RawMessage> = {}) => projectMessage(basic, message(id, extra), peers())!
+const page = (...ids: number[]): HistoryPage => ({
+  items: ids.map(id => record(id)),
+  nextBefore: { id: ids[ids.length - 1], date: 100 },
+})
 const tick = () => new Promise(resolve => setImmediate(resolve))
-function deferred() {
-  let resolve, reject
-  const promise = new Promise((yes, no) => {
-    resolve = yes
-    reject = no
-  })
-  return { promise, resolve, reject }
-}
-function emitter() {
-  const handlers = new Set()
+function emitter<T>() {
+  const handlers = new Set<(value: T) => void>()
   return {
-    add: fn => handlers.add(fn),
-    remove: fn => handlers.delete(fn),
-    emit: value => {
+    add: (fn: (value: T) => void) => handlers.add(fn),
+    remove: (fn: (value: T) => void) => handlers.delete(fn),
+    emit: (value: T) => {
       for (const fn of handlers) fn(value)
     },
     get size() {
@@ -51,29 +65,30 @@ function emitter() {
   }
 }
 function fixture(
-  group = basic,
-  call = async request => {
+  group: SavedTelegramGroup = basic,
+  call: (request: tl.RpcMethod, options?: RpcCallOptions) => Promise<unknown> = async request => {
     throw new Error(`Unexpected ${request._}`)
   },
 ) {
   const query = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } },
   })
-  const calls = []
+  const calls: tl.RpcMethod[] = []
   const client = {
-    call: async (request, options) => {
+    call: async (request: tl.RpcMethod, options?: RpcCallOptions) => {
       calls.push(request)
       return call(request, options)
     },
-    onRawUpdate: emitter(),
-    onConnectionState: emitter(),
+    onRawUpdate: emitter<RawUpdateInfo>(),
+    onConnectionState: emitter<ConnectionState>(),
+    notifyChannelClosed: async () => true,
     startUpdatesLoop: async () => {},
     stopUpdatesLoop: async () => {},
     timers: { cancel: async () => {} },
     storage: {
       self: { getCached: () => ({ userId: 1 }) },
       peers: {
-        getCompleteById: async id =>
+        getCompleteById: async (id: number) =>
           id === 1
             ? user
             : group.kind === 'basic'
@@ -83,45 +98,57 @@ function fixture(
     },
     handleClientUpdate() {},
   }
-  return { query, client, calls, chat: new TelegramChat(client, group, query) }
+  const sdk = client as unknown as BaseTelegramClient
+  const chat = new TelegramChat(sdk, group, query)
+  onTestFinished(async () => {
+    await chat.dispose()
+    query.clear()
+  })
+  return { query, client, sdk, calls, chat }
 }
 
 test('projection rejects another peer and retains no SDK peers or unrelated entries', () => {
   const projected = record(3)
-  assert.equal(projected.view.sender.name, 'One')
-  assert.equal(JSON.stringify(projected).includes('UNRELATED'), false)
-  assert.equal(projectMessage(basic, message(3, { peerId: { _: 'peerChannel', channelId: 123 } }), peers()), null)
-  assert.equal('raw' in projected, false)
+  expect(projected.view.sender?.name).toBe('One')
+  expect(JSON.stringify(projected).includes('UNRELATED')).toBe(false)
+  expect(projectMessage(basic, message(3, { peerId: { _: 'peerChannel', channelId: 123 } }), peers())).toBe(null)
+  expect('raw' in projected).toBe(false)
 })
 test('forum routing distinguishes General ordinary replies, explicit topics, and creation', () => {
-  assert.equal(topicFor(forum, message(8, { replyTo: { _: 'messageReplyHeader', replyToMsgId: 7 } })), 1)
-  assert.equal(
+  expect(topicFor(forum, message(8, { replyTo: { _: 'messageReplyHeader', replyToMsgId: 7 } }))).toBe(1)
+  expect(
     topicFor(
       forum,
       message(8, { replyTo: { _: 'messageReplyHeader', replyToMsgId: 7, forumTopic: true, replyToTopId: 4 } }),
     ),
-    4,
-  )
-  assert.equal(topicFor(forum, { ...message(8), _: 'messageService', action: { _: 'messageActionTopicCreate' } }), 8)
+  ).toBe(4)
+  expect(
+    topicFor(forum, {
+      ...message(8),
+      _: 'messageService',
+      action: { _: 'messageActionTopicCreate', title: 'Topic', iconColor: 0 },
+    }),
+  ).toBe(8)
 })
 test('group-level protection prevents attachment and thumbnail downloads', () => {
-  const media = {
+  const media: tl.RawMessageMediaPhoto = {
     _: 'messageMediaPhoto',
     photo: {
       _: 'photo',
       id: Long.ONE,
       accessHash: Long.ONE,
       dcId: 1,
+      date: 0,
       fileReference: new Uint8Array(),
       sizes: [{ _: 'photoSize', type: 's', w: 10, h: 10, size: 100 }],
     },
   }
   const protectedPeers = PeersIndex.from({ users: [user], chats: [{ ...chatRaw, noforwards: true }] })
   const result = projectMessage(basic, message(4, { media }), protectedPeers)
-  assert.equal(result.view.protected, true)
-  assert.equal(result.view.attachment.downloadable, false)
-  assert.equal(result.file, undefined)
-  assert.equal(result.preview, undefined)
+  expect(result?.view.protected).toBe(true)
+  expect(result?.view.attachment?.downloadable).toBe(false)
+  expect(result?.file).toBe(undefined)
+  expect(result?.preview).toBe(undefined)
 })
 test('history cursor uses last raw ID exclusive, including short pages, without read side effects', async () => {
   const f = fixture(basic, async () => ({
@@ -133,23 +160,22 @@ test('history cursor uses last raw ID exclusive, including short pages, without 
     chats: [chatRaw],
   }))
   const result = await f.chat.fetchHistory({ topicId: null }, { id: 100, date: 101 })
-  assert.equal(f.calls[0].offsetId, 100)
-  assert.deepEqual(result.nextBefore, { id: 37, date: 100 })
-  assert.equal(result.countExact, false)
-  assert.equal(f.calls.length, 1)
+  expect(f.calls[0]).toMatchObject({ _: 'messages.getHistory', offsetId: 100 })
+  expect(result.nextBefore).toStrictEqual({ id: 37, date: 100 })
+  expect(result.countExact).toBe(false)
+  expect(f.calls.length).toBe(1)
   await f.chat.dispose()
 })
 test('General uses getReplies, including empty-page termination', async () => {
   const f = fixture(forum, async () => ({ _: 'messages.messages', messages: [], chats: [], users: [] }))
-  assert.deepEqual(await f.chat.fetchHistory({ topicId: 1 }, null), {
+  expect(await f.chat.fetchHistory({ topicId: 1 }, null)).toStrictEqual({
     items: [],
     nextBefore: undefined,
     serverCount: 0,
     countExact: true,
   })
-  assert.equal(f.calls[0]._, 'messages.getReplies')
-  assert.equal(f.calls[0].msgId, 1)
-  f.client.notifyChannelClosed = async () => {}
+  expect(f.calls[0]._).toBe('messages.getReplies')
+  expect(f.calls[0]).toMatchObject({ msgId: 1 })
   await f.chat.dispose()
 })
 test('healthy summary accepts absent optional left flags and preserves exact unread counters', async () => {
@@ -168,9 +194,9 @@ test('healthy summary accepts absent optional left flags and preserves exact unr
     chats: [chatRaw],
   }))
   const result = await f.chat.fetchSummary()
-  assert.equal(result.unreadCount, 12)
-  assert.equal(result.readInboxMaxId, 40)
-  assert.equal(result.canSendText, true)
+  expect(result.unreadCount).toBe(12)
+  expect(result.readInboxMaxId).toBe(40)
+  expect(result.canSendText).toBe(true)
   await f.chat.dispose()
 })
 test('short topic counters are replaced with targeted full metadata', async () => {
@@ -191,20 +217,19 @@ test('short topic counters are replaced with targeted full metadata', async () =
       : { topics: [full], messages: [message(17)], users: [], chats: [] },
   )
   const result = await f.chat.fetchTopics(null)
-  assert.equal(result.items[0].unreadCount, 9)
-  assert.equal(f.calls[1]._, 'messages.getForumTopicsByID')
-  f.client.notifyChannelClosed = async () => {}
+  expect(result.items[0].unreadCount).toBe(9)
+  expect(f.calls[1]._).toBe('messages.getForumTopicsByID')
   await f.chat.dispose()
 })
 test('cancelled transport result and disposed scope cannot return history or revive queries', async () => {
-  const wait = deferred()
+  const wait = deferred<tl.messages.TypeMessages>()
   const f = fixture(basic, () => wait.promise)
   const pending = f.chat.fetchHistory({ topicId: null }, null)
   const disposal = f.chat.dispose()
-  wait.resolve({ _: 'messages.messages', messages: [message(3)], users: [user], chats: [chatRaw] })
-  await assert.rejects(pending, error => error.category === 'unavailable')
+  wait.resolve({ _: 'messages.messages', topics: [], messages: [message(3)], users: [user], chats: [chatRaw] })
+  await expect(pending).rejects.toMatchObject({ category: 'unavailable' })
   await disposal
-  assert.equal(f.query.getQueryCache().getAll().length, 0)
+  expect(f.query.getQueryCache().getAll().length).toBe(0)
 })
 test('upsert keeps pages/cursors, deduplicates echoes and preserves newer edits', async () => {
   const f = fixture()
@@ -214,16 +239,13 @@ test('upsert keeps pages/cursors, deduplicates echoes and preserves newer edits'
   await f.chat.cache.upsert(record(10))
   await f.chat.cache.upsert(record(8, { message: 'edited', editDate: 200 }))
   await f.chat.cache.upsert(record(8))
-  const data = f.query.getQueryData(key)
-  assert.deepEqual(
-    data.pages.map(page => page.items.map(item => item.view.id)),
-    [
-      [10, 9, 8],
-      [7, 6],
-    ],
-  )
-  assert.equal(data.pages[0].items[2].view.text, 'edited')
-  assert.deepEqual(data.pageParams, [null, { id: 8, date: 100 }])
+  const data = f.query.getQueryData<InfiniteData<HistoryPage>>(key)!
+  expect(data.pages.map(page => page.items.map(item => item.view.id))).toStrictEqual([
+    [10, 9, 8],
+    [7, 6],
+  ])
+  expect(data.pages[0].items[2].view.text).toBe('edited')
+  expect(data.pageParams).toStrictEqual([null, { id: 8, date: 100 }])
   await f.chat.dispose()
 })
 test('deletion tombstone prevents delayed send result resurrection', async () => {
@@ -232,19 +254,18 @@ test('deletion tombstone prevents delayed send result resurrection', async () =>
   f.query.setQueryData(key, { pages: [page(9, 8)], pageParams: [null] })
   await f.chat.cache.remove([9])
   await f.chat.cache.upsert(record(9))
-  assert.deepEqual(
-    f.query.getQueryData(key).pages[0].items.map(item => item.view.id),
-    [8],
-  )
+  expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)!.pages[0].items.map(item => item.view.id)).toStrictEqual([
+    8,
+  ])
   await f.chat.dispose()
 })
 test('upsert awaits cancellation reversion during next-page fetch and keeps cursor alignment', async () => {
   const f = fixture()
-  const wait = deferred()
+  const wait = deferred<HistoryPage>()
   const key = f.chat.cache.keys.history(null)
   const observer = new InfiniteQueryObserver(f.query, {
     queryKey: key,
-    initialPageParam: null,
+    initialPageParam: null as HistoryCursor | null,
     queryFn: ({ pageParam, signal }) => {
       void signal
       return pageParam ? wait.promise : Promise.resolve(page(9, 8))
@@ -252,19 +273,17 @@ test('upsert awaits cancellation reversion during next-page fetch and keeps curs
     getNextPageParam: page => page.nextBefore,
   })
   const unsubscribe = observer.subscribe(() => {})
+  onTestFinished(unsubscribe)
   await observer.refetch()
   const pending = observer.fetchNextPage()
   await tick()
   await f.chat.cache.upsert(record(10))
   wait.resolve(page(7, 6))
   await pending
-  const data = f.query.getQueryData(key)
-  assert.deepEqual(
-    data.pages[0].items.map(item => item.view.id),
-    [10, 9, 8],
-  )
-  assert.equal(data.pages.length, data.pageParams.length)
-  assert.equal(data.pages.length, 1)
+  const data = f.query.getQueryData<InfiniteData<HistoryPage>>(key)!
+  expect(data.pages[0].items.map(item => item.view.id)).toStrictEqual([10, 9, 8])
+  expect(data.pages.length).toBe(data.pageParams.length)
+  expect(data.pages.length).toBe(1)
   unsubscribe()
   await f.chat.dispose()
 })
@@ -273,12 +292,13 @@ test('updates refresh observed summary without any history cache', async () => {
   let fetches = 0
   const observer = new QueryObserver(f.query, { queryKey: f.chat.cache.keys.summary(), queryFn: async () => ++fetches })
   const unsubscribe = observer.subscribe(() => {})
+  onTestFinished(unsubscribe)
   await observer.refetch()
   await f.chat.cache.upsert(record(9))
   await tick()
   await new Promise(resolve => setTimeout(resolve, 5))
-  assert.ok(fetches >= 2)
-  assert.equal(f.query.getQueryData(f.chat.cache.keys.history(null)), undefined)
+  expect(fetches >= 2).toBeTruthy()
+  expect(f.query.getQueryData(f.chat.cache.keys.history(null))).toBe(undefined)
   unsubscribe()
   await f.chat.dispose()
 })
@@ -287,31 +307,38 @@ test('peerless delete never touches channel with equal message IDs; unrelated ev
   const key = f.chat.cache.keys.history(1)
   f.query.setQueryData(key, { pages: [page(9)], pageParams: [null] })
   const remove = subscribeChatUpdates(
-    f.client,
+    f.sdk,
     forum,
     f.chat.cache,
     () => true,
     async () => {},
   )
-  f.client.onRawUpdate.emit({ update: { _: 'updateDeleteMessages', messages: [9] }, peers: peers() })
   f.client.onRawUpdate.emit({
-    update: { _: 'updateNewChannelMessage', message: message(10, { peerId: { _: 'peerChannel', channelId: 999 } }) },
+    update: { _: 'updateDeleteMessages', messages: [9], pts: 1, ptsCount: 1 },
+    peers: peers(),
+  })
+  f.client.onRawUpdate.emit({
+    update: {
+      _: 'updateNewChannelMessage',
+      pts: 1,
+      ptsCount: 1,
+      message: message(10, { peerId: { _: 'peerChannel', channelId: 999 } }),
+    },
     peers: peers(),
   })
   await tick()
-  assert.equal(f.query.getQueryData(key).pages[0].items.length, 1)
+  expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)!.pages[0].items.length).toBe(1)
   remove()
-  f.client.notifyChannelClosed = async () => {}
   await f.chat.dispose()
 })
 test('unknown peerless delete cancels initial basic history and restarts newest', async () => {
   const f = fixture()
-  const first = deferred()
+  const first = deferred<HistoryPage>()
   let calls = 0
   const key = f.chat.cache.keys.history(null)
   const observer = new InfiniteQueryObserver(f.query, {
     queryKey: key,
-    initialPageParam: null,
+    initialPageParam: null as HistoryCursor | null,
     queryFn: ({ signal }) => {
       void signal
       return ++calls === 1 ? first.promise : Promise.resolve(page(8))
@@ -319,22 +346,25 @@ test('unknown peerless delete cancels initial basic history and restarts newest'
     getNextPageParam: page => page.nextBefore,
   })
   const unsubscribe = observer.subscribe(() => {})
+  onTestFinished(unsubscribe)
   const remove = subscribeChatUpdates(
-    f.client,
+    f.sdk,
     basic,
     f.chat.cache,
     () => true,
     async () => {},
   )
   await tick()
-  f.client.onRawUpdate.emit({ update: { _: 'updateDeleteMessages', messages: [9] }, peers: peers() })
+  f.client.onRawUpdate.emit({
+    update: { _: 'updateDeleteMessages', messages: [9], pts: 1, ptsCount: 1 },
+    peers: peers(),
+  })
   await tick()
   first.resolve(page(9, 8))
   await tick()
-  assert.deepEqual(
-    f.query.getQueryData(key).pages[0].items.map(item => item.view.id),
-    [8],
-  )
+  expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)!.pages[0].items.map(item => item.view.id)).toStrictEqual([
+    8,
+  ])
   remove()
   unsubscribe()
   await f.chat.dispose()
@@ -344,11 +374,11 @@ test('recovery discards stale tail and all old pageParams, including inactive hi
   const key = f.chat.cache.keys.history(null)
   f.query.setQueryData(key, { pages: [page(9), page(7)], pageParams: [null, { id: 9, date: 100 }] })
   await f.chat.cache.recover()
-  assert.equal(f.query.getQueryData(key), undefined)
+  expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)!).toBe(undefined)
   await f.chat.dispose()
 })
 test('read acknowledgement is explicit, scoped, and coalesces increasing General maxima', async () => {
-  const first = deferred()
+  const first = deferred<boolean>()
   const f = fixture(forum, _request => (f.calls.length === 1 ? first.promise : Promise.resolve(true)))
   const key = f.chat.cache.keys.history(1)
   f.query.setQueryData(key, {
@@ -359,15 +389,16 @@ test('read acknowledgement is explicit, scoped, and coalesces increasing General
   const b = f.chat.acknowledgeRead({ topicId: 1 }, 9)
   first.resolve(true)
   await Promise.all([a, b])
-  assert.deepEqual(
-    f.calls.map(call => [call._, call.msgId, call.readMaxId]),
-    [
-      ['messages.readDiscussion', 1, 8],
-      ['messages.readDiscussion', 1, 9],
-    ],
-  )
-  assert.throws(() => f.chat.acknowledgeRead({ topicId: 1 }, 999))
-  f.client.notifyChannelClosed = async () => {}
+  expect(
+    f.calls.map(call => {
+      if (call._ !== 'messages.readDiscussion') expect.fail('Unexpected read RPC')
+      return [call._, call.msgId, call.readMaxId]
+    }),
+  ).toStrictEqual([
+    ['messages.readDiscussion', 1, 8],
+    ['messages.readDiscussion', 1, 9],
+  ])
+  expect(() => f.chat.acknowledgeRead({ topicId: 1 }, 999)).toThrow()
   await f.chat.dispose()
 })
 test('send retry keeps random ID and reconciles canonical short response without local echo', async () => {
@@ -385,13 +416,14 @@ test('send retry keeps random ID and reconciles canonical short response without
   const options = telegramSendOptions(f.chat)
   const result = await f.query.getMutationCache().build(f.query, options).execute({ operation })
   await f.query.getMutationCache().build(f.query, options).execute({ operation })
-  assert.equal(result.view.id, 10)
-  assert.equal(f.calls[0].randomId.toString(), f.calls[1].randomId.toString())
-  assert.deepEqual(
-    f.query.getQueryData(key).pages[0].items.map(item => item.view.id),
-    [10, 9],
-  )
-  assert.equal(Object.isFrozen(operation), true)
+  expect(result.view.id).toBe(10)
+  const first = f.calls[0]
+  if (first._ !== 'messages.sendMessage') expect.fail('Unexpected send RPC')
+  expect(f.calls[1]).toMatchObject({ randomId: first.randomId })
+  expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)!.pages[0].items.map(item => item.view.id)).toStrictEqual([
+    10, 9,
+  ])
+  expect(Object.isFrozen(operation)).toBe(true)
   await f.chat.dispose()
 })
 test('send transport leaves cache reconciliation to the success callback', async () => {
@@ -406,11 +438,13 @@ test('send transport leaves cache reconciliation to the success callback', async
   const key = f.chat.cache.keys.history(null)
   f.query.setQueryData(key, { pages: [page(9)], pageParams: [null] })
   const options = telegramSendOptions(f.chat)
-  const result = await options.mutationFn({ operation: f.chat.createSend({ topicId: null, text: 'hello' }) })
-  assert.equal(f.query.getQueryData(key).pages[0].items.length, 1)
+  const variables = { operation: f.chat.createSend({ topicId: null, text: 'hello' }) }
+  const context = { client: f.query, meta: undefined, mutationKey: options.mutationKey }
+  const result = await options.mutationFn!(variables, context)
+  expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)!.pages[0].items.length).toBe(1)
   await f.chat.dispose()
-  await options.onSuccess(result)
-  assert.equal(f.query.getQueryCache().getAll().length, 0)
+  await options.onSuccess!(result, variables, undefined, context)
+  expect(f.query.getQueryCache().getAll().length).toBe(0)
 })
 test('read success refreshes unread metadata through the mutation callback', async () => {
   const f = fixture(forum, async () => true)
@@ -421,30 +455,30 @@ test('read success refreshes unread metadata through the mutation callback', asy
   let fetches = 0
   const observer = new QueryObserver(f.query, { queryKey: f.chat.cache.keys.summary(), queryFn: async () => ++fetches })
   const unsubscribe = observer.subscribe(() => {})
+  onTestFinished(unsubscribe)
   await observer.refetch()
   const before = fetches
   await f.query.getMutationCache().build(f.query, telegramReadOptions(f.chat)).execute({ topicId: 1, maxId: 9 })
   await new Promise(resolve => setTimeout(resolve, 5))
-  assert.ok(fetches > before)
+  expect(fetches > before).toBeTruthy()
   unsubscribe()
-  f.client.notifyChannelClosed = async () => {}
   await f.chat.dispose()
 })
 test('cancelled final text RPC reports unknown outcome, and old scope cannot reuse operation', async () => {
   const f = fixture(
     basic,
-    (_request, { abortSignal }) =>
+    (_request, { abortSignal } = {}) =>
       new Promise((_, reject) =>
-        abortSignal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))),
+        abortSignal!.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))),
       ),
   )
   const operation = f.chat.createSend({ topicId: null, text: 'hello' })
   const sending = f.chat.send(operation)
   await tick()
   f.chat.cancel(operation.id)
-  await assert.rejects(sending, error => error.category === 'unknown-send')
+  await expect(sending).rejects.toMatchObject({ category: 'unknown-send' })
   const newer = fixture()
-  await assert.rejects(newer.chat.send(operation), error => error.category === 'invalid-input')
+  await expect(newer.chat.send(operation)).rejects.toMatchObject({ category: 'invalid-input' })
   await f.chat.dispose()
   await newer.chat.dispose()
 })
@@ -457,12 +491,12 @@ test('dispose during startup removes handlers immediately and stops after startu
     stopped++
   }
   const started = f.chat.start()
-  assert.equal(f.client.onRawUpdate.size, 1)
+  expect(f.client.onRawUpdate.size).toBe(1)
   const disposed = f.chat.dispose()
-  assert.equal(f.client.onRawUpdate.size, 0)
+  expect(f.client.onRawUpdate.size).toBe(0)
   wait.resolve()
   await Promise.all([started, disposed])
-  assert.equal(stopped, 1)
+  expect(stopped).toBe(1)
 })
 
 test('read acknowledgements never lower an already confirmed marker', async () => {
@@ -473,18 +507,17 @@ test('read acknowledgements never lower an already confirmed marker', async () =
   })
   await f.chat.acknowledgeRead({ topicId: 1 }, 9)
   await f.chat.acknowledgeRead({ topicId: 1 }, 8)
-  assert.equal(f.calls.length, 1)
-  f.client.notifyChannelClosed = async () => {}
+  expect(f.calls.length).toBe(1)
   await f.chat.dispose()
 })
 test('initial-fetch cancellation restarts rather than fabricating an update-only page', async () => {
   const f = fixture()
-  const first = deferred()
+  const first = deferred<HistoryPage>()
   let calls = 0
   const key = f.chat.cache.keys.history(null)
   const observer = new InfiniteQueryObserver(f.query, {
     queryKey: key,
-    initialPageParam: null,
+    initialPageParam: null as HistoryCursor | null,
     queryFn: ({ signal }) => {
       void signal
       return ++calls === 1 ? first.promise : Promise.resolve(page(10, 9))
@@ -492,14 +525,14 @@ test('initial-fetch cancellation restarts rather than fabricating an update-only
     getNextPageParam: page => page.nextBefore,
   })
   const unsubscribe = observer.subscribe(() => {})
+  onTestFinished(unsubscribe)
   await tick()
   await f.chat.cache.upsert(record(10))
   first.resolve(page(9))
   await tick()
-  assert.deepEqual(
-    f.query.getQueryData(key).pages[0].items.map(item => item.view.id),
-    [10, 9],
-  )
+  expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)!.pages[0].items.map(item => item.view.id)).toStrictEqual([
+    10, 9,
+  ])
   unsubscribe()
   await f.chat.dispose()
 })
@@ -509,7 +542,7 @@ test('safe upload validation categories survive the runtime boundary', async () 
     { topicId: null, text: '' },
     { source: new Blob([]), name: 'empty', mime: 'application/octet-stream', mode: 'original' },
   )
-  await assert.rejects(f.chat.send(operation), error => error.category === 'invalid-file')
+  await expect(f.chat.send(operation)).rejects.toMatchObject({ category: 'invalid-file' })
   await f.chat.dispose()
 })
 test('explicit startup revoked rejection invokes lifecycle callback without relying on SDK onError', async () => {
@@ -519,7 +552,7 @@ test('explicit startup revoked rejection invokes lifecycle callback without rely
     throw new tl.RpcError(401, 'SESSION_REVOKED')
   }
   const chat = new TelegramChat(
-    f.client,
+    f.sdk,
     basic,
     f.query,
     () => {},
@@ -528,7 +561,7 @@ test('explicit startup revoked rejection invokes lifecycle callback without rely
     },
   )
   await chat.start()
-  assert.equal(revoked, 1)
+  expect(revoked).toBe(1)
   await chat.dispose()
   await f.chat.dispose()
 })
