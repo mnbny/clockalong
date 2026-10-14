@@ -26,7 +26,7 @@ Clockify stays in charge of the time entries. Clockalong gives you a smaller, fa
 - Clockify is required and keeps the actual time entries.
 - Linear can show assigned issues and start issue-based timers.
 - GitHub can show selected repositories, issues, and pull requests, with persisted multi-author dashboard filtering.
-- Telegram is optional and supports QR login, two-step verification, session restore, and disconnect. Chat features are not included.
+- Telegram is optional and supports QR login, saved sessions, and Dashboard chat for one connected group, with topics, replies, and attachments.
 - Quick Timers are local presets for reusable timers that are not tied to another app.
 
 ## Authentication
