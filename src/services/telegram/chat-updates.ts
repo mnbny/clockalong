@@ -16,6 +16,10 @@ export function subscribeChatUpdates(
   let interrupted = false
   const raw = ({ update, peers }: RawUpdateInfo) => {
     if (!active()) return
+    if (update._ === 'updateMessageID') {
+      void cache.confirmSend(update.randomId.toString(), update.id)
+      return
+    }
     if (
       update._ === 'updateNewMessage' ||
       update._ === 'updateNewChannelMessage' ||
@@ -35,7 +39,9 @@ export function subscribeChatUpdates(
     }
     if (update._ === 'updateDeleteMessages') {
       if (group.kind === 'basic') {
-        const known = update.messages.filter(id => !!cache.findMessage(id))
+        const known = update.messages.filter(
+          id => !!cache.findMessage(id) || cache.outgoing().some(item => item.serverId === id),
+        )
         if (known.length) void cache.remove(known)
         if (known.length !== update.messages.length) void cache.recover()
       }
