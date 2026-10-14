@@ -12,6 +12,7 @@ catalog:
   '@hookform/resolvers': 5.4.0
   '@linear/sdk': 87.0.0
   '@mantine/hooks': 9.4.0
+  '@mtcute/web': 0.32.4
   '@octokit/rest': 22.0.1
   '@tabler/icons-react': 3.44.0
   '@tailwindcss/vite': 4.3.1
@@ -54,6 +55,7 @@ catalog:
   prettier-plugin-packagejson: 3.0.2
   prettier-plugin-sh: 0.18.1
   prettier-plugin-tailwindcss: 0.8.0
+  qrcode.react: 4.2.0
   react: 19.2.7
   react-dom: 19.2.7
   react-hook-form: 7.80.0

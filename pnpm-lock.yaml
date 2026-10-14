@@ -27,6 +27,9 @@ catalogs:
     '@mantine/hooks':
       specifier: 9.4.0
       version: 9.4.0
+    '@mtcute/web':
+      specifier: 0.32.4
+      version: 0.32.4
     '@octokit/rest':
       specifier: 22.0.1
       version: 22.0.1
@@ -153,6 +156,9 @@ catalogs:
     prettier-plugin-tailwindcss:
       specifier: 0.8.0
       version: 0.8.0
+    qrcode.react:
+      specifier: 4.2.0
+      version: 4.2.0
     react:
       specifier: 19.2.7
       version: 19.2.7
@@ -218,6 +224,9 @@ importers:
       '@mantine/hooks':
         specifier: 'catalog:'
         version: 9.4.0(react@19.2.7)
+      '@mtcute/web':
+        specifier: 'catalog:'
+        version: 0.32.4
       '@octokit/rest':
         specifier: 'catalog:'
         version: 22.0.1
@@ -272,6 +281,9 @@ importers:
       humanize-duration:
         specifier: 'catalog:'
         version: 3.33.2
+      qrcode.react:
+        specifier: 'catalog:'
+        version: 4.2.0(react@19.2.7)
       react:
         specifier: 'catalog:'
         version: 19.2.7
@@ -689,6 +701,15 @@ packages:
   '@fontsource-variable/oxanium@5.2.8':
     resolution: {integrity: sha512-W3HWxRLXVB6yox3dgm1DIGOp98pz8KglwiM6/2BsMopvZrg98mXI9citFWz2pUX0FOOLwf8fmHxX+KrIn+6BoA==}
 
+  '@fuman/io@0.0.21':
+    resolution: {integrity: sha512-8tSqmAUBWFdYrQUednl3I3VxLudaVXfyCqmPyiaDAXgmABTnjD2LvbXoJ7StrV9bvlrwVmwE+smwiKXSJtji0g==}
+
+  '@fuman/net@0.0.21':
+    resolution: {integrity: sha512-4PbDA2f6SfR5CtOs7omZNrrRh1X23KQBI0XmpL/r1fVd726H6+IfhDRxm/fgNKlLgMwe6pGbI/hzt8JU0y0sgw==}
+
+  '@fuman/utils@0.0.21':
+    resolution: {integrity: sha512-2N5bPK18uGgZRans+ZQ33SE+xSGj4BZNnJbSUnGdH/i4ADTdz/ziC/16Qy3/Jqzbrwr21IpuKObnELp8DDfkDQ==}
+
   '@graphql-typed-document-node/core@3.2.0':
     resolution: {integrity: sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ==}
     peerDependencies:
@@ -749,6 +770,21 @@ packages:
     resolution: {integrity: sha512-SUkge8KlhyLoSSKhEHERx7jLotNu632kldhQPlLn5kbOuJixoEbU8fKcuwpXSsZTtzRgCCT2IkoN+rORhtZTHg==}
     peerDependencies:
       react: ^19.2.0
+
+  '@mtcute/core@0.32.4':
+    resolution: {integrity: sha512-Qe3lcIVSbpUNPfc6uS2FS9vzpR2RuzbPQyT3v8LOZz1cWpVn9IsY5SdewF5vKPpF1tmId/i7rv2F0eT510hTaw==}
+
+  '@mtcute/file-id@0.32.0':
+    resolution: {integrity: sha512-afg/w6KKEn85xenuHVF4N8ysWy3vYZ7VF2sseUM3OXzLdZgVifRnNTdVUmU2kilpRYsR/B0Qvyu7Sif2N7H47A==}
+
+  '@mtcute/tl-runtime@0.32.0':
+    resolution: {integrity: sha512-9TdepMheddBismZDYVng9a0m+D4TqUPWcFc83JiArsXv+pmQiNWzXcoyoTUODUA35i6VOIdO5CuNd8hnKoZHpg==}
+
+  '@mtcute/wasm@0.32.0':
+    resolution: {integrity: sha512-Hkp+h7OYN1GPpJ3HYeQfBM/OgvF0oWCuS2OY0shwigQmNJib2gX7fIH+KDd5UsRNuHptWASawMjKA+wLnGpSvw==}
+
+  '@mtcute/web@0.32.4':
+    resolution: {integrity: sha512-kUD8sPzX6D+5h42sX15sN4QBEF+etDpQoJjYw4w1FTcNIlevhyAuokwJ+kRQJQL1TakwMcb23Fzr9mCB75UImQ==}
 
   '@napi-rs/wasm-runtime@1.1.6':
     resolution: {integrity: sha512-ZLv/JdUfkvOy9eCnnBaGfiO+XimbjebAeO+MRQqD/B+FR1tnRN0tpKSJHRbE8sFfS6aqsXZ67TQjfwfsxULVbg==}
@@ -1233,6 +1269,9 @@ packages:
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
+
+  '@types/events@3.0.0':
+    resolution: {integrity: sha512-EaObqwIvayI5a8dCzhFrjKzVwKLxjoG9T6Ppd5CEo07LRKfQ8Yokw54r5+Wq7FaBQ+yXRvQAYPrHwya1/UFt9g==}
 
   '@types/fs-extra@9.0.13':
     resolution: {integrity: sha512-nEnwB++1u5lVDM2UI4c1+5R+FYaKfaAzS4OococimjVm3nQw3TuzH5UNsocrcTBbhnerblyHj4A49qXbIiZdpA==}
@@ -2254,6 +2293,9 @@ packages:
     resolution: {integrity: sha512-ja1E3yCr9i/0hmBVaM0bfwDjnGy8I/s6PP4DFp+yP+a+mrHO4Rm7DtmnqROTUkHIkqffC84YY7AeqX6oFk0WFg==}
     engines: {node: '>=18'}
 
+  long@5.3.2:
+    resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
+
   loose-envify@1.4.0:
     resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
     hasBin: true
@@ -2508,6 +2550,11 @@ packages:
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
+
+  qrcode.react@4.2.0:
+    resolution: {integrity: sha512-QpgqWi8rD9DsS9EP3z7BT+5lY5SFhsqGjpgW5DY/i3mK4M9DTBNz3ErMi8BWYEfI3L0d8GIbGmcdFAS1uIRGjA==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   react-dom@19.2.7:
     resolution: {integrity: sha512-t0BRVXvbiE/o20Hfw669rLbMCDWtYZLvmJigy2f0MxsXF+71pxhR3xOkspmsO8h3ZlNzyibAmtCa3l4lYKk6gQ==}
@@ -3234,6 +3281,17 @@ snapshots:
 
   '@fontsource-variable/oxanium@5.2.8': {}
 
+  '@fuman/io@0.0.21':
+    dependencies:
+      '@fuman/utils': 0.0.21
+
+  '@fuman/net@0.0.21':
+    dependencies:
+      '@fuman/io': 0.0.21
+      '@fuman/utils': 0.0.21
+
+  '@fuman/utils@0.0.21': {}
+
   '@graphql-typed-document-node/core@3.2.0(graphql@17.0.1)':
     dependencies:
       graphql: 17.0.1
@@ -3294,6 +3352,36 @@ snapshots:
   '@mantine/hooks@9.4.0(react@19.2.7)':
     dependencies:
       react: 19.2.7
+
+  '@mtcute/core@0.32.4':
+    dependencies:
+      '@fuman/io': 0.0.21
+      '@fuman/net': 0.0.21
+      '@fuman/utils': 0.0.21
+      '@mtcute/file-id': 0.32.0
+      '@mtcute/tl-runtime': 0.32.0
+      '@types/events': 3.0.0
+      long: 5.3.2
+
+  '@mtcute/file-id@0.32.0':
+    dependencies:
+      '@fuman/utils': 0.0.21
+      '@mtcute/tl-runtime': 0.32.0
+      long: 5.3.2
+
+  '@mtcute/tl-runtime@0.32.0':
+    dependencies:
+      '@fuman/utils': 0.0.21
+      long: 5.3.2
+
+  '@mtcute/wasm@0.32.0': {}
+
+  '@mtcute/web@0.32.4':
+    dependencies:
+      '@fuman/net': 0.0.21
+      '@fuman/utils': 0.0.21
+      '@mtcute/core': 0.32.4
+      '@mtcute/wasm': 0.32.0
 
   '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
     dependencies:
@@ -3703,6 +3791,8 @@ snapshots:
   '@types/esrecurse@4.3.1': {}
 
   '@types/estree@1.0.9': {}
+
+  '@types/events@3.0.0': {}
 
   '@types/fs-extra@9.0.13':
     dependencies:
@@ -4873,6 +4963,8 @@ snapshots:
       is-unicode-supported: 2.1.0
       yoctocolors: 2.1.2
 
+  long@5.3.2: {}
+
   loose-envify@1.4.0:
     dependencies:
       js-tokens: 4.0.0
@@ -5082,6 +5174,10 @@ snapshots:
   proxy-from-env@2.1.0: {}
 
   punycode@2.3.1: {}
+
+  qrcode.react@4.2.0(react@19.2.7):
+    dependencies:
+      react: 19.2.7
 
   react-dom@19.2.7(react@19.2.7):
     dependencies:
