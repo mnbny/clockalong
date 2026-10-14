@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { beforeEach, mock, test } from 'node:test'
 
 import { auth } from '../src/services/tauri/auth-client.ts'
+import { telegramGroup } from '../src/services/tauri/telegram-group-client.ts'
 import { TelegramSession } from '../src/services/telegram/session.ts'
 
 const user = { _: 'user', id: 1, firstName: 'Test', self: true }
@@ -33,6 +34,9 @@ beforeEach(() => {
     events.push('delete')
     saved = false
   }
+  mock.method(telegramGroup, 'read', async () => null)
+  mock.method(telegramGroup, 'save', async () => {})
+  mock.method(telegramGroup, 'remove', async () => {})
   mock.method(auth, 'getTelegramCredential', async () => credentials)
   mock.method(auth, 'connectTelegram', () => save())
   mock.method(auth, 'disconnectTelegram', () => remove())
@@ -181,4 +185,137 @@ test('missing app configuration creates no client or protocol request', async ()
   await session.restore()
   assert.match(reason, /not configured/)
   assert.equal(BaseTelegramClient.prototype.call.mock.callCount(), 0)
+})
+
+const basic = { version: 1, accountId: '1', kind: 'basic', id: '123', title: 'Team' }
+
+test('group restore failure preserves authenticated account and saved group for retry', async () => {
+  credentials.session = 'saved-session'
+  mock.method(telegramGroup, 'read', async () => basic)
+  const states = []
+  const session = new TelegramSession(
+    () => {},
+    () => {},
+    state => states.push(state),
+  )
+  await session.restore()
+  assert.equal(saved, true)
+  assert.ok(!events.includes('unavailable'))
+  assert.equal(states.at(-1).status, 'unavailable')
+  assert.equal(telegramGroup.remove.mock.callCount(), 0)
+  session.dispose()
+})
+
+test('fresh QR authorization removes old group first; failed removal prevents login', async () => {
+  mock.method(telegramGroup, 'remove', async () => {
+    throw new Error('private storage error')
+  })
+  const session = new TelegramSession(
+    () => {},
+    () => {},
+  )
+  await assert.rejects(session.connect(callbacks), /Could not connect/)
+  assert.equal(BaseTelegramClient.prototype.call.mock.callCount(), 0)
+})
+
+test('no saved session discards an orphan group', async () => {
+  const session = new TelegramSession(
+    () => {},
+    () => {},
+  )
+  await session.restore()
+  assert.equal(telegramGroup.remove.mock.callCount(), 1)
+})
+
+test('failed unlink does not clear the selection or claim success', async () => {
+  const states = []
+  const session = new TelegramSession(
+    () => {},
+    () => {},
+    state => states.push(state),
+  )
+  mock.method(telegramGroup, 'remove', async () => {
+    throw new Error('private storage error')
+  })
+  await assert.rejects(session.unlinkGroup(), /Could not remove/)
+  assert.equal(states.length, 0)
+})
+
+test('pending group verification cannot race unlink or disconnect and disposed results never save', async () => {
+  const pending = deferred()
+  const session = new TelegramSession(
+    () => {},
+    () => {},
+  )
+  await session.connect(callbacks)
+  mock.method(BaseTelegramClient.prototype, 'call', async request => {
+    if (request._ === 'messages.checkChatInvite')
+      return { _: 'chatInviteAlready', chat: { _: 'chat', id: 123, title: 'Team' } }
+    assert.equal(request._, 'messages.getChats')
+    return pending.promise
+  })
+  const connecting = session.connectGroup('https://t.me/+example')
+  await assert.rejects(session.unlinkGroup(), /Wait/)
+  await assert.rejects(session.disconnect(), /Wait/)
+  session.dispose()
+  pending.resolve({ _: 'messages.chats', chats: [{ _: 'chat', id: 123, title: 'Team' }] })
+  await assert.rejects(connecting)
+  assert.equal(telegramGroup.save.mock.callCount(), 0)
+})
+
+test('offline startup keeps safe group identity and permits local unlink', async () => {
+  credentials.session = 'saved-session'
+  mock.method(telegramGroup, 'read', async () => basic)
+  lookup = async () => {
+    throw new Error('offline')
+  }
+  const states = []
+  const session = new TelegramSession(
+    () => {},
+    () => {},
+    state => states.push(state),
+  )
+  await assert.rejects(session.restore())
+  assert.equal(states.at(-1).group.title, 'Team')
+  assert.equal(states.at(-1).status, 'unavailable')
+  await session.unlinkGroup()
+  assert.equal(states.at(-1).status, 'none')
+})
+
+test('late timed-out self lookup cannot replace a new authorization account', async () => {
+  credentials.session = 'old-session'
+  const pending = deferred()
+  lookup = () => pending.promise
+  const originalTimeout = globalThis.setTimeout
+  const timeout = mock.method(globalThis, 'setTimeout', (fn, ms, ...args) =>
+    originalTimeout(fn, ms === 20_000 ? 1 : ms, ...args),
+  )
+  const states = []
+  const session = new TelegramSession(
+    () => {},
+    () => {},
+    state => states.push(state),
+  )
+  await assert.rejects(session.restore(), /Could not restore/)
+  timeout.mock.restore()
+  credentials.session = null
+  lookup = async () => [user]
+  await session.connect(callbacks)
+  pending.resolve([{ ...user, id: 999 }])
+  await new Promise(resolve => setImmediate(resolve))
+  const requests = []
+  mock.method(BaseTelegramClient.prototype, 'call', async request => {
+    requests.push(request._)
+    const chat = { _: 'chat', id: 123, title: 'Team' }
+    if (request._ === 'messages.checkChatInvite') return { _: 'chatInviteAlready', chat }
+    if (request._ === 'messages.getChats') return { _: 'messages.chats', chats: [chat] }
+    throw new Error('Unexpected RPC')
+  })
+  await session.connectGroup('t.me/+invite')
+  assert.equal(telegramGroup.save.mock.calls[0].arguments[0].accountId, '1')
+  assert.deepEqual(requests, ['messages.checkChatInvite', 'messages.getChats'])
+  assert.deepEqual(states.at(-1), { group: { title: 'Team', id: '-123', hasTopics: false }, status: 'connected' })
+  await session.unlinkGroup()
+  assert.equal(states.at(-1).status, 'none')
+  session.dispose()
 })
