@@ -53,6 +53,10 @@ export const queryKeys = {
     all: ['telegram'] as const,
     summary: (keys?: QueryKeySegments<unknown>) => ['telegram', 'summary', ...spreadQueryKeySegments(keys)] as const,
     topics: (keys?: QueryKeySegments<unknown>) => ['telegram', 'topics', ...spreadQueryKeySegments(keys)] as const,
+    topic: (keys?: QueryKeySegments<{ topicId: number }>) =>
+      ['telegram', 'topic', ...spreadQueryKeySegments(keys)] as const,
+    reply: (keys?: QueryKeySegments<{ messageId: number }>) =>
+      ['telegram', 'reply', ...spreadQueryKeySegments(keys)] as const,
     history: (keys?: QueryKeySegments<{ topicId: number | null }>) =>
       ['telegram', 'history', ...spreadQueryKeySegments(keys)] as const,
     avatar: (keys?: QueryKeySegments<{ senderId: string; photoId: string; size: 'small' }>) =>
@@ -60,6 +64,7 @@ export const queryKeys = {
     attachment: (keys?: QueryKeySegments<unknown>) =>
       ['telegram', 'attachment', ...spreadQueryKeySegments(keys)] as const,
     send: (keys?: QueryKeySegments<unknown>) => ['telegram', 'send', ...spreadQueryKeySegments(keys)] as const,
+    outgoing: (keys?: QueryKeySegments<unknown>) => ['telegram', 'outgoing', ...spreadQueryKeySegments(keys)] as const,
     read: (keys?: QueryKeySegments<unknown>) => ['telegram', 'read', ...spreadQueryKeySegments(keys)] as const,
   },
   clockify: {
