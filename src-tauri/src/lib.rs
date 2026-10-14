@@ -12,6 +12,7 @@ mod mcp_protocol;
 mod storage_config;
 mod stronghold;
 mod stronghold_config;
+mod telegram_group;
 
 use tauri::Manager;
 
@@ -106,6 +107,9 @@ pub fn run() {
             auth::clockalong_auth_connect_telegram,
             auth::clockalong_auth_set_telegram_unavailable,
             auth::clockalong_auth_disconnect_telegram,
+            telegram_group::telegram_group_read,
+            telegram_group::telegram_group_save,
+            telegram_group::telegram_group_remove,
             auth::clockalong_auth_refresh_linear_credential,
             mcp::clockalong_mcp_complete_command,
             mcp::clockalong_mcp_get_state,
