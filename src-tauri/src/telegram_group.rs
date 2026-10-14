@@ -29,6 +29,14 @@ enum GroupPeer {
 }
 
 impl TelegramGroup {
+    fn image_cache_key(&self) -> String {
+        let (kind, id) = match &self.peer {
+            GroupPeer::Basic { id } => ("basic", id),
+            GroupPeer::Supergroup { id, .. } => ("supergroup", id),
+        };
+        format!("{}:{kind}:{id}", self.account_id)
+    }
+
     fn valid(&self) -> bool {
         // Marked group IDs must stay within JavaScript's safe integer range.
         let valid_id = |id: &str| {
@@ -62,10 +70,14 @@ pub fn telegram_group_save<R: Runtime>(
         return Err("Invalid Telegram group.".to_string());
     }
     stronghold::write_json(&app, KEY, &group)
-        .map_err(|_| "Could not save the Telegram group.".to_string())
+        .map_err(|_| "Could not save the Telegram group.".to_string())?;
+    // An unavailable disk cache must not prevent group connection or image downloads.
+    let _ = crate::telegram_image_cache::select(&app, group.image_cache_key());
+    Ok(())
 }
 
 pub fn remove<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    crate::telegram_image_cache::clear(app)?;
     stronghold::remove_value(app, KEY)
         .map_err(|_| "Could not remove the saved Telegram group.".to_string())
 }
