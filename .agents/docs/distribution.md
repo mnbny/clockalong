@@ -19,15 +19,21 @@ The Developer ID Application certificate must be installed in the local login ke
 security find-identity -v -p codesigning
 ```
 
-Local Apple Silicon DMG builds require explicit paths for the updater signing key and the App Store Connect API key. Supply both paths through environment variables. Neither key has a default location.
+Local Apple Silicon DMG builds require explicit paths for the updater signing key and the App Store Connect API key. Supply both paths through local production configuration or exported environment variables. Neither key has a default location.
 
 `pnpm release:mac` builds the app, submits the DMG to Apple notarization, staples the notarization ticket, then verifies the stapled DMG with Gatekeeper and `hdiutil`.
+
+Provider app credentials come from the build environment. The normal release launcher loads local production configuration and preserves exported overrides. Cargo embeds Telegram's app ID and hash and Linear's OAuth client ID in the native binary. Packaged apps do not need these variables at launch. Changes to the embedded app values trigger a rebuild.
+
+Existing release scripts inherit these variables. The launcher preserves command arguments, piped release notes, and exit codes. It loads only app, Apple, and updater-signing prefixes from production env files. Development env files remain excluded.
+
+The bundled app values remain extractable. Build-time configuration keeps the values out of source; it does not make distributed values confidential. Missing configuration affects only the corresponding optional provider.
 
 ## Notarization
 
 Developer ID distribution should be notarized. Use App Store Connect API-key auth for local release scripts.
 
-Required API-key environment variables:
+Required API-key variables, supplied through production configuration or the build environment:
 
 ```sh
 export APPLE_API_ISSUER="..."
