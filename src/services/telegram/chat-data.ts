@@ -299,10 +299,14 @@ export function projectMessage(
     }
   }
   const reply = raw.replyTo?._ === 'messageReplyHeader' ? raw.replyTo : undefined
+  const topicId = topicFor(group, raw)
+  const replyOutsideGroup = !!reply?.replyToPeerId && !matchesPeer(group, reply.replyToPeerId)
+  // Ordinary forum messages point at the topic's creation message; that is not a quoted reply.
+  const topicReference = reply?.forumTopic && !replyOutsideGroup && reply.replyToMsgId === topicId
   return {
     view: {
       id: raw.id,
-      topicId: topicFor(group, raw),
+      topicId,
       date: raw.date,
       editDate: raw._ === 'message' ? raw.editDate : undefined,
       text: raw._ === 'message' ? raw.message : '',
@@ -312,8 +316,8 @@ export function projectMessage(
       protected: protectedContent,
       groupedId: raw._ === 'message' && raw.groupedId ? String(raw.groupedId) : undefined,
       sender,
-      replyToId: reply?.replyToMsgId,
-      replyOutsideGroup: !!reply?.replyToPeerId && !matchesPeer(group, reply.replyToPeerId),
+      replyToId: topicReference ? undefined : reply?.replyToMsgId,
+      replyOutsideGroup,
       service: raw._ === 'messageService' ? raw.action._ : undefined,
       attachment,
     },
