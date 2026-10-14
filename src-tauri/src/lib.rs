@@ -4,6 +4,7 @@ mod auth;
 mod auth_clockify;
 mod auth_github;
 mod auth_linear;
+mod auth_telegram;
 mod mcp;
 mod mcp_bridge;
 mod mcp_http;
@@ -101,6 +102,10 @@ pub fn run() {
             auth::clockalong_auth_get_github_credential,
             auth::clockalong_auth_get_linear_credential,
             auth::clockalong_auth_get_state,
+            auth::clockalong_auth_get_telegram_credential,
+            auth::clockalong_auth_connect_telegram,
+            auth::clockalong_auth_set_telegram_unavailable,
+            auth::clockalong_auth_disconnect_telegram,
             auth::clockalong_auth_refresh_linear_credential,
             mcp::clockalong_mcp_complete_command,
             mcp::clockalong_mcp_get_state,

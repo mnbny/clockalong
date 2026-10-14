@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::sync::Mutex;
 use tauri::{async_runtime::JoinHandle, AppHandle, Emitter, Manager, Runtime};
 
-use crate::{auth_clockify, auth_github, auth_linear};
+use crate::{auth_clockify, auth_github, auth_linear, auth_telegram};
 
 pub const CLOCKALONG_AUTH_STATE_CHANGED_EVENT: &str = "clockalong-auth:state-changed";
 
@@ -18,6 +18,7 @@ pub struct ClockalongAuthSnapshot {
     pub(crate) linear_authenticated: bool,
     pub(crate) github_authenticated: bool,
     pub(crate) clockify_authenticated: bool,
+    pub(crate) telegram_authenticated: bool,
 }
 
 #[derive(Serialize)]
@@ -149,6 +150,7 @@ pub async fn initialize_auth_lifecycle<R: Runtime>(app: AppHandle<R>) -> Result<
             linear_authenticated: false,
             github_authenticated: false,
             clockify_authenticated,
+            telegram_authenticated: false,
         },
     )?;
     auth_log("initialize_auth_lifecycle: stored Clockify auth state loaded");
@@ -370,4 +372,31 @@ pub(crate) fn to_error_message(error: impl std::fmt::Display) -> String {
 
 pub(crate) fn auth_log(message: &str) {
     log::info!("{message}");
+}
+
+#[tauri::command]
+pub fn clockalong_auth_get_telegram_credential<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<auth_telegram::TelegramCredential, String> {
+    auth_telegram::credential(app)
+}
+
+#[tauri::command]
+pub fn clockalong_auth_connect_telegram<R: Runtime>(
+    app: AppHandle<R>,
+    session: String,
+) -> Result<(), String> {
+    auth_telegram::connect(app, session)
+}
+
+#[tauri::command]
+pub fn clockalong_auth_set_telegram_unavailable<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<(), String> {
+    auth_telegram::set_authenticated(&app, false)
+}
+
+#[tauri::command]
+pub fn clockalong_auth_disconnect_telegram<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    auth_telegram::disconnect(app)
 }
