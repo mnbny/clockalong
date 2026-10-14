@@ -135,13 +135,9 @@ Use registered callback URLs because Linear requires redirect URI matching. Cloc
 
 A custom URL scheme may be useful for Tauri generally, but do not assume Linear will accept it until tested against Linear's OAuth app configuration.
 
-Clockalong ships this public Linear OAuth client ID in Rust:
+The maintainer supplies the Linear OAuth client ID through the native build environment. Cargo embeds the client ID in the app. There is no committed fallback ID or client secret. Users authorize their accounts without supplying app configuration.
 
-```txt
-b1f808a5cc24f7bf5cae1df43b4d7cf7
-```
-
-This is safe to ship. It is not a secret, and users should not provide it.
+If the build lacks a client ID, Linear returns a configuration error before OAuth or token requests. Startup leaves saved tokens untouched and does not schedule refresh tasks. Clockify remains available.
 
 Clockalong uses this registered redirect URI pool:
 
