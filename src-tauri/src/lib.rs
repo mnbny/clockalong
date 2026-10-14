@@ -12,6 +12,7 @@ mod mcp_protocol;
 mod storage_config;
 mod stronghold;
 mod stronghold_config;
+mod telegram_download;
 mod telegram_group;
 
 use tauri::Manager;
@@ -54,6 +55,7 @@ pub fn run() {
         .manage(mcp::ClockalongMcpState::default())
         .manage(mcp_bridge::McpBridgeState::default())
         .manage(stronghold::ClockalongStrongholdState::default())
+        .manage(telegram_download::TelegramDownloadState::default())
         .setup(|app| {
             let salt_path = app
                 .path()
@@ -110,6 +112,10 @@ pub fn run() {
             telegram_group::telegram_group_read,
             telegram_group::telegram_group_save,
             telegram_group::telegram_group_remove,
+            telegram_download::telegram_download_begin,
+            telegram_download::telegram_download_append,
+            telegram_download::telegram_download_finish,
+            telegram_download::telegram_download_cancel,
             auth::clockalong_auth_refresh_linear_credential,
             mcp::clockalong_mcp_complete_command,
             mcp::clockalong_mcp_get_state,
@@ -120,6 +126,7 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if matches!(&event, tauri::RunEvent::Exit) {
+                telegram_download::cleanup(app);
                 if let Err(error) = mcp::stop(app) {
                     log::error!("MCP server shutdown failed: {error}");
                 }
