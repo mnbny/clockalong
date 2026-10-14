@@ -26,6 +26,7 @@ Clockify stays in charge of the time entries. Clockalong gives you a smaller, fa
 - Clockify is required and keeps the actual time entries.
 - Linear can show assigned issues and start issue-based timers.
 - GitHub can show selected repositories, issues, and pull requests, with persisted multi-author dashboard filtering.
+- Telegram is optional and supports QR login, two-step verification, session restore, and disconnect. Chat features are not included.
 - Quick Timers are local presets for reusable timers that are not tied to another app.
 
 ## Authentication
@@ -35,6 +36,7 @@ Clockalong uses user-owned credentials:
 - Clockify connects with a Clockify API key.
 - Linear connects through OAuth with PKCE.
 - GitHub connects with a fine-grained personal access token.
+- Telegram connects by scanning a QR code with an existing account in the official Telegram phone app.
 
 Clockalong stores long-lived credentials in native secure storage. It only pulls out a working credential when it needs to talk to a connected service.
 
@@ -71,7 +73,7 @@ To prepare a new worktree with asdf, install the plugins listed in `.tool-versio
 scripts/worktree-setup.sh
 ```
 
-This installs the toolchain and dependencies, copies missing `.env` and `.env.local` files from the primary Git worktree, and prebuilds the Rust backend. Existing local files are preserved. After pnpm is available, `pnpm run worktree:setup` runs the same setup.
+This installs the toolchain and dependencies, copies missing base, development, and production env files from the primary Git worktree, and prebuilds the Rust backend. Existing local files are preserved. After pnpm is available, `pnpm run worktree:setup` runs the same setup.
 
 Run the frontend dev server:
 
@@ -86,6 +88,40 @@ pnpm run worktree:run
 ```
 
 The runner accepts `WORKTREE_PORT`, `PASEO_PORT`, `CONDUCTOR_PORT`, `PASEO_WORKTREE_PORT`, or `PORT`, in that order, and defaults to `1420`. It forwards extra arguments to `tauri dev`. Both scripts work from Paseo, Conductor, or a terminal.
+
+### Provider app configuration
+
+Register Telegram at <https://my.telegram.org/apps> and use the client ID from your Linear OAuth application. For development, create the local configuration file once:
+
+```sh
+cp -n .env.development.example .env.development.local
+```
+
+Fill in the three blank values in `.env.development.local`, then use the normal Paseo Run action or `pnpm run worktree:run`. Both start the launcher, which loads the local values for Cargo automatically. Restart the app after changing them. Existing local files are preserved and ignored by Git.
+
+The launcher uses Vite's standard development precedence: exported environment values, `.env.development.local`, `.env.development`, `.env.local`, then `.env`. It forwards only `CLOCKALONG_` values loaded from those files; the child still inherits the normal process environment. Direct `pnpm tauri dev` bypasses this launcher and does not load these files for Cargo.
+
+For releases, create the production configuration file once:
+
+```sh
+cp -n .env.production.example .env.production.local
+```
+
+Fill in the provider app values, Apple notarization fields, signing identity, and updater key path. The file supports quoted values with spaces and `$HOME` expansion. Private key files stay at their specified paths; the launcher does not read their contents.
+
+Then use `pnpm release:mac` or `pnpm release:github` normally. Both load Vite production env files, with this precedence: exported environment values, `.env.production.local`, `.env.production`, `.env.local`, then `.env`. File-loaded values are limited to `CLOCKALONG_`, `APPLE_`, and `TAURI_SIGNING_` prefixes. Development env files are not loaded. CLI arguments and piped GitHub release notes pass through unchanged.
+
+Direct `pnpm tauri build` or direct shell-script invocation bypasses this launcher and requires exported values. The existing signing, notarization, and publishing flows remain unchanged.
+
+Cargo embeds provider app values in the native app and rebuilds when they change. Packaged apps launched from Finder need no environment variables. The bundled app values remain extractable; local configuration keeps them out of source, not out of the distributed app. Do not use `VITE_*` variables for this configuration.
+
+Linear uses PKCE without a client secret. Keep its existing registered callback URLs: `http://localhost:53682/oauth/linear/callback`, `http://localhost:53683/oauth/linear/callback`, and `http://localhost:53684/oauth/linear/callback`. The existing `CLOCKALONG_LINEAR_REDIRECT_URI` override remains available for another registered URL.
+
+Missing Telegram configuration disables its Connect button. Missing Linear configuration produces a clear connection error and leaves saved tokens untouched; startup does not refresh or schedule retries until the app is rebuilt with its client ID. Clockify remains the only required connection. Users authorize their own provider accounts and do not supply these app credentials.
+
+Run only one Telegram-enabled Clockalong instance. Fully restart the app during Telegram auth development. Sharing a session between live instances can invalidate it. Sessions stay in native Stronghold storage; the client uses memory storage. Disconnect removes the local session first and attempts remote logout. If remote logout fails, terminate Clockalong from Telegram's Devices settings.
+
+Credential-free lifecycle checks: `node --import tsx --test scripts/telegram-session.test.mjs`. A configured app and an authorized test account are required to verify QR scanning, two-step verification, and restart restore against Telegram.
 
 Run formatting, linting, and type checks:
 
