@@ -4,6 +4,7 @@ export type ClockalongAuthSnapshot = {
   linearAuthenticated: boolean
   githubAuthenticated: boolean
   clockifyAuthenticated: boolean
+  telegramAuthenticated: boolean
 }
 
 export type ClockalongAuthProvider = 'linear' | 'github' | 'clockify'
@@ -31,7 +32,17 @@ export type ClockalongGithubCredentialSnapshot = {
   accessToken: string | null
 }
 
+export type ClockalongTelegramCredentialSnapshot = {
+  apiId: number | null
+  apiHash: string | null
+  session: string | null
+}
+
 export const auth = {
+  getTelegramCredential: () => invoke<ClockalongTelegramCredentialSnapshot>('clockalong_auth_get_telegram_credential'),
+  connectTelegram: (session: string) => invoke<void>('clockalong_auth_connect_telegram', { session }),
+  setTelegramUnavailable: () => invoke<void>('clockalong_auth_set_telegram_unavailable'),
+  disconnectTelegram: () => invoke<void>('clockalong_auth_disconnect_telegram'),
   connectClockify: (apiKey: string) =>
     invoke<ClockalongAuthConnectionResult>('clockalong_auth_connect_clockify', { apiKey }),
   connectGithub: (accessToken: string) =>
