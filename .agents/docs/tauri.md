@@ -68,6 +68,8 @@ On macOS, closing the main window hides it so the status item and timer remain a
 
 ## Auth gate
 
-Rust owns the startup authentication snapshot. `src-tauri/src/auth.rs` exposes the command/event surface and delegates provider-specific credential work to `auth_linear.rs` and `auth_clockify.rs`. Those modules read provider credentials from Stronghold during setup, validate or refresh them as needed, emit `clockalong-auth:state-changed`, and leave app initialization blocked until that native check completes.
+Rust owns the public authentication snapshot. Native startup validates Clockify before app initialization completes. Linear and GitHub checks run independently and do not block initialization.
 
-Linear starts through the native OAuth command. Clockify uses a native API-key connection command that validates the key before saving it. The frontend should keep route decisions tied to the native auth snapshot instead of trying to infer auth state from local UI state.
+Telegram performs MTProto authentication in the frontend. Its provider waits for native initialization before restore, because startup replaces the initial auth snapshot. Rust owns Telegram session storage and connected-state events. Telegram failure does not block the app or change the Clockify route gate.
+
+Linear uses native OAuth. Clockify and GitHub use native credential validation. Frontend route decisions use the native auth snapshot.
