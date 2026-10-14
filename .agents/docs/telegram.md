@@ -2,9 +2,9 @@
 
 ## Scope
 
-Telegram is an optional account connection. The current feature supports login, session restore, and disconnect. Clockify remains the only app-level authentication requirement.
+Telegram is an optional account connection. It supports login, session restore, disconnect, and one selected group. Clockify remains the only app-level authentication requirement.
 
-Clockalong does not select groups, read topics or messages, send messages, or show a Telegram dashboard widget. Users need an existing Telegram account and the official Telegram phone app.
+Clockalong does not read topics or messages, send messages, or show a Telegram dashboard widget. Users need an existing Telegram account and the official Telegram phone app.
 
 ## Ownership
 
@@ -31,6 +31,18 @@ The service imports the saved session into a fresh memory client and validates i
 Settings keeps Disconnect available after a failed restore. Disconnect removes the native session before attempting bounded remote logout. A failed local deletion remains an error. If remote logout cannot be confirmed, the user can terminate Clockalong in Telegram's Devices settings.
 
 Normal teardown closes the client without deleting the saved session or logging out. Hiding the macOS window does not tear down the client.
+
+## Selected group
+
+Settings accepts an existing invite link for a group the signed-in account already belongs to. Both friends can use the same link with their own accounts. Clockalong checks membership and fetches only that group's metadata. It never joins groups or lists conversations.
+
+Basic groups and supergroups with or without topics are supported. Broadcast channels, gigagroups, monoforums, and inaccessible groups are rejected. A migrated basic group must be unlinked and connected again with its current invite link. Verification refreshes the title and whether the group has topics. Topic and message UI remain outside this feature.
+
+Rust stores one group reference bound to the account in Stronghold, including private access data for supergroups. The provider exposes only the title, marked group ID, topic-mode flag, and verification state. Invite links are temporary input and are not stored. Group data stays outside Settings backups, browser storage, and logs.
+
+After account restore succeeds, the service verifies the saved group. Group failure keeps the selection for Retry and does not disconnect the account. Saved identity remains visible when account restore fails so Unlink works offline. Unlink removes only the local selection; it never leaves the Telegram group. Failed removal remains an error.
+
+Disconnect, invalid-session cleanup, and fresh QR authorization clear the group. An absent saved session also clears any orphan selection. A new authorization cannot reuse the old access data, even for the same account. Normal teardown retains both records. The existing operation guard serializes verification, saves, and removals. Results discarded after teardown cannot start a group save.
 
 ## App configuration
 

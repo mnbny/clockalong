@@ -73,8 +73,8 @@ Add each document using this format:
 
 #### [telegram.md](./telegram.md)
 
-- Description: Telegram login, session ownership, app configuration, and supported use.
-- Tags: `telegram`, `authentication`, `mtproto`, `qr`, `sessions`
+- Description: Telegram login, selected groups, session ownership, and supported use.
+- Tags: `telegram`, `authentication`, `groups`, `mtproto`, `qr`, `sessions`
 
 #### [linear.md](./linear.md)
 
