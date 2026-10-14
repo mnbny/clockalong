@@ -46,7 +46,11 @@
 
 Telegram uses a private frontend service for MTProto authentication, selected-group operations, and SDK realtime updates. Rust stores the session and group reference and publishes authentication state. One provider owns the client above routes and depends on TanStack Query. Shared sign-in and Settings controls use the same QR/password dialog.
 
-Telegram conversation data lives in memory in TanStack Query. Each account and group connection has a separate cache scope. Provider services remove unrelated account data before it can enter the cache. Query hooks expose server pages; future consumers own display ordering and flattening. Mutation callbacks reconcile successful sends and refresh unread counts. A narrow native writer saves attachment streams to Downloads without general frontend filesystem access. The chat interface is a separate phase.
+Telegram conversation records live in memory in TanStack Query. Each account and group connection has a separate cache scope. Provider services exclude unrelated account data from the cache. Query owns history, topics, reply excerpts, unread counts, avatars, and previews. A bounded native disk cache retains only avatar and preview bytes across restarts. The interface derives display order, topic selection, and formatting from Query records.
+
+Mutation callbacks create optimistic messages, clear the originating draft, reconcile confirmed sends, and refresh unread counts. SDK progress callbacks update active transfers. Native writers receive attachment streams for Downloads or temporary media without general frontend filesystem access.
+
+The authenticated layout owns the Telegram chat lifetime. A Dashboard-only header button opens its drawer outside the background app shell. Local state retains topic selection and drafts across drawer closure and Settings visits. Leaving the authenticated layout or replacing the chat scope clears this state and cancels transfers. Drawer and media-dialog focus stay separate from background app shortcuts.
 
 ## Frontend providers
 
