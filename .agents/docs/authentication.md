@@ -204,7 +204,7 @@ GitHub API calls should use a frontend GitHub client such as Octokit. Rust shoul
 
 Telegram is optional and supports login and one selected group. Group verification is separate from account authentication. The frontend performs MTProto authentication; Rust stores the session and owns the public connected flag. Telegram failure does not affect the Clockify route gate.
 
-The [Telegram brief](./telegram.md) defines QR and password login, restore, disconnect, build configuration, and supported use.
+A revoked Telegram session stops group activity and clears conversation data before native credential cleanup. Cleanup blocks a new login until it finishes. Errors from an old client cannot clear a newer connection. Group access failure retains the account and offers a separate group retry.
 
 ## Token refresh
 

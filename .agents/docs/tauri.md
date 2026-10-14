@@ -66,6 +66,12 @@ Clockalong uses Tauri's updater plugin for direct-download macOS updates. The up
 
 On macOS, closing the main window hides it so the status item and timer remain available. The Dock restores the hidden window, while the native menu's Quit item explicitly exits the app.
 
+## Downloads
+
+Telegram attachment downloads use a narrow native writer for the system Downloads folder. The frontend supplies a filename and streams binary chunks through an opaque transfer handle. Rust owns filename restrictions, collision handling, completion checks, and partial-file cleanup. It accepts no arbitrary destination path and grants no general frontend filesystem access.
+
+File work runs off the main thread. Normal app exit waits for partial-file cleanup. Hiding the macOS window leaves active transfers running.
+
 ## Auth gate
 
 Rust owns the public authentication snapshot. Native startup validates Clockify before app initialization completes. Linear and GitHub checks run independently and do not block initialization.

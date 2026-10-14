@@ -48,8 +48,8 @@ Add each document using this format:
 
 #### [tauri.md](./tauri.md)
 
-- Description: Native application state, startup appearance, frontend integration, updates, and menu bar behavior.
-- Tags: `tauri`, `rust`, `native`, `events`, `reactivity`, `updater`, `menu-bar`, `themes`
+- Description: Native application state, frontend integration, downloads, updates, and window behavior.
+- Tags: `tauri`, `rust`, `native`, `events`, `reactivity`, `downloads`, `updater`, `menu-bar`, `themes`
 
 #### [logging.md](./logging.md)
 
@@ -73,8 +73,8 @@ Add each document using this format:
 
 #### [telegram.md](./telegram.md)
 
-- Description: Telegram login, selected groups, session ownership, and supported use.
-- Tags: `telegram`, `authentication`, `groups`, `mtproto`, `qr`, `sessions`
+- Description: Telegram connections, selected-group conversations, file transfers, and data boundaries.
+- Tags: `telegram`, `authentication`, `groups`, `chat`, `realtime`, `files`, `cache`
 
 #### [linear.md](./linear.md)
 

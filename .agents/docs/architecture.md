@@ -44,7 +44,9 @@
 
 - Logging follows the shared Rust/frontend diagnostics pattern documented in `logging.md`.
 
-Telegram uses a provider-specific split: a private frontend service performs MTProto login and session validation; Rust stores sessions and publishes authentication state. One provider owns the client above routes. Shared sign-in and Settings controls use the same QR/password dialog. There is no Telegram query cache or dashboard widget. The [Telegram brief](./telegram.md) defines the provider boundary and lifecycle.
+Telegram uses a private frontend service for MTProto authentication, selected-group operations, and SDK realtime updates. Rust stores the session and group reference and publishes authentication state. One provider owns the client above routes and depends on TanStack Query. Shared sign-in and Settings controls use the same QR/password dialog.
+
+Telegram conversation data lives in memory in TanStack Query. Each account and group connection has a separate cache scope. Provider services remove unrelated account data before it can enter the cache. Query hooks expose server pages; future consumers own display ordering and flattening. Mutation callbacks reconcile successful sends and refresh unread counts. A narrow native writer saves attachment streams to Downloads without general frontend filesystem access. The chat interface is a separate phase.
 
 ## Frontend providers
 

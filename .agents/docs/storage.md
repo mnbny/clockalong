@@ -51,6 +51,12 @@ Clockify stores the user API key in native Stronghold storage, not in the Tauri 
 
 Telegram stores one opaque session and one group reference bound to the account in Stronghold. The group reference includes private supergroup access data. Neither record enters Settings backups. Its frontend MTProto client uses memory storage, with no IndexedDB or localStorage credentials. QR tokens and two-step passwords remain temporary.
 
+## Telegram conversation cache
+
+Telegram history, topics, unread counts, and selected-group sender data live only in TanStack Query memory. The cache retains compact message records and scoped transfer references. It does not retain whole SDK messages or unrelated account peers. Small avatars and previews may enter the cache; full attachments stream to a native writer in the system Downloads folder.
+
+Each account and group connection has a separate cache scope. Unlink, disconnect, invalid-session cleanup, and teardown cancel operations and remove that scope. Late responses cannot restore it. Send hooks release attachment inputs after success. Failed sends can retain inputs for an explicit retry while the consumer remains mounted. Conversation data is excluded from Settings backups, browser persistence, and MCP snapshots. Completed downloads are ordinary user files outside the cache. Unlink and disconnect leave those files intact.
+
 ## Local cache field budgets
 
 The webview enforces a per-origin localStorage quota of about 5 MB, shared by every local cache. The packaged app and the Vite dev server are separate origins, so quota exhaustion usually appears in the installed app first.
