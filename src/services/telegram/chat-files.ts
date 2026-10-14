@@ -35,6 +35,7 @@ const fileMessages = {
   'invalid-file': 'This file cannot be prepared for Telegram.',
   'transfer-failed': 'Telegram file transfer failed.',
   'save-failed': 'Could not save the Telegram file to Downloads.',
+  'media-failed': 'Could not open this Telegram media. Try downloading it instead.',
 } as const
 
 export class TelegramFileError extends Error {
@@ -247,7 +248,6 @@ export async function downloadPreview(
   return new Blob(chunks, { type: photoMime(chunks[0]) ?? 'application/octet-stream' })
 }
 
-/** Only small, scoped peer photos belong in the in-memory avatar cache. */
 export async function downloadAvatar(
   client: ITelegramClient,
   reference: { location: tl.TypeInputFileLocation; dcId: number },
@@ -287,7 +287,7 @@ export async function downloadAvatar(
   }
 }
 
-function photoMime(bytes: Uint8Array) {
+export function photoMime(bytes: Uint8Array) {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
   if ([137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value)) return 'image/png'
   const ascii = (start: number, end: number) => String.fromCharCode(...bytes.subarray(start, end))
