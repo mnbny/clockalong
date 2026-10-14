@@ -9,6 +9,7 @@ import { ClockifySyncProvider } from './services/clockify/sync'
 import { GithubSyncProvider } from './services/github/sync'
 import { LinearSyncProvider } from './services/linear/sync'
 import { storage } from './services/storage/config'
+import { TelegramSessionProvider } from './services/telegram/session-provider'
 import { applyTheme, resolveTheme } from './services/theme'
 import { ThemeProvider } from './services/theme-provider'
 import { ProviderRegistry } from './utils/provider-registry'
@@ -35,10 +36,18 @@ async function startApp() {
 
   ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <ProviderRegistry
-      registry={{ ThemeProvider, ClockifySyncProvider, GithubSyncProvider, LinearSyncProvider, QueryClientProvider }}
+      registry={{
+        TelegramSessionProvider,
+        ThemeProvider,
+        ClockifySyncProvider,
+        GithubSyncProvider,
+        LinearSyncProvider,
+        QueryClientProvider,
+      }}
       providers={[
         'ThemeProvider',
         'QueryClientProvider',
+        'TelegramSessionProvider',
         'LinearSyncProvider',
         'GithubSyncProvider',
         'ClockifySyncProvider',
