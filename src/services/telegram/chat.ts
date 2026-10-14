@@ -25,6 +25,7 @@ import {
   prepareAttachment,
   TelegramFileError,
 } from './chat-files'
+import { TelegramChatImages } from './chat-images'
 import { subscribeChatUpdates } from './chat-updates'
 import { invalidTelegramSession } from './errors'
 import { type SavedTelegramGroup } from './group'
@@ -52,7 +53,16 @@ function safeError(error: unknown, sending = false) {
 }
 let generation = 0
 export type SendInput = Conversation & { text: string; entities?: readonly tl.TypeMessageEntity[]; replyToId?: number }
-export type SendOperation = Readonly<SendInput & { id: string; scope: string; attachment?: AttachmentInput }>
+export type SendOperation = Readonly<
+  SendInput & { id: string; scope: string; localId: number; date: number; attachment?: AttachmentInput }
+>
+export type OutgoingMessage = {
+  operation: SendOperation
+  record: MessageRecord
+  serverId?: number
+  error?: Error
+  progress: number | null
+}
 
 export class TelegramChat {
   readonly scope: string
@@ -67,6 +77,9 @@ export class TelegramChat {
   private readRequests = new Map<number | null, { max: number; confirmed: number; promise: Promise<void> }>()
   private operations = new Map<string, AbortController>()
   private startup: Promise<void> = Promise.resolve()
+  private localMessageId = 0
+  private self: tl.RawUser | undefined
+  private readonly images: TelegramChatImages
 
   constructor(
     private readonly client: BaseTelegramClient,
@@ -76,6 +89,7 @@ export class TelegramChat {
     private readonly onRevoked: () => Promise<void> = async () => {},
   ) {
     this.scope = `${group.accountId}:${group.kind}:${group.id}:${++generation}`
+    this.images = new TelegramChatImages(`${group.accountId}:${group.kind}:${group.id}`)
     this.forum = group.kind === 'supergroup' && group.forum
     this.cache = new TelegramChatCache(query, this.scope, () => !this.lifetime.signal.aborted)
   }
@@ -127,6 +141,9 @@ export class TelegramChat {
     )
     this.startup = (async () => {
       await this.client.startUpdatesLoop()
+      if (this.signal.aborted) return
+      const self = await this.client.storage.peers.getCompleteById(Number(this.group.accountId))
+      if (self?._ === 'user') this.self = self
       if (this.signal.aborted) return
       if (this.group.kind === 'supergroup') await openChat(this.client, inputPeer(this.group))
     })().catch(error => {
@@ -295,6 +312,34 @@ export class TelegramChat {
       }
     })
   }
+  fetchTopic(topicId: number, signal?: AbortSignal) {
+    this.conversation({ topicId })
+    return this.run(signal, async signal => {
+      const response = await this.client.call(
+        { _: 'messages.getForumTopicsByID', peer: inputPeer(this.group), topics: [topicId] },
+        { abortSignal: signal },
+      )
+      const topic = response.topics.find(topic => topic.id === topicId)
+      if (topic?._ === 'forumTopic' && topic.short) throw new TelegramChatError('network')
+      return topic?._ === 'forumTopic' && !topic.short ? projectTopic(topic) : null
+    })
+  }
+  fetchReply(messageId: number, signal?: AbortSignal) {
+    return this.run(signal, async signal => {
+      const source = this.cache.findMessage(messageId)?.view
+      if (!source?.replyToId || source.replyOutsideGroup || this.cache.isDeleted(source.replyToId)) return null
+      const cached = this.cache.findMessage(source.replyToId)?.view
+      if (cached) return cached.topicId === source.topicId ? cached : null
+      const [message] = await getMessages(this.client, inputPeer(this.group), [source.replyToId])
+      this.check(signal)
+      const record = message ? projectMessage(this.group, message.raw, message._peers) : null
+      return record?.view.id === source.replyToId &&
+        record.view.topicId === source.topicId &&
+        !this.cache.isDeleted(source.replyToId)
+        ? record.view
+        : null
+    })
+  }
   createSend(input: SendInput, attachment?: AttachmentInput): SendOperation {
     this.check()
     this.conversation(input)
@@ -308,9 +353,46 @@ export class TelegramChat {
         : undefined,
       scope: this.scope,
       id: id === '0' ? '1' : id,
+      localId: --this.localMessageId,
+      date: Math.floor(Date.now() / 1000),
     })
     this.issued.add(operation)
     return operation
+  }
+  beginSend(operation: SendOperation) {
+    if (!this.issued.has(operation) || operation.scope !== this.scope) throw new TelegramChatError('invalid-input')
+    const record = projectMessage(
+      this.group,
+      {
+        _: 'message',
+        id: operation.localId,
+        date: operation.date,
+        message: operation.text,
+        entities: operation.entities ? [...operation.entities] : undefined,
+        out: true,
+        peerId:
+          this.group.kind === 'basic'
+            ? { _: 'peerChat', chatId: Number(this.group.id) }
+            : { _: 'peerChannel', channelId: Number(this.group.id) },
+        fromId: { _: 'peerUser', userId: Number(this.group.accountId) },
+        replyTo: operation.replyToId ? { _: 'messageReplyHeader', replyToMsgId: operation.replyToId } : undefined,
+      },
+      PeersIndex.from({ users: this.self ? [this.self] : [], chats: [] }),
+    )!
+    record.view.topicId = operation.topicId
+    if (record.view.sender && !record.view.sender.name) record.view.sender.name = 'You'
+    if (operation.attachment) {
+      const attachment = operation.attachment
+      record.view.attachment = {
+        kind: attachment.mode === 'media' ? (attachment.video ? 'video' : 'photo') : 'document',
+        name: attachment.name,
+        mime: attachment.mime,
+        size: attachment.source.size,
+        spoiler: false,
+        downloadable: false,
+      }
+    }
+    this.cache.beginSend(operation, record)
   }
   async send(
     operation: SendOperation,
@@ -486,28 +568,42 @@ export class TelegramChat {
     return this.run(signal, async signal => {
       const ref = this.cache.findMessage(messageId)?.preview
       if (!ref) return null
-      try {
-        return await downloadPreview(this.client, ref, signal)
-      } catch (error) {
-        if (!(error instanceof TelegramFileError) || error.category !== 'unavailable') throw error
-        const fresh = (await this.refreshMessage(messageId, signal))?.preview
-        if (!fresh || fresh.mediaId !== ref.mediaId) return null
-        return downloadPreview(this.client, fresh, signal)
-      }
+      const size = 'thumbSize' in ref.location ? ref.location.thumbSize : ''
+      return this.images.load(
+        `preview:${ref.location._}:${ref.mediaId}:${size}:${ref.size}`,
+        async () => {
+          try {
+            return await downloadPreview(this.client, ref, signal)
+          } catch (error) {
+            if (!(error instanceof TelegramFileError) || error.category !== 'unavailable') throw error
+            const fresh = (await this.refreshMessage(messageId, signal))?.preview
+            if (!fresh || fresh.mediaId !== ref.mediaId) return null
+            return downloadPreview(this.client, fresh, signal)
+          }
+        },
+        signal,
+      )
     })
   }
   avatar(messageId: number, signal?: AbortSignal) {
     return this.run(signal, async signal => {
       const ref = this.cache.findMessage(messageId)?.avatar
       if (!ref) return null
-      try {
-        return await downloadAvatar(this.client, ref, signal)
-      } catch (error) {
-        if (!(error instanceof TelegramFileError) || error.category !== 'unavailable') throw error
-        const fresh = (await this.refreshMessage(messageId, signal))?.avatar
-        if (!fresh || fresh.senderId !== ref.senderId || fresh.photoId !== ref.photoId) return null
-        return downloadAvatar(this.client, fresh, signal)
-      }
+      return this.images.load(
+        `avatar:${ref.senderId}:${ref.photoId}:small`,
+        async () => {
+          try {
+            return await downloadAvatar(this.client, ref, signal)
+          } catch (error) {
+            if (!(error instanceof TelegramFileError) || error.category !== 'unavailable') throw error
+            if (messageId < 1) return null
+            const fresh = (await this.refreshMessage(messageId, signal))?.avatar
+            if (!fresh || fresh.senderId !== ref.senderId || fresh.photoId !== ref.photoId) return null
+            return downloadAvatar(this.client, fresh, signal)
+          }
+        },
+        signal,
+      )
     })
   }
   dispose() {
