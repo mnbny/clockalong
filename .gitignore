@@ -18,6 +18,7 @@
 *.sw?
 dist
 dist-ssr
+/.agents/research/
 src/routeTree.gen.ts
 lerna-debug.log*
 logs
