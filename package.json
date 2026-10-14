@@ -37,6 +37,8 @@
     "setup": "pnpm run worktree:setup",
     "tauri": "tauri",
     "tauri:prebuild": "cargo build --manifest-path src-tauri/Cargo.toml --no-default-features",
+    "test": "vitest run --config .tools/tests/vitest.config.ts",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "validate": "tsx scripts/scripty.ts --sequential",
     "validate:format": "SCRIPTY=1 prettier --write . --ignore-unknown --cache --log-level=error",
     "validate:format:rust": "SCRIPTY=1 cargo fmt --manifest-path src-tauri/Cargo.toml",
@@ -112,11 +114,12 @@
     "typescript": "catalog:",
     "typescript-eslint": "catalog:",
     "vite": "catalog:",
+    "vitest": "catalog:",
     "zx": "catalog:"
   },
-  "packageManager": "pnpm@11.1.2",
+  "packageManager": "pnpm@12.11.2",
   "engines": {
-    "node": ">=20.19.0",
-    "pnpm": ">=11.1.2"
+    "node": ">=26.11.1",
+    "pnpm": ">=12.11.2"
   }
 }
