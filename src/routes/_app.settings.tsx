@@ -7,6 +7,7 @@ import { GitHubSettings } from '../components/GitHubSettings'
 import { LinearSettings } from '../components/LinearSettings'
 import { PageHeader } from '../components/PageHeader'
 import { QuickTimersSettings } from '../components/QuickTimersSettings'
+import { TelegramSettings } from '../components/TelegramSettings'
 
 export const Route = createFileRoute('/_app/settings')({
   component: SettingsScreen,
@@ -28,6 +29,7 @@ function SettingsScreen() {
         <QuickTimersSettings />
         <LinearSettings />
         <GitHubSettings />
+        <TelegramSettings />
         <ClockifySettings />
         <AppSettings />
       </div>
