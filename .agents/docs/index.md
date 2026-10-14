@@ -44,7 +44,7 @@ Add each document using this format:
 #### [architecture.md](./architecture.md)
 
 - Description: Application structure, ownership boundaries, and development conventions.
-- Tags: `architecture`, `frontend`, `backend`, `routing`, `providers`, `queries`, `worktrees`, `scripts`, `validation`, `scripty`
+- Tags: `architecture`, `frontend`, `backend`, `routing`, `providers`, `queries`, `worktrees`, `scripts`, `validation`, `testing`, `scripty`
 
 #### [tauri.md](./tauri.md)
 

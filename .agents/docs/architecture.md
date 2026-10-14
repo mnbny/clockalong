@@ -117,6 +117,10 @@ Provider service files should export fetch functions and DTO types, not query ke
 
 Validation runs formatting, linting, and TypeScript checks in a defined order. Scripty discovers validation steps from the package manifest and stops when a step fails.
 
+The project pins Node.js, pnpm, and Rust versions for development.
+
+JavaScript and TypeScript tests use Vitest with a separate configuration that excludes frontend build plugins. Tests are grouped by feature in one directory. Type checking covers tests and application code. Rust tests use Cargo and can stay beside private modules. Test execution is separate from validation. Repository agent instructions define when to run tests and which behavior needs regression protection.
+
 Worktree scripts follow the Toolkit TypeScript/zx pattern and are independent of the harness. The shell setup entrypoint installs dependencies before loading TypeScript, so it also works in a fresh checkout. `scripts/worktree-utils.ts` owns logging, Git worktree discovery, local-file copying, and port validation. Setup copies missing base, development, and production environment files from the primary worktree and preserves existing local files. Run selects the first nonempty port from `WORKTREE_PORT`, `PASEO_PORT`, `CONDUCTOR_PORT`, `PASEO_WORKTREE_PORT`, and `PORT`, then falls back to `1420`. `conductor.json` and `paseo.json` call these same entrypoints.
 
 The development launcher uses Vite's standard environment-file precedence. It forwards only app-prefixed values from those files to the native child, while preserving the inherited process environment. Exported values take precedence. The normal Run action uses this launcher; direct Tauri invocation bypasses it.

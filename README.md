@@ -57,9 +57,11 @@ Clockalong is not affiliated with or endorsed by Clockify or CAKE.com.
 
 Requirements:
 
-- Node.js 20.19 or newer
-- pnpm 11.1 or newer
-- Rust 1.93 or newer
+- Node.js 26.11.1 or newer
+- pnpm 12.11.2 or newer
+- Rust 1.99.0 or newer
+
+The exact tool versions are pinned in `.tool-versions`; `packageManager` also pins pnpm.
 
 Install dependencies:
 
@@ -121,13 +123,22 @@ Missing Telegram configuration disables its Connect button. Missing Linear confi
 
 Run only one Telegram-enabled Clockalong instance. Fully restart the app during Telegram auth development. Sharing a session between live instances can invalidate it. Sessions stay in native Stronghold storage; the client uses memory storage. Disconnect removes the local session first and attempts remote logout. If remote logout fails, terminate Clockalong from Telegram's Devices settings.
 
-Credential-free lifecycle checks: `node --import tsx --test scripts/telegram-session.test.mjs`. A configured app and an authorized test account are required to verify QR scanning, two-step verification, and restart restore against Telegram.
+Run lifecycle checks without credentials: `pnpm test telegram/session`. A configured app and an authorized test account are required to verify QR scanning, two-step verification, and restart restore against Telegram.
 
 Run formatting, linting, and type checks:
 
 ```sh
 pnpm validate
 ```
+
+Run tests separately from validation:
+
+```sh
+pnpm test
+pnpm test:rust
+```
+
+JavaScript and TypeScript tests use Vitest and live in `.tools/tests/`, grouped by feature. To run one group, use a path filter such as `pnpm test telegram`. Rust tests use Cargo and can stay beside their modules. Type checking includes the TypeScript tests; validation does not execute either suite.
 
 Typecheck only:
 
