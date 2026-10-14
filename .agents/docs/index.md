@@ -73,7 +73,7 @@ Add each document using this format:
 
 #### [telegram.md](./telegram.md)
 
-- Description: Telegram connections, selected-group conversations, file transfers, and data boundaries.
+- Description: Telegram connections, selected-group chat, attachments, and data boundaries.
 - Tags: `telegram`, `authentication`, `groups`, `chat`, `realtime`, `files`, `cache`
 
 #### [linear.md](./linear.md)
