@@ -4,8 +4,18 @@ import { getMe, logOut, signInQr } from '@mtcute/web/methods.js'
 import { isTauri } from '@tauri-apps/api/core'
 
 import { auth } from '../tauri/auth-client'
+import { telegramGroup } from '../tauri/telegram-group-client'
+import {
+  groupError,
+  groupIdentity,
+  resolveGroup,
+  type SavedTelegramGroup,
+  TelegramGroupError,
+  type TelegramGroupState,
+  verifyGroup,
+} from './group'
 
-export type TelegramOperation = 'idle' | 'restoring' | 'connecting' | 'saving' | 'disconnecting'
+export type TelegramOperation = 'idle' | 'restoring' | 'connecting' | 'saving' | 'disconnecting' | 'group'
 export type TelegramLoginView = { step: 'waiting' | 'password' | 'saving' } | { step: 'qr'; url: string }
 export type TelegramLoginCallbacks = {
   show: (view: TelegramLoginView) => void
@@ -27,11 +37,14 @@ const invalidSession = (error: unknown) =>
 export class TelegramSession {
   private client: BaseTelegramClient | null = null
   private attempt: AbortController | null = null
+  private accountId: string | null = null
+  private savedGroup: SavedTelegramGroup | null = null
   private operation: TelegramOperation = 'idle'
 
   constructor(
     private readonly onOperation: (operation: TelegramOperation) => void,
     private readonly onUnavailable: (reason: string) => void,
+    private readonly onGroup: (state: TelegramGroupState) => void = () => {},
   ) {}
 
   private setOperation(operation: TelegramOperation) {
@@ -47,6 +60,8 @@ export class TelegramSession {
     const credential = await auth.getTelegramCredential().catch(() => {
       throw new Error('Could not read the saved Telegram session. Try again.')
     })
+    if (credential.session) await this.loadGroup()
+    else await this.clearGroup()
     if (!credential.apiId || !credential.apiHash) {
       this.onUnavailable('Telegram is not configured in this build. Ask the maintainer to add the Telegram app keys.')
       return null
@@ -75,14 +90,15 @@ export class TelegramSession {
         return
       }
       const savedSession = prepared.session
-      await bounded(
+      const me = await bounded(
         (async () => {
           await prepared.client.importSession(savedSession)
-          await getMe(prepared.client)
+          return getMe(prepared.client)
         })(),
         20_000,
       )
       attempt.signal.throwIfAborted()
+      this.accountId = String(me.id)
       const exportedSession = await prepared.client.exportSession()
       attempt.signal.throwIfAborted()
       this.setOperation('saving')
@@ -92,6 +108,7 @@ export class TelegramSession {
       if (!attempt.signal.aborted) {
         if (invalidSession(error)) {
           await auth.disconnectTelegram()
+          this.resetGroup()
           throw new Error('Your Telegram session expired. Connect again to scan a new QR code.')
         }
         await auth.setTelegramUnavailable()
@@ -99,6 +116,7 @@ export class TelegramSession {
       }
     } finally {
       if (!committed) await this.destroyClient()
+      else if (!attempt.signal.aborted) await this.restoreGroup(attempt)
       this.attempt = null
       this.setOperation('idle')
     }
@@ -121,23 +139,27 @@ export class TelegramSession {
       if (session) {
         restoring = true
         try {
-          await bounded(
+          const me = await bounded(
             (async () => {
               await client.importSession(session)
-              await getMe(client)
+              return getMe(client)
             })(),
             20_000,
           )
+          attempt.signal.throwIfAborted()
+          this.accountId = String(me.id)
         } catch (error) {
           attempt.signal.throwIfAborted()
           if (invalidSession(error)) {
             await auth.disconnectTelegram()
+            this.resetGroup()
             throw new Error('Your Telegram session expired. Try again to scan a new QR code.')
           }
           throw error
         }
       } else {
-        await signInQr(client, {
+        attempt.signal.throwIfAborted()
+        const me = await signInQr(client, {
           abortSignal: attempt.signal,
           onUrlUpdated: url => {
             if (!attempt.signal.aborted) callbacks.show({ step: 'qr', url })
@@ -151,6 +173,8 @@ export class TelegramSession {
           },
           invalidPasswordCallback: callbacks.invalidPassword,
         })
+        attempt.signal.throwIfAborted()
+        this.accountId = String(me.id)
       }
       authorized = true
       attempt.signal.throwIfAborted()
@@ -177,6 +201,7 @@ export class TelegramSession {
       )
     } finally {
       if (!committed) await this.destroyClient()
+      else if (!attempt.signal.aborted) await this.restoreGroup(attempt)
       this.attempt = null
       this.setOperation('idle')
     }
@@ -192,15 +217,119 @@ export class TelegramSession {
   }
 
   async disconnect() {
-    if (this.operation !== 'idle') return false
+    if (this.operation !== 'idle') throw new Error('Wait for the current Telegram action to finish.')
     this.setOperation('disconnecting')
     try {
       await auth.disconnectTelegram().catch(() => {
         throw new Error('Could not remove the saved Telegram session. Try Disconnect again.')
       })
+      this.resetGroup()
       return await this.logoutClient()
     } finally {
       await this.destroyClient()
+      this.setOperation('idle')
+    }
+  }
+
+  private resetGroup() {
+    this.savedGroup = null
+    this.onGroup({ group: null, status: 'none' })
+  }
+
+  private async clearGroup() {
+    await telegramGroup.remove().catch(() => {
+      throw new Error('Could not remove the saved Telegram group. Try again.')
+    })
+    this.resetGroup()
+  }
+
+  private async loadGroup() {
+    try {
+      this.savedGroup = await telegramGroup.read()
+      this.onGroup(
+        this.savedGroup
+          ? {
+              group: groupIdentity(this.savedGroup),
+              status: 'unavailable',
+              error: 'Connect Telegram to verify this group.',
+            }
+          : { group: null, status: 'none' },
+      )
+    } catch {
+      this.onGroup({ group: null, status: 'unavailable', error: 'Could not read the saved group. Retry or unlink it.' })
+    }
+  }
+
+  private async restoreGroup(attempt: AbortController) {
+    try {
+      const saved = await telegramGroup.read()
+      attempt.signal.throwIfAborted()
+      this.savedGroup = saved
+      if (!saved) {
+        this.resetGroup()
+        return
+      }
+      if (!this.client || !this.accountId) throw new TelegramGroupError('Connect Telegram before connecting a group.')
+      const verified = await bounded(verifyGroup(this.client, saved, this.accountId), 20_000)
+      attempt.signal.throwIfAborted()
+      await this.saveGroup(verified, attempt)
+    } catch (error) {
+      if (!attempt.signal.aborted)
+        this.onGroup({
+          group: this.savedGroup ? groupIdentity(this.savedGroup) : null,
+          status: 'unavailable',
+          error: groupError(error),
+        })
+    }
+  }
+
+  private async saveGroup(group: SavedTelegramGroup, attempt: AbortController) {
+    this.setOperation('saving')
+    await telegramGroup.save(group).catch(() => {
+      throw new TelegramGroupError('Could not save the group securely. Try again.')
+    })
+    attempt.signal.throwIfAborted()
+    this.savedGroup = group
+    this.onGroup({ group: groupIdentity(group), status: 'connected' })
+  }
+
+  async connectGroup(link: string) {
+    if (this.operation !== 'idle' || !this.client || !this.accountId)
+      throw new Error('Wait until Telegram is connected and ready.')
+    if (this.savedGroup) throw new Error('Unlink the current group before connecting another.')
+    this.setOperation('group')
+    const attempt = (this.attempt = new AbortController())
+    try {
+      const group = await bounded(resolveGroup(this.client, link, this.accountId), 20_000)
+      attempt.signal.throwIfAborted()
+      await this.saveGroup(group, attempt)
+    } catch (error) {
+      throw new Error(groupError(error))
+    } finally {
+      this.attempt = null
+      this.setOperation('idle')
+    }
+  }
+
+  async retryGroup() {
+    if (this.operation !== 'idle' || !this.client || !this.accountId)
+      throw new Error('Wait until Telegram is connected and ready.')
+    this.setOperation('group')
+    const attempt = (this.attempt = new AbortController())
+    try {
+      await this.restoreGroup(attempt)
+    } finally {
+      this.attempt = null
+      this.setOperation('idle')
+    }
+  }
+
+  async unlinkGroup() {
+    if (this.operation !== 'idle') throw new Error('Wait for the current Telegram action to finish.')
+    this.setOperation('group')
+    try {
+      await this.clearGroup()
+    } finally {
       this.setOperation('idle')
     }
   }
@@ -218,6 +347,7 @@ export class TelegramSession {
   private async destroyClient() {
     const client = this.client
     this.client = null
+    this.accountId = null
     await client?.destroy().catch(() => {})
   }
 

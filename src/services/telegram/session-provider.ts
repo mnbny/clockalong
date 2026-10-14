@@ -4,13 +4,15 @@ import { createContext, createElement, useContext, useEffect, useMemo, useState 
 
 import { appToast } from '../../components/AppToaster'
 import { useAppInit } from '../../hooks/useAppInit'
+import { type TelegramGroupState } from './group'
 import { type TelegramOperation, TelegramSession } from './session'
 
 function useTelegramData() {
   const initialization = useAppInit()
   const [operation, setOperation] = useState<TelegramOperation>('idle')
   const [unavailableReason, setUnavailableReason] = useState<string | null>(null)
-  const [session] = useState(() => new TelegramSession(setOperation, setUnavailableReason))
+  const [group, setGroup] = useState<TelegramGroupState>({ group: null, status: 'none' })
+  const [session] = useState(() => new TelegramSession(setOperation, setUnavailableReason, setGroup))
 
   useEffect(() => {
     if (initialization.value.appInitializing) return
@@ -28,7 +30,13 @@ function useTelegramData() {
   }, [initialization.value.appInitializing, session])
 
   const actions = useMemo(
-    () => ({ connect: session.connect.bind(session), cancel: session.cancel.bind(session) }),
+    () => ({
+      connect: session.connect.bind(session),
+      cancel: session.cancel.bind(session),
+      connectGroup: session.connectGroup.bind(session),
+      retryGroup: session.retryGroup.bind(session),
+      unlinkGroup: session.unlinkGroup.bind(session),
+    }),
     [session],
   )
 
@@ -47,6 +55,7 @@ function useTelegramData() {
 
   return {
     operation,
+    group,
     unavailableReason,
     busy: operation !== 'idle' || initialization.value.appInitializing,
     ...actions,
