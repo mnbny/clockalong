@@ -1,5 +1,7 @@
+import type { TelegramChat } from './chat'
 import type { PropsWithChildren } from 'react'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { createContext, createElement, useContext, useEffect, useMemo, useState } from 'react'
 
 import { appToast } from '../../components/AppToaster'
@@ -9,10 +11,14 @@ import { type TelegramOperation, TelegramSession } from './session'
 
 function useTelegramData() {
   const initialization = useAppInit()
+  const query = useQueryClient()
+  const [chatState, setChatState] = useState<{ chat: TelegramChat | null }>({ chat: null })
   const [operation, setOperation] = useState<TelegramOperation>('idle')
   const [unavailableReason, setUnavailableReason] = useState<string | null>(null)
   const [group, setGroup] = useState<TelegramGroupState>({ group: null, status: 'none' })
-  const [session] = useState(() => new TelegramSession(setOperation, setUnavailableReason, setGroup))
+  const [session] = useState(
+    () => new TelegramSession(setOperation, setUnavailableReason, setGroup, query, chat => setChatState({ chat })),
+  )
 
   useEffect(() => {
     if (initialization.value.appInitializing) return
@@ -54,6 +60,7 @@ function useTelegramData() {
   }
 
   return {
+    chat: chatState.chat,
     operation,
     group,
     unavailableReason,

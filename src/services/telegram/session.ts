@@ -1,10 +1,14 @@
 /* eslint-disable preserve-caught-error -- Telegram errors may contain credentials; expose only safe messages. */
+import type { QueryClient } from '@tanstack/react-query'
+
 import { BaseTelegramClient, MemoryStorage, tl } from '@mtcute/web'
 import { getMe, logOut, signInQr } from '@mtcute/web/methods.js'
 import { isTauri } from '@tauri-apps/api/core'
 
 import { auth } from '../tauri/auth-client'
 import { telegramGroup } from '../tauri/telegram-group-client'
+import { TelegramChat } from './chat'
+import { invalidTelegramSession } from './errors'
 import {
   groupError,
   groupIdentity,
@@ -23,31 +27,32 @@ export type TelegramLoginCallbacks = {
   invalidPassword: () => void
 }
 
-const invalidSession = (error: unknown) =>
-  tl.RpcError.is(error) &&
-  [
-    'AUTH_KEY_UNREGISTERED',
-    'AUTH_KEY_DUPLICATED',
-    'SESSION_REVOKED',
-    'SESSION_EXPIRED',
-    'USER_DEACTIVATED',
-    'USER_DEACTIVATED_BAN',
-  ].includes(error.text)
-
 export class TelegramSession {
   private client: BaseTelegramClient | null = null
   private attempt: AbortController | null = null
   private accountId: string | null = null
   private savedGroup: SavedTelegramGroup | null = null
   private operation: TelegramOperation = 'idle'
+  private chat: TelegramChat | null = null
+  private chatEpoch = 0
+  private chatTeardown = Promise.resolve()
+  private revoking = false
+  private operationSettled: (() => void) | null = null
 
   constructor(
     private readonly onOperation: (operation: TelegramOperation) => void,
     private readonly onUnavailable: (reason: string) => void,
     private readonly onGroup: (state: TelegramGroupState) => void = () => {},
+    private readonly query?: QueryClient,
+    private readonly onChat: (chat: TelegramChat | null) => void = () => {},
   ) {}
 
   private setOperation(operation: TelegramOperation) {
+    if (operation === 'idle') {
+      this.operationSettled?.()
+      this.operationSettled = null
+      if (this.revoking) operation = 'disconnecting'
+    }
     this.operation = operation
     this.onOperation(operation)
   }
@@ -70,9 +75,13 @@ export class TelegramSession {
       apiId: credential.apiId,
       apiHash: credential.apiHash,
       storage: new MemoryStorage(),
-      updates: false,
+      updates: { catchUp: false, onChannelTooLong: id => this.chat?.channelGap(id) },
       logLevel: 0,
       initConnectionOptions: { deviceModel: 'Clockalong Desktop', appVersion: '0.0.0' },
+    })
+    const client = this.client
+    client.onError.add(error => {
+      if (invalidTelegramSession(error) && this.client === client) void this.sessionRevoked(client)
     })
     return { client: this.client, session: credential.session }
   }
@@ -106,7 +115,7 @@ export class TelegramSession {
       committed = true
     } catch (error) {
       if (!attempt.signal.aborted) {
-        if (invalidSession(error)) {
+        if (invalidTelegramSession(error)) {
           await auth.disconnectTelegram()
           this.resetGroup()
           throw new Error('Your Telegram session expired. Connect again to scan a new QR code.')
@@ -150,7 +159,7 @@ export class TelegramSession {
           this.accountId = String(me.id)
         } catch (error) {
           attempt.signal.throwIfAborted()
-          if (invalidSession(error)) {
+          if (invalidTelegramSession(error)) {
             await auth.disconnectTelegram()
             this.resetGroup()
             throw new Error('Your Telegram session expired. Try again to scan a new QR code.')
@@ -219,6 +228,7 @@ export class TelegramSession {
   async disconnect() {
     if (this.operation !== 'idle') throw new Error('Wait for the current Telegram action to finish.')
     this.setOperation('disconnecting')
+    this.stopChat()
     try {
       await auth.disconnectTelegram().catch(() => {
         throw new Error('Could not remove the saved Telegram session. Try Disconnect again.')
@@ -232,6 +242,7 @@ export class TelegramSession {
   }
 
   private resetGroup() {
+    this.stopChat()
     this.savedGroup = null
     this.onGroup({ group: null, status: 'none' })
   }
@@ -261,6 +272,7 @@ export class TelegramSession {
   }
 
   private async restoreGroup(attempt: AbortController) {
+    this.stopChat()
     try {
       const saved = await telegramGroup.read()
       attempt.signal.throwIfAborted()
@@ -291,6 +303,7 @@ export class TelegramSession {
     attempt.signal.throwIfAborted()
     this.savedGroup = group
     this.onGroup({ group: groupIdentity(group), status: 'connected' })
+    await this.startChat(group)
   }
 
   async connectGroup(link: string) {
@@ -327,8 +340,16 @@ export class TelegramSession {
   async unlinkGroup() {
     if (this.operation !== 'idle') throw new Error('Wait for the current Telegram action to finish.')
     this.setOperation('group')
+    this.stopChat()
     try {
       await this.clearGroup()
+    } catch (error) {
+      this.onGroup({
+        group: this.savedGroup ? groupIdentity(this.savedGroup) : null,
+        status: 'unavailable',
+        error: 'Could not unlink the group. Retry its connection or unlink again.',
+      })
+      throw error
     } finally {
       this.setOperation('idle')
     }
@@ -345,10 +366,79 @@ export class TelegramSession {
   }
 
   private async destroyClient() {
+    this.stopChat()
     const client = this.client
     this.client = null
     this.accountId = null
     await client?.destroy().catch(() => {})
+  }
+
+  private stopChat() {
+    ++this.chatEpoch
+    const chat = this.chat
+    this.chat = null
+    this.onChat(null)
+    if (chat) this.chatTeardown = chat.dispose().catch(() => {})
+    else {
+      const client = this.client
+      const epoch = this.chatEpoch
+      this.chatTeardown = this.chatTeardown.then(async () => {
+        if (client && epoch === this.chatEpoch && !this.chat) await client.stopUpdatesLoop().catch(() => {})
+      })
+    }
+  }
+
+  private async startChat(group: SavedTelegramGroup) {
+    if (!this.query || !this.client) return
+    const epoch = this.chatEpoch
+    const client = this.client
+    await this.chatTeardown
+    if (epoch !== this.chatEpoch || this.client !== client) return
+    const chat = new TelegramChat(
+      client,
+      group,
+      this.query,
+      () => {
+        this.onChat(this.chat)
+        if (this.chat && !this.chat.isReady)
+          this.onGroup({
+            group: groupIdentity(group),
+            status: 'unavailable',
+            error: 'This group is unavailable. Retry its connection or unlink it.',
+          })
+      },
+      () => this.sessionRevoked(client),
+    )
+    this.chat = chat
+    this.onChat(chat)
+    void chat.start()
+  }
+
+  private async sessionRevoked(client: BaseTelegramClient) {
+    if (this.client !== client || this.revoking) return
+    this.revoking = true
+    const settled =
+      this.operation === 'idle'
+        ? Promise.resolve()
+        : new Promise<void>(resolve => {
+            this.operationSettled = resolve
+          })
+    this.attempt?.abort()
+    this.stopChat()
+    if (this.operation === 'idle') this.setOperation('disconnecting')
+    try {
+      await settled
+      if (this.client !== client) return
+      await auth.disconnectTelegram().catch(async () => {
+        await auth.setTelegramUnavailable().catch(() => {})
+      })
+      if (this.client !== client) return
+      this.resetGroup()
+      await this.destroyClient()
+    } finally {
+      this.revoking = false
+      this.setOperation('idle')
+    }
   }
 
   dispose() {

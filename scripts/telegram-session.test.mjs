@@ -1,4 +1,5 @@
-import { BaseTelegramClient } from '@mtcute/web'
+import { BaseTelegramClient, tl } from '@mtcute/web'
+import { QueryClient } from '@tanstack/react-query'
 import assert from 'node:assert/strict'
 import { beforeEach, mock, test } from 'node:test'
 
@@ -238,7 +239,8 @@ test('failed unlink does not clear the selection or claim success', async () => 
     throw new Error('private storage error')
   })
   await assert.rejects(session.unlinkGroup(), /Could not remove/)
-  assert.equal(states.length, 0)
+  assert.equal(states.at(-1).status, 'unavailable')
+  assert.equal(states.at(-1).group, null)
 })
 
 test('pending group verification cannot race unlink or disconnect and disposed results never save', async () => {
@@ -318,4 +320,120 @@ test('late timed-out self lookup cannot replace a new authorization account', as
   await session.unlinkGroup()
   assert.equal(states.at(-1).status, 'none')
   session.dispose()
+})
+
+async function restoredChat(t, start = async () => {}) {
+  credentials.session = 'saved-session'
+  const query = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity, retry: false } } })
+  const chats = []
+  const groups = []
+  const clients = []
+  mock.method(telegramGroup, 'read', async () => basic)
+  mock.method(BaseTelegramClient.prototype, 'startUpdatesLoop', async function () {
+    clients.push(this)
+    events.push('updates-start')
+    await start()
+  })
+  mock.method(BaseTelegramClient.prototype, 'stopUpdatesLoop', async () => {
+    events.push('updates-stop')
+  })
+  mock.method(BaseTelegramClient.prototype, 'call', async request => {
+    if (request._ === 'users.getUsers') return [user]
+    if (request._ === 'messages.getChats')
+      return { _: 'messages.chats', chats: [{ _: 'chat', id: 123, title: 'Team' }] }
+    if (request._ === 'messages.checkChatInvite')
+      return { _: 'chatInviteAlready', chat: { _: 'chat', id: 123, title: 'Team' } }
+    throw new Error('Unexpected request in chat lifecycle test')
+  })
+  const session = new TelegramSession(
+    () => {},
+    () => {},
+    state => groups.push(state),
+    query,
+    chat => chats.push(chat),
+  )
+  t.after(async () => {
+    session.dispose()
+    await new Promise(resolve => setImmediate(resolve))
+    query.clear()
+  })
+  await session.restore()
+  assert.ok(chats.at(-1)?.isReady)
+  return { session, query, chats, groups, client: clients[0] }
+}
+
+test('unlink aborts chat and removes its queries before native group removal completes', async t => {
+  const f = await restoredChat(t)
+  const chat = f.chats.at(-1)
+  f.query.setQueryData(chat.cache.keys.history(null), { pages: [], pageParams: [] })
+  const pending = deferred()
+  mock.method(telegramGroup, 'remove', () => pending.promise)
+  const unlinking = f.session.unlinkGroup()
+  assert.equal(chat.signal.aborted, true)
+  assert.equal(f.chats.at(-1), null)
+  assert.equal(f.query.getQueryCache().getAll().length, 0)
+  pending.resolve()
+  await unlinking
+  assert.equal(f.groups.at(-1).status, 'none')
+})
+
+test('failed unlink keeps a retryable selection and creates a fresh chat lifetime on retry', async t => {
+  const f = await restoredChat(t)
+  const old = f.chats.at(-1)
+  mock.method(telegramGroup, 'remove', async () => {
+    throw new Error('private storage error')
+  })
+  await assert.rejects(f.session.unlinkGroup(), /Could not remove/)
+  assert.equal(f.groups.at(-1).status, 'unavailable')
+  assert.equal(f.groups.at(-1).group.id, '-123')
+  assert.equal(f.chats.at(-1), null)
+  assert.equal(old.signal.aborted, true)
+  await f.session.retryGroup()
+  assert.equal(f.groups.at(-1).status, 'connected')
+  assert.ok(f.chats.at(-1).isReady)
+  assert.notEqual(f.chats.at(-1).scope, old.scope)
+})
+
+test('revocation blocks a new login during native cleanup and ignores later errors from the old client', async t => {
+  const f = await restoredChat(t)
+  const old = f.chats.at(-1)
+  f.query.setQueryData(old.cache.keys.history(null), { pages: [], pageParams: [] })
+  const pending = deferred()
+  remove = () => pending.promise
+  f.client.onError.emit(new tl.RpcError(401, 'SESSION_REVOKED'))
+  f.client.onError.emit(new tl.RpcError(401, 'SESSION_REVOKED'))
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(old.signal.aborted, true)
+  assert.equal(f.query.getQueryCache().getAll().length, 0)
+  assert.equal(auth.disconnectTelegram.mock.callCount(), 1)
+  assert.equal(await f.session.connect(callbacks), false)
+  pending.resolve()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(await f.session.connect(callbacks), true)
+  const current = f.chats.at(-1)
+  assert.ok(current.isReady)
+  assert.notEqual(current.scope, old.scope)
+  f.client.onError.emit(new tl.RpcError(401, 'SESSION_REVOKED'))
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(current.signal.aborted, false)
+  assert.equal(auth.disconnectTelegram.mock.callCount(), 1)
+})
+
+test('relink waits for old update startup cleanup before starting the replacement chat', async t => {
+  const pending = deferred()
+  let starts = 0
+  const f = await restoredChat(t, () => (++starts === 1 ? pending.promise : Promise.resolve()))
+  const old = f.chats.at(-1)
+  await f.session.unlinkGroup()
+  const relinking = f.session.connectGroup('t.me/+example')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(f.chats.at(-1), null)
+  assert.equal(starts, 1)
+  pending.resolve()
+  await relinking
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(f.chats.at(-1).isReady)
+  assert.notEqual(f.chats.at(-1).scope, old.scope)
+  assert.equal(starts, 2)
+  assert.equal(events.at(-1), 'updates-start')
 })
