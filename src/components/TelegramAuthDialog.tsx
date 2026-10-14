@@ -80,17 +80,21 @@ export const TelegramAuthDialog = forwardRef<TelegramAuthDialogHandle>(function 
         close()
       }}>
       <div className="modal-box max-w-md rounded-lg">
-        <h3 className="mb-4 text-lg font-semibold">Connect Telegram</h3>
+        <h3 className="mb-5 text-lg leading-7 font-semibold">Connect Telegram</h3>
         {failed ? (
-          <p className="text-sm">Connection did not finish. Try again when you are ready.</p>
+          <p className="text-base-content/70 text-sm leading-6">
+            Connection did not finish. Try again when you are ready.
+          </p>
         ) : view.step === 'qr' ? (
           <div className="grid justify-items-center gap-4">
             <QRCodeSVG value={view.url} size={224} marginSize={4} title="Telegram login QR code" />
-            <p className="text-sm">On your phone, open Telegram → Settings → Devices → Link Desktop Device.</p>
+            <p className="text-base-content/70 text-sm leading-6">
+              On your phone, open Telegram → Settings → Devices → Link Desktop Device.
+            </p>
           </div>
         ) : view.step === 'password' ? (
           <form
-            className="grid gap-4"
+            className="grid gap-5"
             onSubmit={event => {
               event.preventDefault()
               const prompt = passwordPrompt.current
@@ -99,17 +103,17 @@ export const TelegramAuthDialog = forwardRef<TelegramAuthDialogHandle>(function 
               setPassword('')
               setView({ step: 'waiting' })
             }}>
-            <p id="telegram-password-help" className="text-sm">
+            <p id="telegram-password-help" className="text-base-content/70 text-sm leading-6">
               Enter the password you set in Telegram under Settings → Privacy and Security → Two-Step Verification.
             </p>
-            <label className="grid gap-2 text-sm">
-              Telegram password
+            <label className="form-control grid gap-2">
+              <span className="label-text text-sm font-medium">Telegram password</span>
               <input
                 autoFocus
                 autoComplete="off"
                 aria-describedby="telegram-password-help"
                 type="password"
-                className="input input-bordered w-full"
+                className="input input-bordered w-full text-sm"
                 value={password}
                 onChange={event => setPassword(event.target.value)}
               />
