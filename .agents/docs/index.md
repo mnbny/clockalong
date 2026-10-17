@@ -59,7 +59,7 @@ Add each document using this format:
 #### [mcp-server.md](./mcp-server.md)
 
 - Description: Local agent tools, command ownership, lifecycle, and trust boundaries.
-- Tags: `mcp`, `agents`, `tools`, `snapshots`, `timers`, `security`, `loopback`
+- Tags: `mcp`, `agents`, `tools`, `snapshots`, `timers`, `telegram`, `files`, `security`, `loopback`
 
 #### [storage.md](./storage.md)
 
@@ -73,8 +73,8 @@ Add each document using this format:
 
 #### [telegram.md](./telegram.md)
 
-- Description: Telegram connections, selected-group chat, attachments, and data boundaries.
-- Tags: `telegram`, `authentication`, `groups`, `chat`, `realtime`, `files`, `cache`
+- Description: Telegram connections, selected-group chat, agent sends, attachments, and data boundaries.
+- Tags: `telegram`, `authentication`, `groups`, `chat`, `mcp`, `realtime`, `files`, `cache`
 
 #### [linear.md](./linear.md)
 
