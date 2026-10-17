@@ -296,6 +296,44 @@ export function photoMime(bytes: Uint8Array) {
   return null
 }
 
+export async function probeVideo(source: Blob, signal: AbortSignal): Promise<AttachmentInput['video']> {
+  checkSignal(signal)
+  const prefix = new Uint8Array(await source.slice(0, 12).arrayBuffer())
+  checkSignal(signal)
+  if (String.fromCharCode(...prefix.subarray(4, 8)) !== 'ftyp') return undefined
+  // shortcut: only browser-decodable MP4; add transcoding when broader video support is needed.
+  const video = document.createElement('video')
+  const url = URL.createObjectURL(source)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let abort: () => void = () => {}
+  try {
+    return await new Promise((resolve, reject) => {
+      abort = () => reject(new TelegramFileError('aborted'))
+      signal.addEventListener('abort', abort, { once: true })
+      timer = setTimeout(() => resolve(undefined), 5000)
+      video.onloadeddata = () => {
+        const { videoWidth: width, videoHeight: height, duration } = video
+        resolve(
+          width > 0 && height > 0 && Number.isFinite(duration) && duration > 0
+            ? { compatible: true, width, height, duration }
+            : undefined,
+        )
+      }
+      video.onerror = () => resolve(undefined)
+      video.preload = 'auto'
+      video.muted = true
+      video.src = url
+    })
+  } finally {
+    clearTimeout(timer)
+    signal.removeEventListener('abort', abort)
+    video.onloadeddata = video.onerror = null
+    video.removeAttribute('src')
+    video.load()
+    URL.revokeObjectURL(url)
+  }
+}
+
 /** Returns a streaming SDK input; the scoped runtime owns the actual send and retry ID. */
 export async function prepareAttachment(
   client: ITelegramClient,

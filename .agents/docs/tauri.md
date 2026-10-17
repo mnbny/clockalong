@@ -78,6 +78,8 @@ Normal exit removes registered files, and startup removes crash leftovers. Compl
 
 Small Telegram avatars and previews use a separate persistent native image cache. Rust owns paths, storage limits, eviction, and access handles. Reads and writes use bounded binary IPC and run off the main thread. Restoring the same group retains completed images and removes partial writes. Unlink and disconnect invalidate handles and delete cached images. The frontend cannot select filesystem paths or reuse invalidated handles.
 
+MCP attachment sends use a separate native reader. Rust retains the caller's absolute path with the pending send request. The frontend receives only a filename and can claim bounded binary bytes once through the request identifier. Reads accept nonempty regular files of at most 20 MiB and run off the main thread. Completed or expired requests cannot claim files. This does not grant the frontend arbitrary path access.
+
 ## Auth gate
 
 Rust owns the public authentication snapshot. Native startup validates Clockify before app initialization completes. Linear and GitHub checks run independently and do not block initialization.

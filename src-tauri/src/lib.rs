@@ -134,6 +134,7 @@ pub fn run() {
             telegram_media::telegram_media_release,
             auth::clockalong_auth_refresh_linear_credential,
             mcp::clockalong_mcp_complete_command,
+            mcp::clockalong_mcp_read_telegram_attachment,
             mcp::clockalong_mcp_get_state,
             mcp::clockalong_mcp_publish_snapshot,
             mcp::clockalong_mcp_set_enabled,

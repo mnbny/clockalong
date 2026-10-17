@@ -196,6 +196,18 @@ pub fn clockalong_mcp_complete_command(
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+pub async fn clockalong_mcp_read_telegram_attachment(
+    state: tauri::State<'_, McpBridgeState>,
+    request_id: String,
+) -> Result<tauri::ipc::Response, String> {
+    let path = state.take_telegram_attachment(&request_id)?;
+    tauri::async_runtime::spawn_blocking(move || crate::mcp_bridge::read_telegram_attachment(&path))
+        .await
+        .map_err(|_| "Could not read the attachment.".to_string())?
+        .map(tauri::ipc::Response::new)
+}
+
 fn log_status(message: &str, snapshot: &ClockalongMcpSnapshot) {
     log::info!(
         "{message} running={} port={:?} bridge_ready={} last_error={:?}",

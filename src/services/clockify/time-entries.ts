@@ -1,5 +1,5 @@
 import type { ClockifyProject } from '../storage/config'
-import type { CreateTimeEntryRequest, TimeEntryWithRatesDtoV1 } from './generated/clockify'
+import type { CreateTimeEntryRequest, TimeEntryWithRatesDtoV1, UpdateTimeEntryRequest } from './generated/clockify'
 
 import { clockify } from './client'
 import { type ClockifyTimeEntryInterval, getClockifyTimeEntryTiming } from './time-entry-interval'
@@ -39,6 +39,36 @@ export async function stopClockifyTimeEntry(entry: TimeEntryWithRatesDtoV1) {
     { end: new Date().toISOString() },
     { params: { userId: entry.userId, workspaceId: entry.workspaceId } },
   )
+}
+
+export function getClockifyTimeEntryUpdateBody(entry: TimeEntryWithRatesDtoV1, start: Date, end: Date) {
+  const body: UpdateTimeEntryRequest = {
+    billable: entry.billable ?? false,
+    end: end.toISOString(),
+    start: start.toISOString(),
+  }
+
+  if (entry.description !== undefined) {
+    body.description = entry.description
+  }
+
+  if (entry.projectId) {
+    body.projectId = entry.projectId
+  }
+
+  if (entry.taskId) {
+    body.taskId = entry.taskId
+  }
+
+  if (entry.tagIds) {
+    body.tagIds = entry.tagIds
+  }
+
+  if (entry.type === 'REGULAR' || entry.type === 'BREAK') {
+    body.type = entry.type
+  }
+
+  return body
 }
 
 function getClockifyTimeEntryCopyBody(

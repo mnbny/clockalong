@@ -10,11 +10,16 @@ import {
   downloadFile,
   downloadPreview,
   prepareAttachment,
+  probeVideo,
   TelegramFileError,
 } from '../../../src/services/telegram/chat-files'
 import { deferred } from './fixtures'
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
 
 const PART = 512 * 1024
 const signal = () => new AbortController().signal
@@ -281,6 +286,64 @@ test('PNG and nonanimated WebP classify as photos; animated WebP and unknown vid
     signal(),
   )
   expect(prepared).toMatchObject({ type: 'video', supportsStreaming: false })
+})
+
+test('video probing requires a decoded MP4 frame and releases its object URL', async () => {
+  const video = {
+    src: '',
+    videoWidth: 320,
+    videoHeight: 240,
+    duration: 2,
+    onloadeddata: null as (() => void) | null,
+    onerror: null as (() => void) | null,
+    removeAttribute: vi.fn(),
+    load: vi.fn(),
+  }
+  const started = deferred()
+  vi.stubGlobal('document', {
+    createElement: () => {
+      started.resolve()
+      return video
+    },
+  })
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test')
+  const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+  expect(await probeVideo(new Blob(['not an MP4']), signal())).toBeUndefined()
+  const pending = probeVideo(new Blob(['\0\0\0\u0018ftypisom']), signal())
+  await started.promise
+  video.onloadeddata!()
+  expect(await pending).toEqual({ compatible: true, width: 320, height: 240, duration: 2 })
+  expect(video.removeAttribute).toHaveBeenCalledWith('src')
+  expect(revoke).toHaveBeenCalledWith('blob:test')
+})
+
+test('failed, stalled, and cancelled video probes release the decoder without reporting compatible media', async () => {
+  vi.useFakeTimers()
+  const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test')
+  for (const outcome of ['error', 'timeout', 'abort']) {
+    const started = deferred()
+    const video = { src: '', onerror: null as (() => void) | null, removeAttribute: vi.fn(), load: vi.fn() }
+    vi.stubGlobal('document', {
+      createElement: () => {
+        started.resolve()
+        return video
+      },
+    })
+    const controller = new AbortController()
+    const pending = probeVideo(new Blob(['\0\0\0\u0018ftypisom']), controller.signal)
+    const assertion =
+      outcome === 'abort'
+        ? expect(pending).rejects.toSatisfy(category('aborted'))
+        : expect(pending).resolves.toBeUndefined()
+    await started.promise
+    if (outcome === 'error') video.onerror!()
+    else if (outcome === 'abort') controller.abort()
+    else await vi.advanceTimersByTimeAsync(5000)
+    await assertion
+    expect(video.removeAttribute).toHaveBeenCalledWith('src')
+  }
+  expect(revoke).toHaveBeenCalledTimes(3)
 })
 
 test('upload uses lower of current server and installed SDK limits, including premium', async () => {

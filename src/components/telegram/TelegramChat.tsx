@@ -35,6 +35,7 @@ function ChatLifetime({ chat }: { chat: ChatService }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null)
   const picking = useRef(false)
   const live = useRef(true)
+  const sends = useRef(new AbortController())
   const send = useTelegramSend(operation => {
     setDrafts(values => {
       const next = { ...values }
@@ -64,9 +65,10 @@ function ChatLifetime({ chat }: { chat: ChatService }) {
   }, [dashboard])
   useEffect(() => {
     live.current = true
+    sends.current = new AbortController()
     return () => {
       live.current = false
-      for (const item of chat.cache.outgoing()) chat.cancel(item.operation.id)
+      sends.current.abort()
     }
   }, [chat])
   const select = useCallback((id: number) => {
@@ -157,7 +159,7 @@ function ChatLifetime({ chat }: { chat: ChatService }) {
       setError(chatError(error))
       return
     }
-    send.mutate({ operation })
+    send.mutate({ operation, signal: sends.current.signal })
   }
 
   if (!dashboard) return null
@@ -190,6 +192,7 @@ function ChatLifetime({ chat }: { chat: ChatService }) {
           onClose={close}
           draft={draft}
           blocked={telegram.busy}
+          sendSignal={() => sends.current.signal}
           onFiles={(selectedFiles, folder) => void files(selectedFiles, folder)}
           onDropError={setError}
           composer={{

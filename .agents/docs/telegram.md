@@ -6,6 +6,8 @@ Telegram is an optional account connection for conversations in one selected gro
 
 Dashboard chat provides history, topics, realtime updates, unread counts, replies, and single-file transfers. Full-size images and videos open in a media dialog. Downloads save to the system Downloads folder. Users need an existing Telegram account and the official Telegram phone app.
 
+The optional local MCP server lists destinations and sends text or one local file within the selected group. It exposes no other groups or message history. Telegram MCP tools do not require Clockify authentication.
+
 ## Ownership
 
 One private frontend service owns the MTProto client and serializes account and group changes. A thin provider owns the service above routes. Sign-in and Settings share a compact authentication dialog. Conversation reads and transfers do not acquire the login operation guard.
@@ -82,13 +84,17 @@ Telegram confirmation replaces the local message. Realtime updates and send resp
 
 Failure adds an error and Retry and Dismiss actions to the affected message. Each send retains its identity for an explicit retry. Other sends and drafts stay independent. Clockalong does not retry sends automatically or persist an outbox. The SDK can wait or retry internally. A cancellation after the final send request can have an unknown outcome; it does not prove Telegram rejected the message.
 
+MCP sends share these mutation and cache rules without clearing a composer draft. UI teardown cancels UI sends and retries through their own lifetime signal. MCP sends use a separate request deadline. Telegram scope teardown cancels both.
+
 Cached permissions help reject restricted actions before a request. Telegram remains authoritative when permissions change. Failures expose fixed categories, including restrictions and wait periods, without raw provider errors or content.
 
 ## Attachments
 
 The file picker, drops onto the open drawer, and file pastes into the focused composer select one attachment. Multiple files and folders are rejected. Selection does not send a file. Uploads accept one selected File or Blob per send. Progress and cancellation appear on the outgoing attachment, without blocking the composer.
 
-Media mode uses supported photos and videos with verified compatibility metadata. Original mode sends the supplied file as a document. An unprobed or unsupported video uses the document path. Media mode does not promise local compression or video transcoding.
+MCP accepts one absolute local file path through a bounded native reader. Files must be nonempty regular files of at most 20 MiB. Supported photos and locally playable MP4 videos default to media, with an optional plain-text caption. An explicit file option forces the original document path. Unsupported formats remain documents.
+
+Media mode uses supported photos and videos with verified compatibility metadata. MCP probes MP4 videos through the local browser decoder without playback. Failed or stalled probes use the document path. Original mode sends the supplied file as a document. An unprobed or unsupported video uses the document path. Media mode does not promise local compression or video transcoding.
 
 Upload limits follow Telegram's account configuration within the installed SDK's supported limits. Full downloads stream to a writable destination with bounded buffering and respect destination backpressure. The service does not assemble large files in the Query cache. Expired file references permit one scoped refresh and retry for the same attachment. Protected and ephemeral attachments are not downloadable.
 

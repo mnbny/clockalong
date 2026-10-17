@@ -13,7 +13,7 @@
 - Reusable frontend components live in `src/components/`; shared frontend helpers live in `src/utils/`.
 - Frontend-to-Rust bridge calls live in clients under `src/services/tauri/`; route code should use those clients instead of raw `invoke`.
 - External frontend API clients live under `src/services/<provider>/`; Clockify uses a generated Zodios client under `src/services/clockify/`.
-- The frontend MCP boundary lives under `src/services/mcp/`. It normalizes snapshots, controls timers, and creates completed entries through existing provider services.
+- The frontend MCP boundary normalizes snapshots, controls timers, creates completed entries, lists Telegram destinations, and sends Telegram messages through existing provider services.
 - Work sources can be external providers such as Linear and GitHub or local sources such as Quick Timers. Do not force a generic provider abstraction until multiple implemented sources prove the common shape.
 - Import directly from source modules instead of internal re-export files.
 - Keep simple logic near its use. Extract helpers when reuse or a separate responsibility justifies them. These rules apply to TypeScript and Rust.
@@ -29,8 +29,8 @@
 - Native MCP modules split responsibilities:
   - `src-tauri/src/mcp.rs`: reads stored enablement, reports server status, and owns the Tauri commands.
   - `src-tauri/src/mcp_http.rs`: owns the loopback listener and validates HTTP requests.
-  - `src-tauri/src/mcp_protocol.rs`: negotiates MCP, defines public tool schemas, validates arguments, and answers read tools.
-  - `src-tauri/src/mcp_bridge.rs`: owns the cached snapshot and tracks pending webview commands.
+  - The protocol layer negotiates MCP, defines public tool schemas, validates arguments, and answers cached tracking reads.
+  - The bridge owns the cached snapshot, pending webview commands, request deadlines, and single-use attachment access.
 - Auth routing uses Clockify as the app-level gate:
   - `/` waits for native app initialization, then navigates to `/dashboard`.
   - `_app` guards authenticated routes and redirects users to `/sign-in` only when Clockify is unauthenticated.
@@ -48,9 +48,9 @@ Telegram uses a private frontend service for MTProto authentication, selected-gr
 
 Telegram conversation records live in memory in TanStack Query. Each account and group connection has a separate cache scope. Provider services exclude unrelated account data from the cache. Query owns history, topics, reply excerpts, unread counts, avatars, and previews. A bounded native disk cache retains only avatar and preview bytes across restarts. The interface derives display order, topic selection, and formatting from Query records.
 
-Mutation callbacks create optimistic messages, clear the originating draft, reconcile confirmed sends, and refresh unread counts. SDK progress callbacks update active transfers. Native writers receive attachment streams for Downloads or temporary media without general frontend filesystem access.
+Shared mutation callbacks create optimistic messages, reconcile confirmed sends, and refresh unread counts. UI callers can supply a draft-clearing callback; MCP sends do not. SDK progress callbacks update active transfers. Native writers receive attachment streams for Downloads or temporary media without general frontend filesystem access.
 
-The authenticated layout owns the Telegram chat lifetime. A Dashboard-only header button opens its drawer outside the background app shell. Local state retains topic selection and drafts across drawer closure and Settings visits. Leaving the authenticated layout or replacing the chat scope clears this state and cancels transfers. Drawer and media-dialog focus stay separate from background app shortcuts.
+The authenticated layout owns the Telegram chat interface lifetime. A Dashboard-only header button opens its drawer outside the background app shell. Local state retains topic selection and drafts across drawer closure and Settings visits. Leaving the authenticated layout clears this state and cancels UI transfers. MCP sends use independent request deadlines. Replacing the Telegram scope cancels both UI and MCP work. Drawer and media-dialog focus stay separate from background app shortcuts.
 
 ## Frontend providers
 
@@ -62,7 +62,7 @@ The theme provider receives the saved theme before the app renders. It keeps the
 
 Work-source sync providers also mount inside `QueryClientProvider`. `LinearSyncProvider` owns the background sync into the local Linear assigned-ticket collection, and `GithubSyncProvider` owns the background sync into the local GitHub work-item collection. Routes should consume those collections instead of starting provider pagination.
 
-The app header and MCP use one shared full sync action. It requests each enabled provider sync and refreshes Clockify running-entry and summary data. Concurrent callers share the work. Failed or paused requests produce an explicit sync error.
+The app header and MCP use one shared full sync action for tracking data. It syncs enabled work sources and refreshes Clockify entries, the running timer, and summaries. Concurrent callers share the work. Failed or paused requests produce an explicit sync error. Telegram discovery and sends use separate scoped commands.
 
 Provider widgets do not expose refresh controls. Only the app header refresh icon shows global sync activity.
 
@@ -128,5 +128,7 @@ JavaScript and TypeScript tests use Vitest with a separate configuration that ex
 Worktree scripts follow the Toolkit TypeScript/zx pattern and are independent of the harness. The shell setup entrypoint installs dependencies before loading TypeScript, so it also works in a fresh checkout. `scripts/worktree-utils.ts` owns logging, Git worktree discovery, local-file copying, and port validation. Setup copies missing base, development, and production environment files from the primary worktree and preserves existing local files. Run selects the first nonempty port from `WORKTREE_PORT`, `PASEO_PORT`, `CONDUCTOR_PORT`, `PASEO_WORKTREE_PORT`, and `PORT`, then falls back to `1420`. `conductor.json` and `paseo.json` call these same entrypoints.
 
 The development launcher uses Vite's standard environment-file precedence. It forwards only app-prefixed values from those files to the native child, while preserving the inherited process environment. Exported values take precedence. The normal Run action uses this launcher; direct Tauri invocation bypasses it.
+
+Worktree setup copies local configuration from the primary checkout. It does not copy changes back. Configuration kept only in a disposable worktree can be lost when that worktree is removed.
 
 The release launcher uses Vite production precedence and forwards app, Apple, and updater-signing configuration to the existing shell scripts. Exported values take precedence. Release commands preserve arguments, stdin, and exit codes without loading development environment files.
