@@ -30,7 +30,7 @@ The app exposes two narrow commands for diagnostics UI:
 - Console forwarding lives in `src/lib/logging.ts`.
 - Use `console.info`, `console.warn`, `console.error`, or `console.debug` with a stable bracketed prefix for logs that belong in the settings drawer.
 - Provider bridge helpers should log safe lifecycle messages, not credential values.
-- Clockify API logs use `[clockify api]` and should include endpoint, query params, status, and sanitized request/response summaries. Do not log API keys. Time-entry response summaries may include truncated descriptions, time-entry IDs, timestamps, user/workspace IDs, and internal-ref provider counts because those fields are needed to debug Clockify sync and matching issues.
+- Clockify API logs use `[clockify api]` and should include endpoint, query params, status, and sanitized request/response summaries. Do not log API keys. Bulk request summaries include only the entry count, not entry contents. Time-entry response summaries may include truncated descriptions, time-entry IDs, timestamps, user/workspace IDs, and internal-ref provider counts because those fields are needed to debug Clockify sync and matching issues.
 - The app log hook should read logs through the typed Tauri app client.
 - Clockify entry sync diagnostics use `[clockify sync]`. Log sync ranges, page counts, fetched/stored/skipped counts, insert/update counts, ref counts, and short entry samples. Do not log credentials.
 - Widget diagnostics use scoped prefixes such as `[clockify widget]`, `[linear widget]`, and `[github widget]` to show what the local synced-entry live queries expose to each dashboard widget.

@@ -103,7 +103,11 @@ Broad Clockify entry reads should come from the local synced entry collection in
 
 Overlap detection reads completed synced entries and ignores running entries. The current periods are intentionally non-overlapping: today, the previous six days, and days seven through twenty-seven ago. Overlapping completed entries show an `Overlap detected` error badge under only the affected period.
 
-Clicking the overlap badge opens a confirmation dialog with dated before/after ranges for each entry that would move. The repair preserves each entry's duration, keeps non-overlapping entries in place, and shifts overlapping entries forward until that period has no completed-entry overlap. The app updates only changed Clockify entries, then refreshes the entry sync and summary reports.
+The overlap badge opens a confirmation dialog with dated before/after ranges for each entry that would move. The repair preserves each entry's duration and keeps non-overlapping entries in place. It shifts overlapping entries forward until that period has no completed-entry overlap.
+
+The app submits changed Clockify entries in bulk requests of at most 25 entries. Each request contains entries from one user and workspace. Batches run one at a time. If Clockify rejects a batch because of a rate limit, the app pauses and retries that batch with the same timestamps. Retry waits are bounded. A successful response must confirm every entry in the batch before the next batch starts.
+
+If a repair stops after partial success, completed updates remain saved. The app does not assume that a failed bulk request leaves all entries unchanged. After success or failure, the dialog closes and the app refreshes the entry sync and summary reports. After a successful refresh, the next preview uses the refreshed entries.
 
 The widget has a compact entry table with `1 day`, `3 days`, and `7 days` calendar-day filters. It defaults to one day and follows the app's existing data-table patterns, including the shared row-level play/stop treatment. Resuming an entry creates a new running Clockify entry with the selected entry's trackable fields. Users can edit an entry's start time, end time, or duration from this table; duration accepts fractional minutes for precise corrections. Do not add adjacent-entry overlap protection to that edit flow; Clockalong should accept intentional overbilling here.
 

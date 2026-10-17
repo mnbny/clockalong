@@ -52,6 +52,8 @@ The public OpenAPI spec includes report paths and path-level report servers. Kee
 
 Clockify permissions follow the authenticated user's Clockify role and workspace access. Clockalong should assume a normal user key can manage that user's own timer and time entries. Admin-style workspace operations may fail unless the user has the required Clockify role.
 
+Overlap repairs use Clockify's bulk edit endpoint for one user and workspace. Each request retains the entry fields and the time intervals from the repair preview. Batch size is an app limit; Clockify does not publish a maximum in its API schema.
+
 ## Completed entry creation
 
 Provider services create both running timers and completed entries through the existing Clockify client. An optional interval supplies explicit start and end timestamps. A completed interval must contain valid dates and a positive duration. Without an interval, the service starts a timer at the current time.
