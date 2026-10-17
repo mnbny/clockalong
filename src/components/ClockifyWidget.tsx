@@ -1,4 +1,4 @@
-import type { TimeEntryWithRatesDtoV1, UpdateTimeEntryRequest } from '../services/clockify/generated/clockify'
+import type { TimeEntryWithRatesDtoV1 } from '../services/clockify/generated/clockify'
 import type { TimeEntrySummaryReportDto } from '../services/clockify/generated/reports'
 
 import { formatCurrency } from '@automattic/format-currency'
@@ -24,12 +24,14 @@ import { queryKeys } from '../lib/query-client'
 import { clockify, clockifyReports } from '../services/clockify/client'
 import {
   type ClockifyTimeEntryOverlapFix,
+  fixClockifyTimeEntryOverlaps,
   getCompletedClockifyTimeEntryOverlapFixes,
 } from '../services/clockify/overlaps'
 import { clockifyTimeEntriesCollection, type SyncedClockifyTimeEntry } from '../services/clockify/sync'
 import {
   createClockifyTimeEntryFromEntry,
   getClockifyTimeEntryTitle,
+  getClockifyTimeEntryUpdateBody,
   stopClockifyTimeEntry,
 } from '../services/clockify/time-entries'
 import { useStorage } from '../services/storage/useStorage'
@@ -261,28 +263,22 @@ export function ClockifyWidget() {
   }, [monthSyncedEntries, selectedWorkspace?.id, todaySyncedEntries, userQuery.data?.id, weekSyncedEntries])
   const overlapFixes = overlapDialogState?.fixes ?? []
   const fixOverlapMutation = useMutation({
-    mutationFn: async () => {
-      await Promise.all(
-        overlapFixes.map(fix =>
-          clockify.updateTimeEntry(getClockifyTimeEntryOverlapFixBody(fix), {
-            params: { id: fix.entry.id!, workspaceId: fix.entry.workspaceId! },
-          }),
-        ),
-      )
-
-      return overlapFixes.length
-    },
+    mutationFn: () => fixClockifyTimeEntryOverlaps(overlapFixes),
     onError: error => {
       appToast.error('Could not fix Clockify overlap', {
         description: getErrorMessage(error),
       })
     },
     onSuccess: count => {
+      appToast.success(count === 1 ? 'Fixed 1 Clockify entry' : `Fixed ${count} Clockify entries`)
+    },
+    onSettled: async () => {
       fixOverlapDialogRef.current?.close()
       setOverlapDialogState(null)
-      appToast.success(count === 1 ? 'Fixed 1 Clockify entry' : `Fixed ${count} Clockify entries`)
-      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.entrySync() })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.clockify.entrySync() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() }),
+      ])
     },
   })
   const resumeClockifyEntryMutation = useMutation({
@@ -420,7 +416,7 @@ export function ClockifyWidget() {
                   </div>
                   <div className="text-xl leading-7 font-semibold tabular-nums">{stat.time}</div>
                   <div className="text-base-content/60 text-sm tabular-nums">{stat.amount}</div>
-                  {periodOverlapFixes[stat.id].length ? (
+                  {!!periodOverlapFixes[stat.id].length && (
                     <div>
                       <button
                         className="badge badge-error badge-sm cursor-pointer gap-1 border-0 tracking-normal normal-case disabled:cursor-not-allowed"
@@ -440,7 +436,7 @@ export function ClockifyWidget() {
                         Overlap detected
                       </button>
                     </div>
-                  ) : null}
+                  )}
                 </div>
               ))}
             </div>
@@ -538,7 +534,7 @@ export function ClockifyWidget() {
                 className="btn btn-error"
                 type="submit"
                 disabled={fixOverlapMutation.isPending || !overlapFixes.length}>
-                {fixOverlapMutation.isPending ? <span className="loading loading-spinner loading-sm" /> : null}
+                {!!fixOverlapMutation.isPending && <span className="loading loading-spinner loading-sm" />}
                 Fix
               </button>
             </div>
@@ -1004,44 +1000,6 @@ function formatTime(value: string | undefined) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(date)
-}
-
-function getClockifyTimeEntryOverlapFixBody(fix: ClockifyTimeEntryOverlapFix): UpdateTimeEntryRequest {
-  return getClockifyTimeEntryUpdateBody(fix.entry, fix.start, fix.end)
-}
-
-function getClockifyTimeEntryUpdateBody(
-  entry: TimeEntryWithRatesDtoV1,
-  start: Date,
-  end: Date,
-): UpdateTimeEntryRequest {
-  const body: UpdateTimeEntryRequest = {
-    billable: entry.billable ?? false,
-    end: end.toISOString(),
-    start: start.toISOString(),
-  }
-
-  if (entry.description !== undefined) {
-    body.description = entry.description
-  }
-
-  if (entry.projectId) {
-    body.projectId = entry.projectId
-  }
-
-  if (entry.taskId) {
-    body.taskId = entry.taskId
-  }
-
-  if (entry.tagIds) {
-    body.tagIds = entry.tagIds
-  }
-
-  if (entry.type === 'REGULAR' || entry.type === 'BREAK') {
-    body.type = entry.type
-  }
-
-  return body
 }
 
 function getClockifyReportDateRangeType(period: ClockifyReportPeriodId): 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' {
