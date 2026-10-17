@@ -244,7 +244,9 @@ export function AppSettings() {
             />
           </SettingsRow>
 
-          <SettingsRow label="MCP server" description="Allow local agents to read work, control timers, and add time.">
+          <SettingsRow
+            label="MCP server"
+            description="Allow local agents to read work, control timers, add time, and send Telegram messages and local files to your selected group.">
             <div className="flex w-full min-w-0 flex-col gap-3">
               <div className="flex flex-wrap items-center gap-3">
                 <input

@@ -98,6 +98,21 @@ export class TelegramChatCache {
   setSummary(summary: GroupSummary) {
     if (this.active()) this.query.setQueryData(this.keys.summary(), summary)
   }
+  setTopic(topic: Topic) {
+    if (!this.active()) return
+    this.query.setQueryData(queryKeys.telegram.topic({ params: { topicId: topic.id }, other: [this.scope] }), topic)
+    this.query.setQueryData<InfiniteData<TopicPage>>(
+      this.keys.topics(),
+      data =>
+        data && {
+          ...data,
+          pages: data.pages.map(page => ({
+            ...page,
+            items: page.items.map(item => (item.id === topic.id ? topic : item)),
+          })),
+        },
+    )
+  }
   summary() {
     return this.query.getQueryData<GroupSummary>(this.keys.summary())
   }

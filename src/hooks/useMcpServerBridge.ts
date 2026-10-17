@@ -6,7 +6,7 @@ import type {
 } from '../services/clockify/generated/clockify'
 import type { TimeEntrySummaryReportDto } from '../services/clockify/generated/reports'
 import type { BuildMcpSnapshotInput } from '../services/mcp/snapshot'
-import type { McpCommandPayload, McpCommandResult } from '../services/tauri/mcp-client'
+import type { McpCommandPayload, McpCommandResult, McpTelegramCommand } from '../services/tauri/mcp-client'
 import type { QueryKey } from '@tanstack/react-query'
 
 import { useLiveQuery } from '@tanstack/react-db'
@@ -21,20 +21,26 @@ import { githubWorkItemsCollection } from '../services/github/sync'
 import { linearTicketsCollection, useLinearSync } from '../services/linear/sync'
 import { executeMcpCommand, type ExecuteMcpCommandContext } from '../services/mcp/commands'
 import { publishMcpSnapshot, refreshMcpSnapshot } from '../services/mcp/refresh'
+import { executeMcpTelegramCommand, type McpTelegramContext } from '../services/mcp/telegram'
 import { useStorage } from '../services/storage/useStorage'
 import { clockalongMcpCommandEvent, mcp } from '../services/tauri/mcp-client'
+import { useTelegram } from '../services/telegram/session-provider'
 import { getErrorMessage } from '../utils/errors'
 import { useAppAuth } from './useAppAuth'
 import { useAppInit } from './useAppInit'
 import { useClockifyTimerProject } from './useClockifyTimerProject'
 
 type IncomingMcpCommand = {
+  deadlineAt: unknown
   arguments: unknown
   requestId: unknown
   tool: unknown
 }
 
 export function useMcpServerBridge() {
+  const telegram = useTelegram()
+  const telegramRef = useRef(telegram)
+  telegramRef.current = telegram
   const appInitializationState = useAppInit()
   const authState = useAppAuth()
   const linearSync = useLinearSync()
@@ -222,7 +228,7 @@ export function useMcpServerBridge() {
         return
       }
 
-      void handleMcpCommand(event.payload, commandContextRef, snapshotInputRef)
+      void handleMcpCommand(event.payload, commandContextRef, snapshotInputRef, telegramRef)
     })
       .then(nextUnlisten => {
         if (active) {
@@ -275,6 +281,7 @@ async function handleMcpCommand(
   incoming: IncomingMcpCommand,
   contextRef: { current: ExecuteMcpCommandContext },
   snapshotInputRef: { current: BuildMcpSnapshotInput },
+  telegramRef: { current: McpTelegramContext },
 ) {
   if (typeof incoming.requestId !== 'string') {
     mcpBridgeLog('ignored command without request id')
@@ -285,6 +292,16 @@ async function handleMcpCommand(
   const tool = typeof incoming.tool === 'string' ? incoming.tool : 'unknown'
 
   mcpBridgeLog('command received', { requestId, tool })
+
+  if (tool === 'list_telegram_destinations' || tool === 'send_telegram_message') {
+    try {
+      const result = await executeMcpTelegramCommand(incoming as McpTelegramCommand, () => telegramRef.current)
+      await completeMcpCommand({ requestId, result, tool })
+    } catch (error) {
+      await completeMcpCommand({ error: getErrorMessage(error), requestId, tool })
+    }
+    return
+  }
 
   if (tool === 'refresh') {
     try {
