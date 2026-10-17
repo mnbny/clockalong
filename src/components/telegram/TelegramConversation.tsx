@@ -58,6 +58,7 @@ function useWindowActive() {
 }
 
 export function TelegramConversation({
+  sendSignal,
   open,
   topicId,
   canReply,
@@ -65,6 +66,7 @@ export function TelegramConversation({
   onReply,
   onMedia,
 }: {
+  sendSignal: () => AbortSignal
   open: boolean
   topicId: number | null
   canReply: boolean
@@ -262,7 +264,7 @@ export function TelegramConversation({
                 outgoing={outgoing.data?.find(item => item.record.view.id === message.id)}
                 canReply={canReply && message.id > 0}
                 canRetry={open && canReply && !!chat?.isReady && ['connected', 'updating'].includes(chat.connection)}
-                onRetry={operation => send.mutate({ operation })}
+                onRetry={operation => send.mutate({ operation, signal: sendSignal() })}
                 onDismiss={operation => chat?.cache.dismissSend(operation.id)}
                 onCancel={operation => chat?.cancel(operation.id)}
                 onReply={() => onReply(message)}

@@ -25,6 +25,7 @@ type Props = {
   draft: ChatDraft
   composer: Omit<ComponentProps<typeof TelegramComposer>, 'draft' | 'replyLabel' | 'disabled' | 'canSend' | 'notice'>
   blocked: boolean
+  sendSignal: () => AbortSignal
   onFiles: (files: File[], folder?: boolean) => void
   onDropError: (message: string) => void
 }
@@ -73,6 +74,7 @@ function TelegramChatContents({
   draft,
   composer,
   blocked,
+  sendSignal,
   onFiles,
   onDropError,
 }: Props) {
@@ -185,6 +187,7 @@ function TelegramChatContents({
             )}
             {ready ? (
               <TelegramConversation
+                sendSignal={sendSignal}
                 key={`conversation:${selected}`}
                 open={open}
                 topicId={selected!}
