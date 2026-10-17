@@ -148,7 +148,11 @@ function createClockifyAxiosConfig(apiKey: string | undefined, axiosConfig: Axio
 function getClockifyRequestBodyLog(data: unknown) {
   const body = parseClockifyRequestBody(data)
 
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+  if (Array.isArray(body)) {
+    return { count: body.length, type: 'array' }
+  }
+
+  if (!body || typeof body !== 'object') {
     return body
   }
 
