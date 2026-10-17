@@ -3,11 +3,13 @@ use serde_json::Value;
 use std::{
     collections::HashMap,
     fmt,
+    io::Read,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
         Mutex,
     },
-    time::Duration,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Runtime};
 use tokio::sync::oneshot;
@@ -17,7 +19,13 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const REFRESH_TIMEOUT: Duration = Duration::from_secs(120);
 
 type CommandCompletion = Result<Value, String>;
-type PendingCommands = HashMap<String, oneshot::Sender<CommandCompletion>>;
+const TELEGRAM_FILE_LIMIT: u64 = 20 * 1024 * 1024;
+struct PendingCommand {
+    sender: oneshot::Sender<CommandCompletion>,
+    attachment: Option<PathBuf>,
+    expires: Instant,
+}
+type PendingCommands = HashMap<String, PendingCommand>;
 
 #[derive(Clone)]
 pub struct CachedMcpSnapshot {
@@ -48,6 +56,7 @@ struct McpCommandEvent {
     request_id: String,
     tool: String,
     arguments: Value,
+    deadline_at: u64,
 }
 
 impl Default for McpBridgeState {
@@ -117,18 +126,51 @@ impl McpBridgeState {
         &self,
         app: &AppHandle<R>,
         tool: String,
-        arguments: Value,
+        mut arguments: Value,
     ) -> Result<Value, McpBridgeError> {
         let request_id = format!(
             "mcp-{}",
             self.next_request_id.fetch_add(1, Ordering::Relaxed)
         );
         let (sender, receiver) = oneshot::channel();
+        let timeout = if matches!(tool.as_str(), "refresh" | "send_telegram_message") {
+            REFRESH_TIMEOUT
+        } else {
+            COMMAND_TIMEOUT
+        };
+        let attachment = if tool == "send_telegram_message" {
+            arguments.as_object_mut().and_then(|args| {
+                args.remove("filePath")
+                    .and_then(|path| path.as_str().map(PathBuf::from))
+            })
+        } else {
+            None
+        };
+        if let Some(path) = &attachment {
+            arguments["fileName"] = Value::String(
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("attachment")
+                    .to_string(),
+            );
+        }
+        let deadline_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64
+            + timeout.as_millis() as u64;
         let pending_count = {
             let mut pending_commands = self.pending_commands.lock().map_err(|_| {
                 McpBridgeError::Internal("Failed to register MCP command".to_string())
             })?;
-            pending_commands.insert(request_id.clone(), sender);
+            pending_commands.insert(
+                request_id.clone(),
+                PendingCommand {
+                    sender,
+                    attachment,
+                    expires: Instant::now() + timeout,
+                },
+            );
             pending_commands.len()
         };
         let pending_guard = PendingCommandGuard {
@@ -145,15 +187,11 @@ impl McpBridgeState {
                 request_id: request_id.clone(),
                 tool: tool.clone(),
                 arguments,
+                deadline_at,
             },
         )
         .map_err(|error| McpBridgeError::Internal(error.to_string()))?;
 
-        let timeout = if tool == "refresh" {
-            REFRESH_TIMEOUT
-        } else {
-            COMMAND_TIMEOUT
-        };
         let completion = tokio::time::timeout(timeout, receiver).await;
         drop(pending_guard);
 
@@ -181,13 +219,23 @@ impl McpBridgeState {
             .map_err(|_| McpBridgeError::Internal("Failed to complete MCP command".to_string()))?
             .remove(request_id);
 
-        if let Some(sender) = sender {
+        if let Some(command) = sender {
             let status = if completion.is_ok() { "ok" } else { "error" };
-            let _ = sender.send(completion);
+            let _ = command.sender.send(completion);
             log::info!("MCP command completed request_id={request_id} status={status}");
         }
 
         Ok(())
+    }
+
+    pub fn take_telegram_attachment(&self, request_id: &str) -> Result<PathBuf, String> {
+        self.pending_commands
+            .lock()
+            .map_err(|_| "Attachment is unavailable.".to_string())?
+            .get_mut(request_id)
+            .filter(|command| command.expires > Instant::now())
+            .and_then(|command| command.attachment.take())
+            .ok_or_else(|| "Attachment is unavailable or the request expired.".to_string())
     }
 
     pub fn replace_listener(
@@ -236,6 +284,27 @@ impl McpBridgeState {
     }
 }
 
+pub fn read_telegram_attachment(path: &Path) -> Result<Vec<u8>, String> {
+    let invalid = || "Choose a nonempty regular file of at most 20 MiB.".to_string();
+    let unreadable = || "Could not read the attachment.".to_string();
+    if !path.is_absolute() || !std::fs::metadata(path).map_err(|_| unreadable())?.is_file() {
+        return Err(invalid());
+    }
+    let file = std::fs::File::open(path).map_err(|_| unreadable())?;
+    let metadata = file.metadata().map_err(|_| unreadable())?;
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > TELEGRAM_FILE_LIMIT {
+        return Err(invalid());
+    }
+    let mut bytes = Vec::new();
+    file.take(TELEGRAM_FILE_LIMIT + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| unreadable())?;
+    if bytes.is_empty() || bytes.len() as u64 > TELEGRAM_FILE_LIMIT {
+        return Err(invalid());
+    }
+    Ok(bytes)
+}
+
 struct PendingCommandGuard<'a> {
     state: &'a McpBridgeState,
     request_id: String,
@@ -246,5 +315,65 @@ impl Drop for PendingCommandGuard<'_> {
         if let Ok(mut pending_commands) = self.state.pending_commands.lock() {
             pending_commands.remove(&self.request_id);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn attachment_access_is_single_use_and_expires_with_its_request() {
+        let state = McpBridgeState::default();
+        let register = |id: &str, expires| {
+            let (sender, _) = oneshot::channel();
+            state.pending_commands.lock().unwrap().insert(
+                id.to_string(),
+                PendingCommand {
+                    sender,
+                    attachment: Some(PathBuf::from("/tmp/report.txt")),
+                    expires,
+                },
+            );
+        };
+        register("active", Instant::now() + Duration::from_secs(30));
+        assert!(state.take_telegram_attachment("unknown").is_err());
+        assert_eq!(
+            state.take_telegram_attachment("active").unwrap(),
+            PathBuf::from("/tmp/report.txt")
+        );
+        assert!(state.take_telegram_attachment("active").is_err());
+        register("expired", Instant::now() - Duration::from_secs(1));
+        assert!(state.take_telegram_attachment("expired").is_err());
+        register("finished", Instant::now() + Duration::from_secs(30));
+        state.complete_command("finished", Ok(Value::Null)).unwrap();
+        assert!(state.take_telegram_attachment("finished").is_err());
+        register("dropped", Instant::now() + Duration::from_secs(30));
+        drop(PendingCommandGuard {
+            state: &state,
+            request_id: "dropped".to_string(),
+        });
+        assert!(state.take_telegram_attachment("dropped").is_err());
+    }
+
+    #[test]
+    fn attachment_reads_are_bounded_and_errors_do_not_include_paths() {
+        let dir = std::env::temp_dir().join(format!("clockalong-mcp-{}", rand::random::<u64>()));
+        std::fs::create_dir(&dir).unwrap();
+        let path = dir.join("private-name.bin");
+        std::fs::write(&path, [0, 255, 1]).unwrap();
+        assert_eq!(read_telegram_attachment(&path).unwrap(), [0, 255, 1]);
+        assert!(read_telegram_attachment(&dir).is_err());
+        assert!(read_telegram_attachment(Path::new("relative.txt")).is_err());
+        std::fs::write(&path, []).unwrap();
+        assert!(read_telegram_attachment(&path).is_err());
+        std::fs::File::create(&path)
+            .unwrap()
+            .set_len(TELEGRAM_FILE_LIMIT + 1)
+            .unwrap();
+        assert!(read_telegram_attachment(&path).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+        let error = read_telegram_attachment(&path).unwrap_err();
+        assert!(!error.contains("private-name"));
     }
 }

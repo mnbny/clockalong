@@ -21,7 +21,26 @@ export type McpAddTimeEntryArguments = McpStartTimerArguments & {
   endedAt?: string
 }
 
+export type McpTelegramCommand = {
+  requestId: string
+  deadlineAt: number
+} & (
+  | { tool: 'list_telegram_destinations'; arguments: Record<string, never> }
+  | {
+      tool: 'send_telegram_message'
+      arguments: { groupId: string; topicId: number | null; text?: string; fileName?: string; asFile?: boolean }
+    }
+)
+
+export type McpTelegramDestinations = {
+  group: { id: string; title: string; hasTopics: boolean }
+  destinations: { topicId: number | null; title: string; closed: boolean }[]
+}
+
+export type McpTelegramMessageResult = { groupId: string; topicId: number | null; messageId: number }
+
 export type McpCommandPayload =
+  | McpTelegramCommand
   | {
       arguments: McpStartTimerArguments
       requestId: string
@@ -70,7 +89,13 @@ export type McpRefreshResult = {
   synced: string[]
 }
 
-export type McpCommandResult = McpStartTimerResult | McpStopTimerResult | McpAddTimeEntryResult | McpRefreshResult
+export type McpCommandResult =
+  | McpStartTimerResult
+  | McpStopTimerResult
+  | McpAddTimeEntryResult
+  | McpRefreshResult
+  | McpTelegramDestinations
+  | McpTelegramMessageResult
 
 export type McpCommandCompletion =
   | {
@@ -88,6 +113,8 @@ export const clockalongMcpCommandEvent = 'clockalong-mcp:command'
 export const clockalongMcpStateChangedEvent = 'clockalong-mcp:state-changed'
 
 export const mcp = {
+  readTelegramAttachment: (requestId: string) =>
+    invoke<ArrayBuffer>('clockalong_mcp_read_telegram_attachment', { requestId }),
   completeCommand: (completion: McpCommandCompletion) => invoke<void>('clockalong_mcp_complete_command', completion),
   getStatus: () => invoke<McpServerStatus>('clockalong_mcp_get_state'),
   publishSnapshot: (capturedAt: string, snapshot: unknown) =>

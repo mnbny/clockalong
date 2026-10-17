@@ -5,7 +5,7 @@ use tauri::{AppHandle, Runtime};
 
 const CURRENT_PROTOCOL_VERSION: &str = "2025-06-18";
 const PREVIOUS_PROTOCOL_VERSION: &str = "2025-03-26";
-const SERVER_INSTRUCTIONS: &str = "Clockalong tracks time in Clockify against Linear tickets, GitHub issues and pull requests, and local Quick Timer presets. Call `list_trackable_work` to sync all connected providers and see what can be tracked; pass refresh: false for cached results. Use `refresh` to sync without listing work, including before reading tracking status or recent entries. Use `start_timer` to begin billing against a listed item and `stop_timer` to end it. Clockify runs one timer at a time, so starting a new timer stops the one already running. Use `add_time_entry` to add completed time in minutes for a listed item without changing the running timer. Overlaps are allowed.";
+const SERVER_INSTRUCTIONS: &str = "Clockalong tracks time in Clockify against Linear tickets, GitHub issues and pull requests, and local Quick Timer presets. Call `list_trackable_work` to sync all connected providers and see what can be tracked; pass refresh: false for cached results. Use `refresh` to sync without listing work, including before reading tracking status or recent entries. Use `start_timer` to begin billing against a listed item and `stop_timer` to end it. Clockify runs one timer at a time, so starting a new timer stops the one already running. Use `add_time_entry` to add completed time in minutes for a listed item without changing the running timer. Overlaps are allowed. Use `list_telegram_destinations` and `send_telegram_message` for the selected Telegram group only. No other Telegram groups are exposed. A send with unconfirmed delivery must not be automatically retried.";
 const STARTUP_ERROR: &str = "Clockalong is still starting up. Try again in a moment.";
 const TIMEOUT_ERROR: &str = "Clockalong did not respond in time.";
 const CLOCKIFY_ERROR: &str =
@@ -131,6 +131,20 @@ async fn call_tool<R: Runtime>(
         "refresh" => {
             validate_empty_arguments(&arguments)?;
             refresh_tool(app, state).await
+        }
+        "list_telegram_destinations" | "send_telegram_message" => {
+            if name == "list_telegram_destinations" {
+                validate_empty_arguments(&arguments)?;
+            } else {
+                validate_send_telegram_message(&arguments)?;
+            }
+            match state.snapshot() {
+                Ok(_) => state
+                    .dispatch_command(app, name.to_string(), arguments)
+                    .await
+                    .map_err(bridge_error_message),
+                Err(error) => Err(bridge_error_message(error)),
+            }
         }
         "start_timer" => {
             validate_start_timer(&arguments)?;
@@ -442,6 +456,38 @@ fn validate_start_timer(arguments: &Value) -> Result<(), ProtocolError> {
     validate_work_target(arguments)
 }
 
+fn validate_send_telegram_message(arguments: &Value) -> Result<(), ProtocolError> {
+    let arguments = validate_object_keys(
+        arguments,
+        &["groupId", "topicId", "text", "filePath", "asFile"],
+    )?;
+    if arguments
+        .get("asFile")
+        .is_some_and(|value| !value.is_boolean())
+    {
+        return Err(invalid_params());
+    }
+    required_string(arguments, "groupId")?;
+    match arguments.get("topicId") {
+        Some(Value::Null) => {}
+        Some(value)
+            if value
+                .as_i64()
+                .is_some_and(|id| id > 0 && id <= i32::MAX as i64) => {}
+        _ => return Err(invalid_params()),
+    }
+    let text = optional_string(arguments, "text")?;
+    let path = optional_string(arguments, "filePath")?;
+    if path
+        .as_ref()
+        .is_some_and(|path| !std::path::Path::new(path).is_absolute())
+        || (path.is_none() && text.as_ref().is_none_or(|text| text.trim().is_empty()))
+    {
+        return Err(invalid_params());
+    }
+    Ok(())
+}
+
 fn validate_add_time_entry(arguments: &Value) -> Result<(), ProtocolError> {
     let arguments = validate_object_keys(
         arguments,
@@ -620,6 +666,8 @@ fn tool_error(message: &str) -> Value {
 fn bridge_error_message(error: McpBridgeError) -> String {
     match error {
         McpBridgeError::NotReady => STARTUP_ERROR.to_string(),
+        McpBridgeError::Timeout { tool, .. } if tool == "send_telegram_message" =>
+            "Delivery could not be confirmed. The message may have been sent; check Telegram before retrying. Do not automatically resend.".to_string(),
         McpBridgeError::Timeout { .. } => TIMEOUT_ERROR.to_string(),
         McpBridgeError::Webview(message) | McpBridgeError::Internal(message) => message,
     }
@@ -779,6 +827,28 @@ fn is_leap_year(year: i64) -> bool {
 fn tool_catalog() -> Vec<Value> {
     vec![
         json!({
+            "name": "list_telegram_destinations",
+            "description": "Lists only the selected Telegram group and its visible topics. Does not list other groups, read messages, or mark them read. Use the returned groupId and topicId with send_telegram_message. Telegram must be connected in Clockalong.",
+            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+        }),
+        json!({
+            "name": "send_telegram_message",
+            "description": "Sends plain text, one attachment, or an attachment with a text caption to the selected Telegram group only. Photos and playable MP4 videos default to media; other formats are documents. Set asFile only when the user asks to send as a file/document. Get groupId and topicId from list_telegram_destinations first. Files must be nonempty, at most 20 MiB, and readable on the computer running Clockalong. Sending can take up to two minutes. If delivery is unconfirmed, check Telegram before retrying; never automatically resend.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "groupId": { "type": "string", "description": "Selected group.id returned by discovery; other groups are rejected." },
+                    "topicId": { "type": ["integer", "null"], "minimum": 1, "maximum": 2147483647, "description": "Returned topic ID, or null for a group without topics." },
+                    "text": { "type": "string", "description": "Plain text; used as the caption when attaching a file." },
+                    "filePath": { "type": "string", "description": "Absolute local path. Supported photos and videos are sent as media by default." },
+                    "asFile": { "type": "boolean", "default": false, "description": "Send the original attachment as a document instead of photo/video media. Set true when the user asks to send as a file." },
+                },
+                "required": ["groupId", "topicId"],
+                "anyOf": [{ "required": ["text"] }, { "required": ["filePath"] }],
+                "additionalProperties": false,
+            },
+        }),
+        json!({
             "name": "list_trackable_work",
             "description": "Syncs all connected providers, then lists work items for starting timers or adding completed time, with their tracked totals. Set refresh to false for cached results. Repository settings, sync limits, and result filters still apply.",
             "inputSchema": {
@@ -869,6 +939,34 @@ fn tool_catalog() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn telegram_contract_rejects_unscoped_or_malformed_arguments() {
+        for args in [
+            json!({"groupId":"selected","topicId":1,"text":"hello"}),
+            json!({"groupId":"selected","topicId":null,"filePath":"/tmp/report.pdf"}),
+            json!({"groupId":"selected","topicId":1,"filePath":"/tmp/photo.jpg","asFile":true}),
+        ] {
+            assert!(validate_send_telegram_message(&args).is_ok());
+        }
+        for args in [
+            json!({"topicId":1,"text":"hello"}),
+            json!({"groupId":"selected","text":"hello"}),
+            json!({"groupId":"selected","topicId":0,"text":"hello"}),
+            json!({"groupId":"selected","topicId":1,"text":"  "}),
+            json!({"groupId":"selected","topicId":1,"filePath":"relative.txt"}),
+            json!({"groupId":"selected","topicId":1,"text":"hello","peer":"arbitrary"}),
+            json!({"groupId":"selected","topicId":1,"filePath":"/tmp/photo.jpg","asFile":"true"}),
+        ] {
+            assert!(validate_send_telegram_message(&args).is_err());
+        }
+        assert!(validate_empty_arguments(&json!({"groupId":"other"})).is_err());
+        assert!(bridge_error_message(McpBridgeError::Timeout {
+            request_id: "send".to_string(),
+            tool: "send_telegram_message".to_string(),
+        })
+        .contains("Do not automatically resend"));
+    }
 
     #[test]
     fn refresh_contract_defaults_to_full_sync_and_allows_cached_reads() {
