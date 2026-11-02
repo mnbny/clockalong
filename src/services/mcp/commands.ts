@@ -16,7 +16,8 @@ import { isTauri } from '@tauri-apps/api/core'
 import { getClockalongAuthState } from '../../hooks/useAppAuth'
 import { queryClient, queryKeys } from '../../lib/query-client'
 import { getErrorMessage } from '../../utils/errors'
-import { upsertSyncedClockifyEntry } from '../clockify/sync'
+import { clockifyEntryCache } from '../clockify/entry-cache'
+import { cacheClockifyEntryResult } from '../clockify/sync'
 import { stopClockifyTimeEntry } from '../clockify/time-entries'
 import {
   type ClockifyTimeEntryInterval,
@@ -79,10 +80,11 @@ export async function executeMcpCommand(
     return commandError('clockify_disconnected', clockifyDisconnectedMessage)
   }
 
+  const lifecycle = clockifyEntryCache.getLifecycle()
   try {
     switch (command.tool) {
       case 'start_timer': {
-        const execution = await executeCreateTimeEntry(command.arguments, context)
+        const execution = await executeCreateTimeEntry(command.arguments, context, lifecycle)
         return execution
       }
       case 'add_time_entry': {
@@ -90,11 +92,11 @@ export async function executeMcpCommand(
           command.arguments.durationMinutes,
           command.arguments.endedAt === undefined ? new Date() : new Date(command.arguments.endedAt),
         )
-        const execution = await executeCreateTimeEntry(command.arguments, context, interval)
+        const execution = await executeCreateTimeEntry(command.arguments, context, lifecycle, interval)
         return execution
       }
       case 'stop_timer': {
-        const execution = await executeStopTimer(context)
+        const execution = await executeStopTimer(context, lifecycle)
         return execution
       }
       default:
@@ -108,6 +110,7 @@ export async function executeMcpCommand(
 async function executeCreateTimeEntry(
   arguments_: McpStartTimerArguments,
   context: ExecuteMcpCommandContext,
+  lifecycle: number,
   interval?: ClockifyTimeEntryInterval,
 ): Promise<McpCommandExecution> {
   const project = context.clockifyTimerProject
@@ -208,12 +211,19 @@ async function executeCreateTimeEntry(
   }
 
   const result = interval ? getAddTimeEntryResult(entry, project) : getStartTimerResult(entry, project, stoppedPrevious)
+  if (interval) {
+    try {
+      await cacheClockifyEntryResult(entry, { workspaceId: project.workspaceId, timeInterval: interval }, lifecycle)
+    } catch (error) {
+      console.warn('[mcp command] Could not cache created Clockify entry:', error)
+    }
+  }
   invalidateClockifyTimerData()
 
   return { ok: true, result }
 }
 
-async function executeStopTimer(context: ExecuteMcpCommandContext): Promise<McpCommandExecution> {
+async function executeStopTimer(context: ExecuteMcpCommandContext, lifecycle: number): Promise<McpCommandExecution> {
   const runningEntry = context.runningEntry
 
   if (!runningEntry) {
@@ -232,11 +242,7 @@ async function executeStopTimer(context: ExecuteMcpCommandContext): Promise<McpC
 
   if (runningEntry.userId && runningEntry.workspaceId) {
     try {
-      await upsertSyncedClockifyEntry({
-        entry: stoppedEntry,
-        userId: runningEntry.userId,
-        workspaceId: runningEntry.workspaceId,
-      })
+      await cacheClockifyEntryResult(stoppedEntry, runningEntry, lifecycle)
     } catch (error) {
       console.warn('[mcp command] Could not cache stopped Clockify entry:', error)
     }

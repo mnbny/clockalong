@@ -2,8 +2,10 @@
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { githubWorkItemCache } from '../../../src/services/github/work-item-cache'
+import { publishMcpSnapshot } from '../../../src/services/mcp/refresh'
 import { listMcpWork } from '../../../src/services/mcp/work-list'
 import { storage } from '../../../src/services/storage/config'
+import { mcp } from '../../../src/services/tauri/mcp-client'
 
 const scope = { repositories: ['owner/repo'], visibleWorkItemTypes: { issues: true, pullRequests: true } }
 afterEach(async () => {
@@ -13,6 +15,7 @@ afterEach(async () => {
 
 test('a hidden webview can answer cached GitHub list requests', async () => {
   vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+  vi.spyOn(mcp, 'publishSnapshot').mockResolvedValue()
   vi.spyOn(storage, 'get').mockImplementation(async key =>
     key === 'githubSelectedRepositories'
       ? [{ fullName: 'owner/repo', id: 1, name: 'repo', owner: 'owner', private: false, url: 'https://example.test' }]
@@ -40,16 +43,15 @@ test('a hidden webview can answer cached GitHub list requests', async () => {
     githubWorkItemCache.beginSync(),
     scope,
   )
+  const snapshot = await publishMcpSnapshot({ githubConnected: true })
   const result = await listMcpWork(
     {
-      capturedAt: '2026-01-01T00:00:00Z',
-      nonGithubRows: [],
+      capturedAt: snapshot.capturedAt,
+
       source: 'github',
       query: null,
       includeClosed: false,
       limit: 10,
-      githubConnected: true,
-      githubTracking: [],
     },
     { githubConnected: true },
     Date.now() + 5000,

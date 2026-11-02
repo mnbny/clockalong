@@ -16,7 +16,6 @@ import { listen } from '@tauri-apps/api/event'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 
 import { queryKeys } from '../lib/query-client'
-import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
 import { db } from '../services/db'
 import { linearTicketsCollection, useLinearSync } from '../services/linear/sync'
 import { executeMcpCommand, type ExecuteMcpCommandContext } from '../services/mcp/commands'
@@ -117,16 +116,11 @@ export function useMcpServerBridge() {
     },
     [mcpServerEnabled],
   )
-  const clockifyEntriesQuery = useLiveQuery(
-    query => {
-      if (!mcpServerEnabled) {
-        return null
-      }
-
-      return query.from({ syncedEntry: clockifyTimeEntriesCollection })
-    },
+  const clockifyRevisionQuery = useCallback(
+    () => (mcpServerEnabled ? db.clockifyCacheMeta.get('revision') : Promise.resolve(undefined)),
     [mcpServerEnabled],
   )
+  const clockifyRevision = useDexieQuery(clockifyRevisionQuery)
   const appReady = !appInitializationState.value.appInitializing && !authState.loading
   const clockifyConnected = appReady && authState.value.clockifyAuthenticated
   const githubConnected = clockifyConnected && authState.value.githubAuthenticated
@@ -154,11 +148,10 @@ export function useMcpServerBridge() {
         quickTimersCache,
         quickTimersEnabled,
         runningEntry,
-        syncedClockifyEntries: clockifyEntriesQuery.data ?? [],
       }) satisfies BuildMcpSnapshotInput,
     [
       clockifyConnected,
-      clockifyEntriesQuery.data,
+      clockifyRevision.data?.revision,
       clockifyProjects,
       clockifyTimerProject,
       githubConnected,

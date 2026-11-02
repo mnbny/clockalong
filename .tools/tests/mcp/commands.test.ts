@@ -2,8 +2,10 @@ import type { McpCommandPayload } from '../../../src/services/tauri/mcp-client'
 
 import { afterEach, expect, test, vi } from 'vitest'
 
-import { queryClient } from '../../../src/lib/query-client'
+import { queryClient, queryKeys } from '../../../src/lib/query-client'
 import { clockify } from '../../../src/services/clockify/client'
+import { clearSyncedClockifyTimeEntries } from '../../../src/services/clockify/sync'
+import { db } from '../../../src/services/db'
 import { githubWorkItemCache } from '../../../src/services/github/work-item-cache'
 import { executeMcpCommand, type ExecuteMcpCommandContext } from '../../../src/services/mcp/commands'
 import { storage } from '../../../src/services/storage/config'
@@ -22,6 +24,7 @@ const context = {
 } satisfies ExecuteMcpCommandContext
 
 test('adding Quick Timer time preserves the running association and resolves template values', async () => {
+  queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user' })
   vi.spyOn(storage, 'get').mockImplementation(async (key: keyof typeof storage.config) => {
     if (key === 'quickTimers')
       return [{ id: 'preset', name: 'Meeting', icon: '', descriptionTemplate: '{name}: {topic}' }]
@@ -67,6 +70,7 @@ test('adding Quick Timer time preserves the running association and resolves tem
     },
   })
   expect(create).toHaveBeenCalledTimes(1)
+  expect((await db.clockifyEntries.get(['user', 'workspace', 'new-entry']))?.entry.description).toBe('Alex: Planning')
   expect(create.mock.calls[0][0]?.projectId).toBe('project')
   expect(set.mock.calls.some(call => call[0] === 'quickTimersCache')).toBe(true)
   expect(set.mock.calls.some(call => call[0] === 'quickTimersActiveEntry')).toBe(false)
@@ -192,4 +196,60 @@ test('GitHub commands resolve cached IDs and reject missing IDs without creating
   }
 })
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(async () => {
+  vi.restoreAllMocks()
+  queryClient.clear()
+  await clearSyncedClockifyTimeEntries()
+})
+
+test('stopping through MCP caches a partial response immediately', async () => {
+  vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(async () => {})
+  vi.spyOn(storage, 'set').mockImplementation(async () => {})
+  vi.spyOn(clockify, 'stopRunningTimeEntry').mockResolvedValue({ timeInterval: { end: '2026-01-01T11:00:00Z' } })
+  const result = await executeMcpCommand(
+    { tool: 'stop_timer', requestId: 'stop', arguments: {} },
+    {
+      ...context,
+      runningEntry: {
+        id: 'timer',
+        userId: 'user',
+        workspaceId: 'workspace',
+        description: 'Tracked',
+        timeInterval: { start: '2026-01-01T10:00:00Z' },
+      },
+    },
+  )
+  expect(result.ok).toBe(true)
+  expect((await db.clockifyEntries.get(['user', 'workspace', 'timer']))?.entry).toMatchObject({
+    description: 'Tracked',
+    timeInterval: { start: '2026-01-01T10:00:00Z', end: '2026-01-01T11:00:00Z' },
+  })
+})
+
+test('a timer response received after disconnect cannot repopulate the local cache', async () => {
+  vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(async () => {})
+  vi.spyOn(storage, 'set').mockImplementation(async () => {})
+  let finish!: (value: { timeInterval: { end: string } }) => void
+  const stop = vi.spyOn(clockify, 'stopRunningTimeEntry').mockReturnValue(
+    new Promise(resolve => {
+      finish = resolve
+    }),
+  )
+  const pending = executeMcpCommand(
+    { tool: 'stop_timer', requestId: 'late-stop', arguments: {} },
+    {
+      ...context,
+      runningEntry: {
+        id: 'timer',
+        userId: 'user',
+        workspaceId: 'workspace',
+        timeInterval: { start: '2026-01-01T10:00:00Z' },
+      },
+    },
+  )
+  await vi.waitFor(() => expect(stop).toHaveBeenCalled())
+  await clearSyncedClockifyTimeEntries()
+  finish({ timeInterval: { end: '2026-01-01T11:00:00Z' } })
+  expect((await pending).ok).toBe(true)
+  expect(await db.clockifyEntries.count()).toBe(0)
+})
