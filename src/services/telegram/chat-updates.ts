@@ -9,6 +9,7 @@ export function subscribeChatUpdates(
   client: BaseTelegramClient,
   group: SavedTelegramGroup,
   cache: TelegramChatCache,
+  pendingSends: Map<string, number | undefined>,
   active: () => boolean,
   refreshAccess: () => Promise<void>,
   onConnection: (state: 'offline' | 'connecting' | 'updating' | 'connected') => void = () => {},
@@ -17,7 +18,8 @@ export function subscribeChatUpdates(
   const raw = ({ update, peers }: RawUpdateInfo) => {
     if (!active()) return
     if (update._ === 'updateMessageID') {
-      void cache.confirmSend(update.randomId.toString(), update.id)
+      const id = update.randomId.toString()
+      if (pendingSends.has(id)) pendingSends.set(id, update.id)
       return
     }
     if (
@@ -39,9 +41,7 @@ export function subscribeChatUpdates(
     }
     if (update._ === 'updateDeleteMessages') {
       if (group.kind === 'basic') {
-        const known = update.messages.filter(
-          id => !!cache.findMessage(id) || cache.outgoing().some(item => item.serverId === id),
-        )
+        const known = update.messages.filter(id => !!cache.findMessage(id) || [...pendingSends.values()].includes(id))
         if (known.length) void cache.remove(known)
         if (known.length !== update.messages.length) void cache.recover()
       }

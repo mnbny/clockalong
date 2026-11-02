@@ -1,7 +1,9 @@
 import type { McpTelegramCommand } from '../../../src/services/tauri/mcp-client'
 import type { BaseTelegramClient, tl } from '@mtcute/web'
+import type * as TelegramMethods from '@mtcute/web/methods.js'
 
-import { Long } from '@mtcute/web'
+import { Long, PeersIndex } from '@mtcute/web'
+import { sendMedia } from '@mtcute/web/methods.js'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { queryClient } from '../../../src/lib/query-client'
@@ -11,6 +13,11 @@ import { TelegramChat, TelegramChatError } from '../../../src/services/telegram/
 import * as chatFiles from '../../../src/services/telegram/chat-files'
 import { groupIdentity, type SavedTelegramGroup } from '../../../src/services/telegram/group'
 import { deferred } from '../telegram/fixtures'
+
+vi.mock('@mtcute/web/methods.js', async importOriginal => ({
+  ...(await importOriginal<typeof TelegramMethods>()),
+  sendMedia: vi.fn(),
+}))
 
 const saved: SavedTelegramGroup = {
   version: 1,
@@ -81,6 +88,7 @@ function fixture(forum = true) {
       },
     },
     handleClientUpdate() {},
+    stopUpdatesLoop: async () => {},
   } as unknown as BaseTelegramClient
   const chat = new TelegramChat(client, group, queryClient)
   const context: McpTelegramContext = { chat, group: { group: groupIdentity(group), status: 'connected' }, busy: false }
@@ -188,12 +196,11 @@ test('missing and hidden topics never fall back to General or read the attachmen
   expect(f.call.mock.calls.some(([r]) => r._ === 'messages.sendMessage')).toBe(false)
 })
 
-test('file-only and captioned sends preserve bytes and use the existing mutation callbacks', async () => {
+test('file-only and captioned failures preserve bytes without retaining a mutation or display queue', async () => {
   const f = fixture()
   const bytes = new Uint8Array([0, 1, 255, 10])
   const read = vi.spyOn(mcp, 'readTelegramAttachment').mockResolvedValue(bytes.buffer)
   const send = vi.spyOn(f.chat, 'send').mockImplementation(async (operation, options) => {
-    expect(f.chat.cache.outgoing().some(item => item.operation.id === operation.id)).toBe(true)
     expect(operation.attachment).toMatchObject({ mode: 'original', name: 'report.bin' })
     expect(new Uint8Array(await operation.attachment!.source.arrayBuffer())).toEqual(bytes)
     expect(options?.signal?.aborted).toBe(false)
@@ -205,6 +212,14 @@ test('file-only and captioned sends preserve bytes and use the existing mutation
   expect(read).toHaveBeenCalledWith('send')
   expect(send).toHaveBeenCalledTimes(2)
   expect(send.mock.calls.map(([operation]) => operation.text)).toEqual(['', 'caption'])
+  expect(queryClient.getMutationCache().getAll()).toEqual([])
+  expect(
+    queryClient
+      .getQueryCache()
+      .getAll()
+      .map(query => query.queryKey[1])
+      .sort(),
+  ).toEqual(['summary', 'topic'])
 })
 
 test('raw provider errors never expose other groups and are not retried', async () => {
@@ -273,4 +288,131 @@ test('deadline cancellation prevents a late file read from starting a send', asy
   read.resolve(new Uint8Array([1]).buffer)
   await assertion
   expect(send).not.toHaveBeenCalled()
+})
+
+const sentAttachment = () =>
+  ({
+    raw: {
+      _: 'message',
+      id: 914,
+      date: 100,
+      message: 'caption',
+      out: true,
+      peerId: { _: 'peerChannel', channelId: 123 },
+      fromId: { _: 'peerUser', userId: 1 },
+    },
+    _peers: PeersIndex.from({ users: [], chats: [] }),
+  }) as Awaited<ReturnType<typeof sendMedia>>
+
+test.each([undefined, 'caption'])(
+  'MCP attachment success uses the send service without retaining file state: %s',
+  async text => {
+    const f = fixture()
+    const bytes = new Uint8Array([0, 1, 255, 10])
+    vi.spyOn(mcp, 'readTelegramAttachment').mockResolvedValue(bytes.buffer)
+    vi.spyOn(chatFiles, 'prepareAttachment').mockImplementation(async (_client, input) => {
+      expect(new Uint8Array(await input.source.arrayBuffer())).toEqual(bytes)
+      return { type: 'document', file: input.source }
+    })
+    vi.mocked(sendMedia).mockResolvedValueOnce(sentAttachment())
+    expect(await f.run(f.send({ topicId: 42, text, fileName: 'report.bin' }))).toEqual({
+      groupId: '-1000000000123',
+      topicId: 42,
+      messageId: 914,
+    })
+    expect(sendMedia).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ channelId: 123 }),
+      expect.objectContaining({ type: 'document' }),
+      expect.objectContaining({ caption: text ?? '', replyTo: 42 }),
+    )
+    expect(queryClient.getMutationCache().getAll()).toEqual([])
+    expect(
+      queryClient
+        .getQueryCache()
+        .getAll()
+        .map(query => query.queryKey[1])
+        .sort(),
+    ).toEqual(['summary', 'topic'])
+  },
+)
+
+test.each([false, true])('upload cancellation distinguishes whether the final send started: %s', async uploaded => {
+  const f = fixture()
+  const started = deferred()
+  vi.spyOn(chatFiles, 'prepareAttachment').mockResolvedValue({ type: 'document', file: new Blob(['file']) })
+  vi.mocked(sendMedia).mockImplementationOnce(async (_client, _peer, _media, params) => {
+    params?.progressCallback?.(uploaded ? 4 : 1, 4)
+    started.resolve()
+    return new Promise((_, reject) =>
+      params?.abortSignal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), {
+        once: true,
+      }),
+    )
+  })
+  const controller = new AbortController()
+  const operation = f.chat.createSend(
+    { topicId: 1, text: '' },
+    { source: new Blob(['file']), name: 'file', mime: 'text/plain', mode: 'original' },
+  )
+  const pending = f.chat.send(operation, { signal: controller.signal })
+  const assertion = expect(pending).rejects.toMatchObject({ category: uploaded ? 'unknown-send' : 'aborted' })
+  await started.promise
+  controller.abort()
+  await assertion
+  expect(queryClient.getQueryCache().getAll()).toEqual([])
+  expect(queryClient.getMutationCache().getAll()).toEqual([])
+})
+
+test('MCP deadline cancels an active attachment send with no automatic resend', async () => {
+  vi.useFakeTimers()
+  const f = fixture()
+  const started = deferred()
+  vi.spyOn(mcp, 'readTelegramAttachment').mockResolvedValue(new Uint8Array([1]).buffer)
+  vi.spyOn(chatFiles, 'prepareAttachment').mockResolvedValue({ type: 'document', file: new Blob(['file']) })
+  vi.mocked(sendMedia).mockImplementationOnce(async (_client, _peer, _media, params) => {
+    params?.progressCallback?.(1, 1)
+    started.resolve()
+    return new Promise((_, reject) =>
+      params?.abortSignal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), {
+        once: true,
+      }),
+    )
+  })
+  const before = vi.mocked(sendMedia).mock.calls.length
+  const assertion = expect(f.run(f.send({ fileName: 'file.bin' }))).rejects.toThrow('Do not automatically resend')
+  await started.promise
+  await vi.advanceTimersByTimeAsync(110_001)
+  await assertion
+  expect(vi.mocked(sendMedia).mock.calls.length - before).toBe(1)
+  expect(queryClient.getMutationCache().getAll()).toEqual([])
+  expect(
+    queryClient
+      .getQueryCache()
+      .getAll()
+      .map(query => query.queryKey[1])
+      .sort(),
+  ).toEqual(['summary', 'topic'])
+})
+
+test('scope teardown prevents a late attachment response from restoring cached data', async () => {
+  const f = fixture()
+  const started = deferred()
+  const response = deferred<Awaited<ReturnType<typeof sendMedia>>>()
+  vi.spyOn(mcp, 'readTelegramAttachment').mockResolvedValue(new Uint8Array([1]).buffer)
+  vi.spyOn(chatFiles, 'prepareAttachment').mockResolvedValue({ type: 'document', file: new Blob(['file']) })
+  let sendSignal: AbortSignal | undefined
+  vi.mocked(sendMedia).mockImplementationOnce(async (_client, _peer, _media, params) => {
+    sendSignal = params?.abortSignal
+    started.resolve()
+    return response.promise
+  })
+  const assertion = expect(f.run(f.send({ fileName: 'file.bin' }))).rejects.toThrow('Telegram is unavailable')
+  await started.promise
+  await f.chat.dispose()
+  expect(sendSignal?.aborted).toBe(true)
+  response.resolve(sentAttachment())
+  await assertion
+  expect(queryClient.getQueryCache().getAll()).toEqual([])
+  expect(queryClient.getMutationCache().getAll()).toEqual([])
 })

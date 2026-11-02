@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query'
 
 import { type BaseTelegramClient, Long, PeersIndex, tl } from '@mtcute/web'
-import { closeChat, getMessages, openChat, readHistory, sendMedia, sendText } from '@mtcute/web/methods.js'
+import { closeChat, getMessages, openChat, sendMedia, sendText } from '@mtcute/web/methods.js'
 
 import { TelegramChatCache } from './chat-cache'
 import {
@@ -16,11 +16,9 @@ import {
   type TopicCursor,
   type TopicPage,
 } from './chat-data'
-import { saveToDownloads } from './chat-download'
 import {
   type AttachmentInput,
   downloadAvatar,
-  downloadFile,
   downloadPreview,
   prepareAttachment,
   TelegramFileError,
@@ -52,17 +50,8 @@ function safeError(error: unknown, sending = false) {
   return new TelegramChatError(sending ? 'unknown-send' : 'network')
 }
 let generation = 0
-export type SendInput = Conversation & { text: string; entities?: readonly tl.TypeMessageEntity[]; replyToId?: number }
-export type SendOperation = Readonly<
-  SendInput & { id: string; scope: string; localId: number; date: number; attachment?: AttachmentInput }
->
-export type OutgoingMessage = {
-  operation: SendOperation
-  record: MessageRecord
-  serverId?: number
-  error?: Error
-  progress: number | null
-}
+export type SendInput = Conversation & { text: string }
+export type SendOperation = Readonly<SendInput & { id: string; scope: string; attachment?: AttachmentInput }>
 
 export class TelegramChat {
   readonly scope: string
@@ -73,12 +62,9 @@ export class TelegramChat {
   private unsubscribe = () => {}
   private issued = new WeakSet<SendOperation>()
   private ready = true
-  private confirmedReads = new Map<number | null, number>()
-  private readRequests = new Map<number | null, { max: number; confirmed: number; promise: Promise<void> }>()
-  private operations = new Map<string, AbortController>()
+  // Only IDs are retained while sending, including acknowledgements that precede the message body.
+  private operations = new Map<string, number | undefined>()
   private startup: Promise<void> = Promise.resolve()
-  private localMessageId = 0
-  private self: tl.RawUser | undefined
   private readonly images: TelegramChatImages
 
   constructor(
@@ -132,6 +118,7 @@ export class TelegramChat {
       this.client,
       this.group,
       this.cache,
+      this.operations,
       () => this.isReady,
       () => this.refreshAccess(),
       state => {
@@ -141,9 +128,6 @@ export class TelegramChat {
     )
     this.startup = (async () => {
       await this.client.startUpdatesLoop()
-      if (this.signal.aborted) return
-      const self = await this.client.storage.peers.getCompleteById(Number(this.group.accountId))
-      if (self?._ === 'user') this.self = self
       if (this.signal.aborted) return
       if (this.group.kind === 'supergroup') await openChat(this.client, inputPeer(this.group))
     })().catch(error => {
@@ -324,22 +308,6 @@ export class TelegramChat {
       return topic?._ === 'forumTopic' && !topic.short ? projectTopic(topic) : null
     })
   }
-  fetchReply(messageId: number, signal?: AbortSignal) {
-    return this.run(signal, async signal => {
-      const source = this.cache.findMessage(messageId)?.view
-      if (!source?.replyToId || source.replyOutsideGroup || this.cache.isDeleted(source.replyToId)) return null
-      const cached = this.cache.findMessage(source.replyToId)?.view
-      if (cached) return cached.topicId === source.topicId ? cached : null
-      const [message] = await getMessages(this.client, inputPeer(this.group), [source.replyToId])
-      this.check(signal)
-      const record = message ? projectMessage(this.group, message.raw, message._peers) : null
-      return record?.view.id === source.replyToId &&
-        record.view.topicId === source.topicId &&
-        !this.cache.isDeleted(source.replyToId)
-        ? record.view
-        : null
-    })
-  }
   createSend(input: SendInput, attachment?: AttachmentInput): SendOperation {
     this.check()
     this.conversation(input)
@@ -347,64 +315,21 @@ export class TelegramChat {
     const id = Long.fromBits(random[0], random[1]).toString()
     const operation = Object.freeze({
       ...input,
-      entities: input.entities ? Object.freeze(input.entities.map(entity => Object.freeze({ ...entity }))) : undefined,
       attachment: attachment
         ? Object.freeze({ ...attachment, video: attachment.video ? Object.freeze({ ...attachment.video }) : undefined })
         : undefined,
       scope: this.scope,
       id: id === '0' ? '1' : id,
-      localId: --this.localMessageId,
-      date: Math.floor(Date.now() / 1000),
     })
     this.issued.add(operation)
     return operation
   }
-  beginSend(operation: SendOperation) {
-    if (!this.issued.has(operation) || operation.scope !== this.scope) throw new TelegramChatError('invalid-input')
-    const record = projectMessage(
-      this.group,
-      {
-        _: 'message',
-        id: operation.localId,
-        date: operation.date,
-        message: operation.text,
-        entities: operation.entities ? [...operation.entities] : undefined,
-        out: true,
-        peerId:
-          this.group.kind === 'basic'
-            ? { _: 'peerChat', chatId: Number(this.group.id) }
-            : { _: 'peerChannel', channelId: Number(this.group.id) },
-        fromId: { _: 'peerUser', userId: Number(this.group.accountId) },
-        replyTo: operation.replyToId ? { _: 'messageReplyHeader', replyToMsgId: operation.replyToId } : undefined,
-      },
-      PeersIndex.from({ users: this.self ? [this.self] : [], chats: [] }),
-    )!
-    record.view.topicId = operation.topicId
-    if (record.view.sender && !record.view.sender.name) record.view.sender.name = 'You'
-    if (operation.attachment) {
-      const attachment = operation.attachment
-      record.view.attachment = {
-        kind: attachment.mode === 'media' ? (attachment.video ? 'video' : 'photo') : 'document',
-        name: attachment.name,
-        mime: attachment.mime,
-        size: attachment.source.size,
-        spoiler: false,
-        downloadable: false,
-      }
-    }
-    this.cache.beginSend(operation, record)
-  }
-  async send(
-    operation: SendOperation,
-    options: { signal?: AbortSignal; onProgress?: (uploaded: number, total: number) => void } = {},
-  ) {
+  async send(operation: SendOperation, options: { signal?: AbortSignal } = {}) {
     if (!this.issued.has(operation) || operation.scope !== this.scope || this.operations.has(operation.id))
       throw new TelegramChatError('invalid-input')
     this.check()
     if (this.connection === 'offline' || this.connection === 'connecting') throw new TelegramChatError('unavailable')
     this.conversation(operation)
-    if (operation.replyToId && this.cache.findMessage(operation.replyToId)?.view.topicId !== operation.topicId)
-      throw new TelegramChatError('invalid-input')
     if (
       operation.topicId &&
       this.cache.topic(operation.topicId)?.closed &&
@@ -412,27 +337,16 @@ export class TelegramChat {
     )
       throw new TelegramChatError('restricted')
     if (!operation.attachment && this.cache.summary()?.canSendText === false) throw new TelegramChatError('restricted')
-    const controller = new AbortController()
-    this.operations.set(operation.id, controller)
-    const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal
+    this.operations.set(operation.id, undefined)
     try {
-      return await this.run(
-        signal,
+      const record = await this.run(
+        options.signal,
         async signal => {
-          const replyTo =
-            operation.replyToId ?? (operation.topicId && operation.topicId !== 1 ? operation.topicId : undefined)
           const params = {
             randomId: Long.fromString(operation.id),
             abortSignal: signal,
-            replyTo,
-            threadId:
-              operation.replyToId && operation.topicId && operation.topicId !== 1 ? operation.topicId : undefined,
+            replyTo: operation.topicId && operation.topicId !== 1 ? operation.topicId : undefined,
           }
-          const text = operation.entities
-            ? { text: operation.text, entities: operation.entities.map(entity => ({ ...entity })) }
-            : operation.text
-          if (operation.entities?.some(entity => 'userId' in entity && !this.cache.hasSender(`user:${entity.userId}`)))
-            throw new TelegramChatError('invalid-input')
           const prepared = operation.attachment
             ? await prepareAttachment(this.client, operation.attachment, signal)
             : null
@@ -452,13 +366,12 @@ export class TelegramChat {
             sent = prepared
               ? await sendMedia(this.client, inputPeer(this.group), prepared, {
                   ...params,
-                  caption: text,
+                  caption: operation.text,
                   progressCallback: (done, total) => {
                     if (done >= total) finalStarted = true
-                    options.onProgress?.(done, total)
                   },
                 })
-              : await sendText(this.client, inputPeer(this.group), text, params)
+              : await sendText(this.client, inputPeer(this.group), operation.text, params)
           } catch (error) {
             if (signal.aborted) throw new TelegramChatError(finalStarted ? 'unknown-send' : 'aborted')
             throw error
@@ -472,91 +385,11 @@ export class TelegramChat {
         },
         true,
       )
+      await this.cache.upsert(record, { confirmedSend: true })
+      return record
     } finally {
       this.operations.delete(operation.id)
     }
-  }
-  cancel(operationId: string) {
-    this.operations.get(operationId)?.abort()
-  }
-  acknowledgeRead(conversation: Conversation, maxId: number) {
-    this.check()
-    this.conversation(conversation)
-    if (this.connection === 'offline' || this.connection === 'connecting') throw new TelegramChatError('unavailable')
-    if (!Number.isInteger(maxId) || maxId < 1 || this.cache.findMessage(maxId)?.view.topicId !== conversation.topicId)
-      throw new TelegramChatError('invalid-input')
-    const existing = this.readRequests.get(conversation.topicId)
-    if (existing) {
-      existing.max = Math.max(existing.max, maxId)
-      return existing.promise
-    }
-    const request = {
-      max: maxId,
-      confirmed: Math.max(
-        this.confirmedReads.get(conversation.topicId) ?? 0,
-        (conversation.topicId === null
-          ? this.cache.summary()?.readInboxMaxId
-          : this.cache.topic(conversation.topicId)?.readInboxMaxId) ?? 0,
-      ),
-      promise: Promise.resolve(),
-    }
-    request.promise = this.run(undefined, async signal => {
-      while (request.max > request.confirmed) {
-        const target = request.max
-        if (this.forum)
-          await this.client.call(
-            {
-              _: 'messages.readDiscussion',
-              peer: inputPeer(this.group),
-              msgId: conversation.topicId!,
-              readMaxId: target,
-            },
-            { abortSignal: signal },
-          )
-        else await readHistory(this.client, inputPeer(this.group), { maxId: target, clearMentions: false })
-        this.check(signal)
-        request.confirmed = target
-        this.confirmedReads.set(conversation.topicId, target)
-      }
-    }).finally(() => this.readRequests.delete(conversation.topicId))
-    this.readRequests.set(conversation.topicId, request)
-    return request.promise
-  }
-  download(
-    messageId: number,
-    options: {
-      sink: WritableStream<Uint8Array>
-      signal?: AbortSignal
-      onProgress?: (downloaded: number, total: number) => void
-    },
-  ) {
-    return this.run(options.signal, async signal => {
-      const ref = this.cache.findMessage(messageId)?.file
-      if (!ref) throw new TelegramChatError('unavailable')
-      await downloadFile(
-        this.client,
-        ref,
-        { ...options, signal },
-        async () => (await this.refreshMessage(messageId, signal))?.file ?? null,
-      )
-    })
-  }
-  saveDownload(
-    messageId: number,
-    options: { signal?: AbortSignal; onProgress?: (downloaded: number, total: number) => void } = {},
-  ) {
-    return this.run(options.signal, async signal => {
-      const record = this.cache.findMessage(messageId)
-      if (!record?.file) throw new TelegramChatError('unavailable')
-      const attachment = record.view.attachment
-      const extension = attachment?.kind === 'photo' ? '.jpg' : attachment?.mime === 'video/mp4' ? '.mp4' : ''
-      const fileName = attachment?.name || `telegram-${messageId}${extension}`
-      return saveToDownloads(fileName, record.file.size, signal, sink => {
-        if (this.cache.findMessage(messageId)?.file?.mediaId !== record.file?.mediaId)
-          throw new TelegramChatError('unavailable')
-        return this.download(messageId, { ...options, signal, sink })
-      })
-    })
   }
   private async refreshMessage(messageId: number, signal: AbortSignal) {
     if (!this.cache.findMessage(messageId)) throw new TelegramChatError('unavailable')
@@ -596,7 +429,6 @@ export class TelegramChat {
             return await downloadAvatar(this.client, ref, signal)
           } catch (error) {
             if (!(error instanceof TelegramFileError) || error.category !== 'unavailable') throw error
-            if (messageId < 1) return null
             const fresh = (await this.refreshMessage(messageId, signal))?.avatar
             if (!fresh || fresh.senderId !== ref.senderId || fresh.photoId !== ref.photoId) return null
             return downloadAvatar(this.client, fresh, signal)
@@ -610,10 +442,7 @@ export class TelegramChat {
     this.lifetime.abort()
     this.ready = false
     this.unsubscribe()
-    this.operations.forEach(controller => controller.abort())
     this.operations.clear()
-    this.readRequests.clear()
-    this.confirmedReads.clear()
     this.cache.dispose()
     return this.startup.then(async () => {
       if (this.group.kind === 'supergroup') await closeChat(this.client, inputPeer(this.group)).catch(() => {})

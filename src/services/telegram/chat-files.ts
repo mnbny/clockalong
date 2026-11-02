@@ -8,7 +8,6 @@ export type FileReference = {
   dcId: number
   size: number
   mediaId: string
-  messageId: number
 }
 
 export type AttachmentInput = {
@@ -34,8 +33,6 @@ const fileMessages = {
   'too-large': 'This file exceeds the supported Telegram upload size for this account.',
   'invalid-file': 'This file cannot be prepared for Telegram.',
   'transfer-failed': 'Telegram file transfer failed.',
-  'save-failed': 'Could not save the Telegram file to Downloads.',
-  'media-failed': 'Could not open this Telegram media. Try downloading it instead.',
 } as const
 
 export class TelegramFileError extends Error {
@@ -76,19 +73,16 @@ function safeError(error: unknown, signal: AbortSignal) {
   if (signal.aborted) return new TelegramFileError('aborted')
   if (error instanceof TelegramFileError) return error
   if (invalidTelegramSession(error)) return new TelegramFileError('session-expired')
-  if (expiredReference(error)) return new TelegramFileError('unavailable')
-  if (error instanceof MtUnsupportedError && error.message.includes('CDN redirect'))
-    return new TelegramFileError('cdn-unsupported')
-  return new TelegramFileError('transfer-failed')
-}
-
-function expiredReference(error: unknown) {
-  return (
+  if (
     tl.RpcError.is(error, 'FILE_REFERENCE_EXPIRED') ||
     tl.RpcError.is(error, 'FILE_REFERENCE_INVALID') ||
     tl.RpcError.is(error, 'FILEREF_UPGRADE_NEEDED') ||
     (error instanceof MtUnsupportedError && error.message === 'File ref expired!')
   )
+    return new TelegramFileError('unavailable')
+  if (error instanceof MtUnsupportedError && error.message.includes('CDN redirect'))
+    return new TelegramFileError('cdn-unsupported')
+  return new TelegramFileError('transfer-failed')
 }
 
 const PART_BYTES = 512 * 1024
@@ -126,97 +120,56 @@ function downloadBudget(signal: AbortSignal) {
   }
 }
 
-export async function downloadFile(
+async function downloadFile(
   client: ITelegramClient,
   reference: FileReference,
-  options: {
-    sink: WritableStream<Uint8Array>
-    signal: AbortSignal
-    onProgress?: (transferred: number, total: number) => void
-  },
-  refresh: () => Promise<FileReference | null>,
-): Promise<void> {
-  const { sink, signal, onProgress } = options
+  sink: WritableStream<Uint8Array>,
+  signal: AbortSignal,
+) {
+  const controller = new AbortController()
+  const abort = () => controller.abort(new TelegramFileError('aborted'))
+  signal.addEventListener('abort', abort, { once: true })
+  const budget = downloadBudget(controller.signal)
   let writer: WritableStreamDefaultWriter<Uint8Array> | undefined
   let committed = 0
-  let current = reference
   try {
     checkSignal(signal)
-    if (!Number.isSafeInteger(reference.size) || reference.size < 0) throw new TelegramFileError('unavailable')
     writer = sink.getWriter()
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const controller = new AbortController()
-      const abort = () => controller.abort(new TelegramFileError('aborted'))
-      signal.addEventListener('abort', abort, { once: true })
-      const budget = downloadBudget(controller.signal)
-      let failure: unknown
-      let failed = false
-      try {
-        checkSignal(signal)
-        // No SDK stallTimeout: its timer counts deliberate sink/backpressure pauses as stalls.
-        for await (const chunk of downloadAsIterable(client, current.location, {
-          dcId: current.dcId,
-          fileSize: current.size,
-          offset: committed,
-          partSize: PART_BYTES / 1024,
-          abortSignal: controller.signal,
-          throttle: bytes => budget.reserve(bytes),
-        })) {
-          checkSignal(signal)
-          if (committed + chunk.byteLength > reference.size) throw new TelegramFileError('unavailable')
-          await cancellable(writer.write(chunk), signal)
-          committed += chunk.byteLength
-          budget.release(PART_BYTES)
-          onProgress?.(committed, reference.size)
-        }
-        checkSignal(signal)
-        if (committed !== reference.size) throw new TelegramFileError('unavailable')
-      } catch (error) {
-        failed = true
-        failure = error
-      } finally {
-        // SDK workers can still be awaiting throttles when its iterator exits.
-        controller.abort(new TelegramFileError('aborted'))
-        budget.dispose()
-        signal.removeEventListener('abort', abort)
-      }
-      if (!failed) break
+    // No SDK stallTimeout: its timer counts deliberate sink/backpressure pauses as stalls.
+    for await (const chunk of downloadAsIterable(client, reference.location, {
+      dcId: reference.dcId,
+      fileSize: reference.size,
+      partSize: PART_BYTES / 1024,
+      abortSignal: controller.signal,
+      throttle: bytes => budget.reserve(bytes),
+    })) {
       checkSignal(signal)
-      if (!expiredReference(failure)) throw failure
-      if (attempt !== 0) throw new TelegramFileError('unavailable')
-      const fresh = await cancellable(refresh(), signal)
-      if (
-        !fresh ||
-        fresh.mediaId !== reference.mediaId ||
-        fresh.messageId !== reference.messageId ||
-        fresh.size !== reference.size ||
-        committed % 4096 !== 0
-      )
-        throw new TelegramFileError('unavailable')
-      current = fresh
+      if (committed + chunk.byteLength > reference.size) throw new TelegramFileError('unavailable')
+      await cancellable(writer.write(chunk), signal)
+      committed += chunk.byteLength
+      budget.release(PART_BYTES)
     }
     checkSignal(signal)
+    if (committed !== reference.size) throw new TelegramFileError('unavailable')
     await cancellable(writer.close(), signal)
   } catch (error) {
     const safe = safeError(error, signal)
-    // A WritableStream cannot abort its underlying sink until an outstanding write settles.
-    // Request cleanup immediately, but do not let an unresponsive destination block cancellation.
     if (writer) {
       const cleanup = writer.abort(safe).catch(() => {})
       if (!signal.aborted) await cleanup
     }
     throw safe
   } finally {
+    // SDK workers can still be awaiting throttles when its iterator exits.
+    controller.abort(new TelegramFileError('aborted'))
+    budget.dispose()
+    signal.removeEventListener('abort', abort)
     writer?.releaseLock()
   }
 }
 
 /** The caller resolves a separate thumbnail reference, never the full attachment location. */
-export async function downloadPreview(
-  client: ITelegramClient,
-  reference: FileReference,
-  signal: AbortSignal,
-): Promise<Blob> {
+export async function downloadPreview(client: ITelegramClient, reference: FileReference, signal: AbortSignal) {
   checkSignal(signal)
   if (
     !Number.isSafeInteger(reference.size) ||
@@ -231,18 +184,15 @@ export async function downloadPreview(
   await downloadFile(
     client,
     reference,
-    {
-      signal,
-      sink: new WritableStream<Uint8Array>({
-        write(chunk) {
-          chunks.push(new Uint8Array(chunk))
-        },
-        abort() {
-          chunks.length = 0
-        },
-      }),
-    },
-    async () => null,
+    new WritableStream<Uint8Array>({
+      write(chunk) {
+        chunks.push(new Uint8Array(chunk))
+      },
+      abort() {
+        chunks.length = 0
+      },
+    }),
+    signal,
   )
   checkSignal(signal)
   return new Blob(chunks, { type: photoMime(chunks[0]) ?? 'application/octet-stream' })
@@ -252,7 +202,7 @@ export async function downloadAvatar(
   client: ITelegramClient,
   reference: { location: tl.TypeInputFileLocation; dcId: number },
   signal: AbortSignal,
-): Promise<Blob> {
+) {
   const controller = new AbortController()
   const abort = () => controller.abort(new TelegramFileError('aborted'))
   signal.addEventListener('abort', abort, { once: true })
@@ -334,7 +284,7 @@ export async function probeVideo(source: Blob, signal: AbortSignal): Promise<Att
   }
 }
 
-/** Returns a streaming SDK input; the scoped runtime owns the actual send and retry ID. */
+/** Returns a streaming SDK input; the scoped runtime owns the actual send and request ID. */
 export async function prepareAttachment(
   client: ITelegramClient,
   input: AttachmentInput,

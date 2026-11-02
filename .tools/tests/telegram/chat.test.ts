@@ -13,10 +13,8 @@ import {
 import { type InfiniteData, InfiniteQueryObserver, QueryClient, QueryObserver } from '@tanstack/react-query'
 import { expect, onTestFinished, test } from 'vitest'
 
-import { queryKeys } from '../../../src/lib/query-client'
 import { TelegramChat } from '../../../src/services/telegram/chat'
 import { projectMessage, topicFor } from '../../../src/services/telegram/chat-data'
-import { telegramReadOptions, telegramSendOptions } from '../../../src/services/telegram/chat-queries'
 import { subscribeChatUpdates } from '../../../src/services/telegram/chat-updates'
 import { deferred } from './fixtures'
 
@@ -47,7 +45,7 @@ const peers = () =>
     chats: [chatRaw, { ...chatRaw, id: 999, title: 'UNRELATED' }],
   })
 const record = (id: number, extra: Partial<tl.RawMessage> = {}) => projectMessage(basic, message(id, extra), peers())!
-const page = (...ids: number[]): HistoryPage => ({
+const page = (...ids: number[]) => ({
   items: ids.map(id => record(id)),
   nextBefore: { id: ids[ids.length - 1], date: 100 },
 })
@@ -177,7 +175,6 @@ test('group-level protection prevents attachment and thumbnail downloads', () =>
   const result = projectMessage(basic, message(4, { media }), protectedPeers)
   expect(result?.view.protected).toBe(true)
   expect(result?.view.attachment?.downloadable).toBe(false)
-  expect(result?.file).toBe(undefined)
   expect(result?.preview).toBe(undefined)
 })
 test('history cursor uses last raw ID exclusive, including short pages, without read side effects', async () => {
@@ -251,7 +248,7 @@ test('short topic counters are replaced with targeted full metadata', async () =
   expect(f.calls[1]._).toBe('messages.getForumTopicsByID')
   await f.chat.dispose()
 })
-test('remembered topic lookup is scoped and confirms deleted IDs without scanning pages', async () => {
+test('targeted topic lookup is scoped and confirms deleted IDs without scanning pages', async () => {
   const f = fixture(forum, async () => ({
     topics: [{ _: 'forumTopicDeleted', id: 72 }],
     messages: [],
@@ -264,55 +261,6 @@ test('remembered topic lookup is scoped and confirms deleted IDs without scannin
     topics: [72],
     peer: { _: 'inputPeerChannel', channelId: 123 },
   })
-})
-test('reply lookup requires a known in-group reference and rejects unrelated returned peers', async () => {
-  const f = fixture(basic, async () => ({
-    _: 'messages.messages',
-    messages: [message(4, { peerId: { _: 'peerChat', chatId: 999 } })],
-    users: [user],
-    chats: [chatRaw],
-  }))
-  const source = record(9, { replyTo: { _: 'messageReplyHeader', replyToMsgId: 4 } })
-  const outside = record(10, {
-    replyTo: { _: 'messageReplyHeader', replyToMsgId: 4, replyToPeerId: { _: 'peerChat', chatId: 999 } },
-  })
-  f.query.setQueryData(f.chat.cache.keys.history(null), { pages: [{ items: [source, outside] }], pageParams: [null] })
-  expect(await f.chat.fetchReply(999)).toBeNull()
-  expect(await f.chat.fetchReply(10)).toBeNull()
-  expect(f.calls).toHaveLength(0)
-  expect(await f.chat.fetchReply(9)).toBeNull()
-  expect(f.calls).toHaveLength(1)
-})
-test('an in-flight unloaded reply cannot restore a deleted message', async () => {
-  const wait = deferred<unknown>()
-  const f = fixture(basic, () => wait.promise)
-  f.query.setQueryData(f.chat.cache.keys.history(null), {
-    pages: [{ items: [record(9, { replyTo: { _: 'messageReplyHeader', replyToMsgId: 4 } })] }],
-    pageParams: [null],
-  })
-  const reply = f.chat.fetchReply(9)
-  await tick()
-  await f.chat.cache.remove([4])
-  wait.resolve({ _: 'messages.messages', messages: [message(4)], users: [user], chats: [chatRaw] })
-  expect(await reply).toBeNull()
-})
-test('edited quoted messages refresh excerpts after history reconciliation', async () => {
-  const f = fixture()
-  f.query.setQueryData(f.chat.cache.keys.history(null), {
-    pages: [{ items: [record(9, { replyTo: { _: 'messageReplyHeader', replyToMsgId: 4 } }), record(4)] }],
-    pageParams: [null],
-  })
-  const observer = new QueryObserver(f.query, {
-    queryKey: queryKeys.telegram.reply({ params: { messageId: 9 }, other: [f.chat.scope] }),
-    queryFn: () => f.chat.fetchReply(9),
-  })
-  const unsubscribe = observer.subscribe(() => {})
-  onTestFinished(unsubscribe)
-  await observer.refetch()
-  expect(observer.getCurrentResult().data?.text).toBe('m4')
-  await f.chat.cache.upsert(record(4, { message: 'changed', editDate: 200 }))
-  await tick()
-  expect(observer.getCurrentResult().data?.text).toBe('changed')
 })
 test('routine metadata refresh retains visible topic pages until all fresh pages are ready', async () => {
   const f = fixture(forum)
@@ -427,6 +375,7 @@ test('peerless delete never touches channel with equal message IDs; unrelated ev
     f.sdk,
     forum,
     f.chat.cache,
+    new Map(),
     () => true,
     async () => {},
   )
@@ -468,6 +417,7 @@ test('unknown peerless delete cancels initial basic history and restarts newest'
     f.sdk,
     basic,
     f.chat.cache,
+    new Map(),
     () => true,
     async () => {},
   )
@@ -494,31 +444,7 @@ test('recovery discards stale tail and all old pageParams, including inactive hi
   expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)!).toBe(undefined)
   await f.chat.dispose()
 })
-test('read acknowledgement is explicit, scoped, and coalesces increasing General maxima', async () => {
-  const first = deferred<boolean>()
-  const f = fixture(forum, _request => (f.calls.length === 1 ? first.promise : Promise.resolve(true)))
-  const key = f.chat.cache.keys.history(1)
-  f.query.setQueryData(key, {
-    pages: [{ items: [record(9), record(8)].map(item => ({ ...item, view: { ...item.view, topicId: 1 } })) }],
-    pageParams: [null],
-  })
-  const a = f.chat.acknowledgeRead({ topicId: 1 }, 8)
-  const b = f.chat.acknowledgeRead({ topicId: 1 }, 9)
-  first.resolve(true)
-  await Promise.all([a, b])
-  expect(
-    f.calls.map(call => {
-      if (call._ !== 'messages.readDiscussion') expect.fail('Unexpected read RPC')
-      return [call._, call.msgId, call.readMaxId]
-    }),
-  ).toStrictEqual([
-    ['messages.readDiscussion', 1, 8],
-    ['messages.readDiscussion', 1, 9],
-  ])
-  expect(() => f.chat.acknowledgeRead({ topicId: 1 }, 999)).toThrow()
-  await f.chat.dispose()
-})
-test('send retry keeps random ID and replaces the local message with the canonical short response', async () => {
+test('send uses a stable random ID and reconciles the canonical response into loaded history', async () => {
   const f = fixture(basic, async () => ({
     _: 'updateShortSentMessage',
     id: 10,
@@ -530,193 +456,139 @@ test('send retry keeps random ID and replaces the local message with the canonic
   const key = f.chat.cache.keys.history(null)
   f.query.setQueryData(key, { pages: [page(9)], pageParams: [null] })
   const operation = f.chat.createSend({ topicId: null, text: 'hello' })
-  const options = telegramSendOptions(f.chat)
-  const result = await f.query.getMutationCache().build(f.query, options).execute({ operation })
-  await f.query.getMutationCache().build(f.query, options).execute({ operation })
-  expect(result.view.id).toBe(10)
-  const first = f.calls[0]
-  if (first._ !== 'messages.sendMessage') expect.fail('Unexpected send RPC')
-  expect(f.calls[1]).toMatchObject({ randomId: first.randomId })
-  expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)!.pages[0].items.map(item => item.view.id)).toStrictEqual([
+  const result = await f.chat.send(operation)
+  expect(result.view).toMatchObject({ id: 10, text: 'hello' })
+  expect(f.calls[0]).toMatchObject({ _: 'messages.sendMessage', randomId: Long.fromString(operation.id) })
+  expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)!.pages[0].items.map(item => item.view.id)).toEqual([
     10, 9,
   ])
   expect(Object.isFrozen(operation)).toBe(true)
-  expect(f.chat.cache.outgoing()).toEqual([])
-  await f.chat.dispose()
+  expect(f.query.getMutationCache().getAll()).toEqual([])
 })
-test('multiple sends appear before confirmation and identical text keeps separate message identities', async () => {
+test.each([false, true])('simultaneous sends reconcile out of order with loaded history: %s', async loaded => {
   const waits = [deferred<tl.TypeUpdates>(), deferred<tl.TypeUpdates>()]
-  const started: string[] = []
   let request = 0
-  const f = fixture(basic, method => {
-    if (method._ !== 'messages.sendMessage') expect.fail('Unexpected send RPC')
-    expect(started).toContain(method.randomId.toString())
-    return waits[request++].promise
-  })
-  await f.chat.start()
+  const f = fixture(basic, () => waits[request++].promise)
   const key = f.chat.cache.keys.history(null)
-  f.query.setQueryData(key, { pages: [page(9)], pageParams: [null] })
+  const pages = [page(9), page(7, 6)]
+  const pageParams = [null, { id: 9, date: 100 }]
+  if (loaded) f.query.setQueryData(key, { pages, pageParams })
   const operations = [0, 1].map(() => f.chat.createSend({ topicId: null, text: 'same text' }))
-  const options = telegramSendOptions(f.chat, operation => {
-    expect(f.chat.cache.findMessage(operation.localId)?.view.text).toBe('same text')
-    started.push(operation.id)
-  })
-  const results = operations.map(operation => f.query.getMutationCache().build(f.query, options).execute({ operation }))
+  const results = operations.map(operation => f.chat.send(operation))
   await tick()
+  await expect(f.chat.send(operations[0])).rejects.toMatchObject({ category: 'invalid-input' })
   expect(f.calls).toHaveLength(2)
-  expect(started).toEqual(operations.map(operation => operation.id))
-  expect(f.chat.cache.outgoing().map(item => item.record.view)).toMatchObject([
-    { text: 'same text', outgoing: true, sender: { name: 'One' } },
-    { text: 'same text', outgoing: true, sender: { name: 'One' } },
-  ])
-  expect(new Set(f.chat.cache.outgoing().map(item => item.record.view.id)).size).toBe(2)
-  expect(() => f.chat.acknowledgeRead({ topicId: null }, operations[0].localId)).toThrow()
-  expect(f.chat.cache.findMessage(operations[0].localId)?.view.text).toBe('same text')
-  expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)?.pages[0].items).toHaveLength(1)
-  // Confirm out of order, with another incoming message already at the head.
-  await f.chat.cache.upsert(record(12))
+  expect(new Set(operations.map(operation => operation.id)).size).toBe(2)
   for (const index of [1, 0]) {
     waits[index].resolve({ _: 'updateShortSentMessage', id: 10 + index, date: 100, out: true, pts: 1, ptsCount: 1 })
-    await results[index]
+    expect((await results[index]).view.id).toBe(10 + index)
   }
-  await f.chat.cache.upsert(record(10, { message: 'same text', out: true }))
-  expect(f.chat.cache.outgoing()).toEqual([])
-  expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)?.pages[0].items.map(item => item.view.id)).toEqual([
-    12, 11, 10, 9,
-  ])
+  if (loaded) {
+    const history = f.query.getQueryData<InfiniteData<HistoryPage>>(key)!
+    expect(history.pages.map(page => page.items.map(item => item.view.id))).toEqual([
+      [11, 10, 9],
+      [7, 6],
+    ])
+    expect(history.pages.map(page => page.nextBefore)).toEqual(pages.map(page => page.nextBefore))
+    expect(history.pageParams).toEqual(pageParams)
+  } else {
+    expect(f.query.getQueryCache().getAll()).toEqual([])
+  }
 })
-test('a failed send retains its own retry identity while another send completes', async () => {
-  let fail = true
-  const f = fixture(basic, async request => {
-    if (request._ === 'messages.sendMessage' && request.message === 'first' && fail) throw new Error('transport')
-    return { _: 'updateShortSentMessage', id: fail ? 10 : 11, date: 100, out: true, pts: 1, ptsCount: 1 }
-  })
-  const first = f.chat.createSend({ topicId: null, text: 'first' })
-  const second = f.chat.createSend({ topicId: null, text: 'second' })
-  const execute = (operation: typeof first) =>
-    f.query.getMutationCache().build(f.query, telegramSendOptions(f.chat)).execute({ operation })
-  await expect(execute(first)).rejects.toMatchObject({ category: 'unknown-send' })
-  await execute(second)
-  expect(f.chat.cache.outgoing()).toHaveLength(1)
-  expect(f.chat.cache.outgoing()[0]).toMatchObject({ operation: first, error: { category: 'unknown-send' } })
-  // Even without an existing history query, confirmation keeps the sent message visible.
-  expect(f.chat.cache.findMessage(10)?.view.text).toBe('second')
-  fail = false
-  await execute(first)
-  expect(f.chat.cache.outgoing()).toEqual([])
-  const requests = f.calls.filter(request => request._ === 'messages.sendMessage')
-  expect(requests[2].randomId).toEqual(requests[0].randomId)
-  expect(f.chat.cache.findMessage(11)?.view.text).toBe('first')
+test.each([1, 4])('forum sends route to destination %s without composing a user reply', async topicId => {
+  const f = fixture(forum, async () => ({
+    _: 'updateShortSentMessage',
+    id: 10,
+    date: 100,
+    out: true,
+    pts: 1,
+    ptsCount: 1,
+  }))
+  const result = await f.chat.send(f.chat.createSend({ topicId, text: 'hello' }))
+  expect(result.view.topicId).toBe(topicId)
+  const request = f.calls.find(request => request._ === 'messages.sendMessage')!
+  expect(request.peer).toMatchObject({ _: 'inputPeerChannel', channelId: 123 })
+  if (topicId === 1) expect(request.replyTo).toBeUndefined()
+  else expect(request.replyTo).toMatchObject({ replyToMsgId: topicId })
 })
 test.each(['confirmation first', 'message first'] as const)(
-  'realtime reconciliation uses the operation ID with %s and ignores a late failure',
+  'realtime echo and send response preserve newer edits with %s',
   async order => {
-    const f = fixture()
+    const wait = deferred<tl.TypeUpdates>()
+    const f = fixture(basic, () => wait.promise)
     await f.chat.start()
     const key = f.chat.cache.keys.history(null)
     f.query.setQueryData(key, { pages: [page(9)], pageParams: [null] })
     const operation = f.chat.createSend({ topicId: null, text: 'hello' })
-    f.chat.beginSend(operation)
-    const confirm = () => {
+    const sending = f.chat.send(operation)
+    await tick()
+    const confirm = () =>
       f.client.onRawUpdate.emit({
         update: { _: 'updateMessageID', randomId: Long.fromString(operation.id), id: 10 },
         peers: peers(),
       } as RawUpdateInfo)
-    }
     if (order === 'confirmation first') confirm()
     f.client.onRawUpdate.emit({
-      update: { _: 'updateNewMessage', message: message(10, { message: 'hello', out: true }), pts: 1, ptsCount: 1 },
+      update: {
+        _: 'updateNewMessage',
+        message: message(10, { message: 'edited', editDate: 200, out: true }),
+        pts: 1,
+        ptsCount: 1,
+      },
       peers: peers(),
     } as RawUpdateInfo)
     if (order === 'message first') confirm()
-    await tick()
-    f.chat.cache.updateSend(operation.id, { error: new Error('late transport failure') })
-    await f.chat.cache.upsert(record(10, { message: 'hello', out: true }), operation.id)
-    expect(f.chat.cache.outgoing()).toEqual([])
+    wait.resolve({ _: 'updateShortSentMessage', id: 10, date: 100, out: true, pts: 1, ptsCount: 1 })
+    await sending
+    expect(f.chat.cache.findMessage(10)?.view.text).toBe('edited')
     expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)?.pages[0].items.map(item => item.view.id)).toEqual([
       10, 9,
     ])
   },
 )
-test('outgoing attachments survive recovery, keep topic and reply identity, and are cleared on disposal', async () => {
-  const f = fixture(forum)
-  const source = new Blob(['file'], { type: 'text/plain' })
-  const operation = f.chat.createSend(
-    { topicId: 4, text: 'caption', replyToId: 8 },
-    { source, name: 'note.txt', mime: 'text/plain', mode: 'original' },
-  )
-  f.chat.beginSend(operation)
-  f.chat.cache.updateSend(operation.id, { progress: 50 })
-  await f.chat.cache.recover()
-  expect(f.chat.cache.outgoing()[0]).toMatchObject({
-    progress: 50,
-    operation: { id: operation.id, attachment: { source } },
-    record: { view: { topicId: 4, replyToId: 8, attachment: { name: 'note.txt', downloadable: false } } },
-  })
-  const ordinary = f.chat.createSend({ topicId: 4, text: 'ordinary message' })
-  f.chat.beginSend(ordinary)
-  expect(f.chat.cache.findMessage(ordinary.localId)?.view.replyToId).toBeUndefined()
-  await f.chat.cache.confirmSend(operation.id, 10)
-  await f.chat.cache.remove([10])
-  await f.chat.cache.upsert({ ...record(10), view: { ...record(10).view, topicId: 4 } }, operation.id)
+test('basic-group deletion between acknowledgement and send response cannot resurrect the message', async () => {
+  const wait = deferred<tl.TypeUpdates>()
+  const f = fixture(basic, () => wait.promise)
+  await f.chat.start()
+  const key = f.chat.cache.keys.history(null)
+  f.query.setQueryData(key, { pages: [page(9)], pageParams: [null] })
+  const operation = f.chat.createSend({ topicId: null, text: 'hello' })
+  const sending = f.chat.send(operation)
+  await tick()
+  // Deliberately no await between acknowledgement and deletion: the body is still absent.
+  f.client.onRawUpdate.emit({
+    update: { _: 'updateMessageID', randomId: Long.fromString(operation.id), id: 10 },
+    peers: peers(),
+  } as RawUpdateInfo)
+  f.client.onRawUpdate.emit({
+    update: { _: 'updateDeleteMessages', messages: [10], pts: 1, ptsCount: 1 },
+    peers: peers(),
+  } as RawUpdateInfo)
+  wait.resolve({ _: 'updateShortSentMessage', id: 10, date: 100, out: true, pts: 1, ptsCount: 1 })
+  expect((await sending).view.id).toBe(10)
+  expect(f.chat.cache.isDeleted(10)).toBe(true)
   expect(f.chat.cache.findMessage(10)).toBeUndefined()
-  expect(f.chat.cache.outgoing().map(item => item.operation.id)).toEqual([ordinary.id])
-  await f.chat.dispose()
-  f.chat.cache.updateSend(ordinary.id, { progress: 90 })
-  expect(f.query.getQueryCache().getAll()).toEqual([])
+  expect(f.chat.cache.findMessage(9)).toBeDefined()
 })
-test('a basic-group deletion before the send response cannot restore an acknowledged outgoing message', async () => {
-  const f = fixture()
+test('failed send correlation is released and late acknowledgements cannot claim unrelated deletions', async () => {
+  const f = fixture(basic, async () => {
+    throw new Error('transport')
+  })
   await f.chat.start()
   const operation = f.chat.createSend({ topicId: null, text: 'hello' })
-  f.chat.beginSend(operation)
-  await f.chat.cache.confirmSend(operation.id, 10)
+  await expect(f.chat.send(operation)).rejects.toMatchObject({ category: 'unknown-send' })
+  f.client.onRawUpdate.emit({
+    update: { _: 'updateMessageID', randomId: Long.fromString(operation.id), id: 10 },
+    peers: peers(),
+  } as RawUpdateInfo)
   f.client.onRawUpdate.emit({
     update: { _: 'updateDeleteMessages', messages: [10], pts: 1, ptsCount: 1 },
     peers: peers(),
   } as RawUpdateInfo)
   await tick()
-  await f.chat.cache.upsert(record(10), operation.id)
-  expect(f.chat.cache.outgoing()).toEqual([])
-  expect(f.chat.cache.findMessage(10)).toBeUndefined()
-})
-test('send transport leaves cache reconciliation to the success callback', async () => {
-  const f = fixture(basic, async () => ({
-    _: 'updateShortSentMessage',
-    id: 10,
-    date: 100,
-    out: true,
-    pts: 1,
-    ptsCount: 1,
-  }))
-  const key = f.chat.cache.keys.history(null)
-  f.query.setQueryData(key, { pages: [page(9)], pageParams: [null] })
-  const options = telegramSendOptions(f.chat)
-  const variables = { operation: f.chat.createSend({ topicId: null, text: 'hello' }) }
-  const context = { client: f.query, meta: undefined, mutationKey: options.mutationKey }
-  const result = await options.mutationFn!(variables, context)
-  expect(f.query.getQueryData<InfiniteData<HistoryPage>>(key)!.pages[0].items.length).toBe(1)
-  await f.chat.dispose()
-  await options.onSuccess!(result, variables, undefined, context)
-  expect(f.query.getQueryCache().getAll().length).toBe(0)
-})
-test('read success refreshes unread metadata through the mutation callback', async () => {
-  const f = fixture(forum, async () => true)
-  f.query.setQueryData(f.chat.cache.keys.history(1), {
-    pages: [{ items: [{ ...record(9), view: { ...record(9).view, topicId: 1 } }] }],
-    pageParams: [null],
-  })
-  let fetches = 0
-  const observer = new QueryObserver(f.query, { queryKey: f.chat.cache.keys.summary(), queryFn: async () => ++fetches })
-  const unsubscribe = observer.subscribe(() => {})
-  onTestFinished(unsubscribe)
-  await observer.refetch()
-  const before = fetches
-  await f.query.getMutationCache().build(f.query, telegramReadOptions(f.chat)).execute({ topicId: 1, maxId: 9 })
-  await new Promise(resolve => setTimeout(resolve, 5))
-  expect(fetches > before).toBeTruthy()
-  unsubscribe()
-  await f.chat.dispose()
+  expect(f.chat.cache.isDeleted(10)).toBe(false)
+  expect(f.query.getQueryCache().getAll()).toEqual([])
+  expect(f.calls).toHaveLength(1)
 })
 test('cancelled final text RPC reports unknown outcome, and old scope cannot reuse operation', async () => {
   const f = fixture(
@@ -727,9 +599,10 @@ test('cancelled final text RPC reports unknown outcome, and old scope cannot reu
       ),
   )
   const operation = f.chat.createSend({ topicId: null, text: 'hello' })
-  const sending = f.chat.send(operation)
+  const controller = new AbortController()
+  const sending = f.chat.send(operation, { signal: controller.signal })
   await tick()
-  f.chat.cancel(operation.id)
+  controller.abort()
   await expect(sending).rejects.toMatchObject({ category: 'unknown-send' })
   const newer = fixture()
   await expect(newer.chat.send(operation)).rejects.toMatchObject({ category: 'invalid-input' })
@@ -753,17 +626,6 @@ test('dispose during startup removes handlers immediately and stops after startu
   expect(stopped).toBe(1)
 })
 
-test('read acknowledgements never lower an already confirmed marker', async () => {
-  const f = fixture(forum, async () => true)
-  f.query.setQueryData(f.chat.cache.keys.history(1), {
-    pages: [{ items: [record(9), record(8)].map(item => ({ ...item, view: { ...item.view, topicId: 1 } })) }],
-    pageParams: [null],
-  })
-  await f.chat.acknowledgeRead({ topicId: 1 }, 9)
-  await f.chat.acknowledgeRead({ topicId: 1 }, 8)
-  expect(f.calls.length).toBe(1)
-  await f.chat.dispose()
-})
 test('initial-fetch cancellation restarts rather than fabricating an update-only page', async () => {
   const f = fixture()
   const first = deferred<HistoryPage>()
