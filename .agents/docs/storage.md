@@ -65,7 +65,7 @@ Conversation data is excluded from Settings backups, browser persistence, and MC
 
 ## Local cache field budgets
 
-The webview enforces a per-origin localStorage quota of about 5 MB, shared by every local cache. The packaged app and the Vite dev server are separate origins, so quota exhaustion usually appears in the installed app first.
+The webview enforces a per-origin localStorage quota of about 5 MB, shared by the caches that use localStorage. The packaged app and the Vite dev server are separate origins. GitHub work items use IndexedDB instead.
 
 Local caches must persist only the fields UI consumes. Each sync module declares an explicit field allowlist and maps raw provider payloads through `pick` from `src/utils/objects.ts`:
 
@@ -74,7 +74,9 @@ Local caches must persist only the fields UI consumes. Each sync module declares
 
 Extend the matching list when UI needs another field. Do not persist raw provider responses. A raw Octokit pull request averages about 25 KB, and the generated Clockify schema is `passthrough`, so hydrated responses carry whole project, task, tag, and user objects that never appear in `TimeEntryWithRatesDtoV1`.
 
-A provider sync collects all successful pages in memory before it changes its local collection. It then reconciles inserts, updates, and stale deletions in one TanStack DB transaction. Do not persist individual rows or pages. Do not reconcile a partial or failed pagination run.
+A provider sync collects all successful pages in memory before it changes its local collection. It then reconciles inserts, updates, and stale deletions in one transaction. Do not persist individual rows or pages. Do not reconcile a partial or failed pagination run.
+
+The shared database uses Dexie's native schema versions. Future versions can declare schema changes with `version().stores()` and data upgrades with `upgrade()`. If an upgrade fails, IndexedDB rolls back the upgrade transaction and the database open fails.
 
 ## Local Clockify entry cache
 
@@ -88,4 +90,12 @@ Assigned Linear ticket rows are persisted by TanStack DB through browser localSt
 
 ## Local GitHub work-item cache
 
-GitHub issue and pull request rows are persisted by TanStack DB through browser localStorage under `clockalong.github.workItems.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for GitHub dashboard surfaces, rebuilt by `GithubSyncProvider` from GitHub's API according to the selected repositories, enabled work-item types, and fetch limit. Author and label selection, the transient `Show all` override, and closed-item visibility affect dashboard display only. They do not change sync filters. Persisted author and label selections may refer to values absent from the current cache so they can become active again when new work items arrive.
+GitHub issue and pull request rows persist in the shared application IndexedDB database. Dexie owns storage and reactive reads. Compact indexes support scoped filters, stable page ordering, and author choices. Local reads work offline.
+
+A successful sync commits fetched updates and excluded scope deletions together. Rows outside the latest capped fetch remain as last-known data. They are not necessarily revalidated by the latest sync. Disconnect clears GitHub rows and indexes. It also prevents older in-flight syncs from restoring the rows.
+
+The app removes the obsolete GitHub localStorage key. It does not import those rows. The initial sync runs even when periodic sync is manual.
+
+This cache is not a Tauri store key and does not contain provider credentials. It is a local read model for GitHub dashboard surfaces. Sync adds rows from GitHub's API. The selected repositories, enabled work-item types, and fetch limit control each fetch. Author and label selection, the transient `Show all` override, and closed-item visibility affect dashboard display only. They do not change sync filters.
+
+Persisted author and label selections can refer to values absent from the current cache. New work items can make those selections active again. Queries load bounded pages instead of the full archive. Browser storage remains subject to its own quota and eviction rules.
