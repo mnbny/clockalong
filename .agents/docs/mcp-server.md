@@ -35,7 +35,7 @@ Sends require the group and topic identifiers returned by discovery. The group m
 
 A file path must be absolute and readable on the computer that runs Clockalong. Files must be nonempty regular files of at most 20 MiB. Supported photos and locally playable MP4 videos default to media. Other files use the original document path. The `asFile` option forces a document when the user requests a file. Optional text becomes the attachment caption. Successful sends return only the group, topic, and message identifiers.
 
-Sends reuse the existing Telegram service and outgoing-message cache. They do not change composer drafts. Drawer closure, window hiding, and departure from the Clockify-authenticated layout do not cancel MCP sends. Telegram teardown and the request deadline still cancel them.
+Sends call the scoped Telegram service directly and reconcile confirmed records into existing read caches. They do not create a display queue or retain failed attachment inputs. Window hiding, route changes, and Clockify authentication do not cancel MCP sends. Telegram teardown and the request deadline cancel them.
 
 There is no persistent outbox or automatic resend. An unconfirmed send may already have reached Telegram. Agents must check Telegram before retrying.
 

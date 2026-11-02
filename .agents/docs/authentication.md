@@ -11,7 +11,7 @@ Helper text should explain what the user needs to do. Keep implementation status
 - Clockify is the core required provider for time tracking.
 - External work-source providers such as Linear and GitHub are optional unless a specific workflow requires them.
 - Rust owns durable credentials and the public authentication snapshot. Telegram performs its protocol login in the frontend.
-- The frontend owns the visible authentication screen, toasts, routing, and API clients.
+- The frontend owns connection controls, toasts, routing, and API clients.
 - Provider API calls should happen in TypeScript when a provider has a practical frontend client.
 - Rust should not become a broad API proxy unless a provider forces that design.
 - Refresh tokens stay native-side only.
@@ -202,7 +202,7 @@ GitHub API calls should use a frontend GitHub client such as Octokit. Rust shoul
 
 ## Telegram
 
-Telegram is optional and supports login and one selected group. Group verification is separate from account authentication. The frontend performs MTProto authentication; Rust stores the session and owns the public connected flag. Telegram failure does not affect the Clockify route gate.
+Telegram is optional and supports login and one selected group. Interactive login and reconnection are available on the sign-in screen and in Settings. Telegram account connection, saved session restore, and MCP operations are independent of Clockify authentication. Group selection is available in Settings. Group verification is separate from account authentication. The frontend performs MTProto authentication; Rust stores the session and owns the public connected flag. Telegram failure does not affect the Clockify route gate.
 
 A revoked Telegram session stops group activity and clears conversation data before native credential cleanup. Cleanup blocks a new login until it finishes. Errors from an old client cannot clear a newer connection. Group access failure retains the account and offers a separate group retry.
 

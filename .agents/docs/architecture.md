@@ -44,13 +44,13 @@
 
 - Logging follows the shared Rust/frontend diagnostics pattern documented in `logging.md`.
 
-Telegram uses a private frontend service for MTProto authentication, selected-group operations, and SDK realtime updates. Rust stores the session and group reference and publishes authentication state. One provider owns the client above routes and depends on TanStack Query. Shared sign-in and Settings controls use the same QR/password dialog.
+Telegram uses a private frontend service for MTProto authentication, selected-group operations, and SDK realtime updates. Rust stores the session and group reference and publishes authentication state. One provider owns the client above routes and depends on TanStack Query. The sign-in screen and Settings use the same interactive QR/password dialog.
 
-Telegram conversation records live in memory in TanStack Query. Each account and group connection has a separate cache scope. Provider services exclude unrelated account data from the cache. Query owns history, topics, reply excerpts, unread counts, avatars, and previews. A bounded native disk cache retains only avatar and preview bytes across restarts. The interface derives display order, topic selection, and formatting from Query records.
+Telegram conversation records live in memory in TanStack Query. Each account and group connection has a separate cache scope. Provider services exclude unrelated account data from the cache. Query owns scoped history, topics, and group metadata. A bounded native disk cache retains only avatar and preview bytes across restarts. Service methods retain message projection and bounded avatar and preview reads. No conversation interface mounts these services.
 
-Shared mutation callbacks create optimistic messages, reconcile confirmed sends, and refresh unread counts. UI callers can supply a draft-clearing callback; MCP sends do not. SDK progress callbacks update active transfers. Native writers receive attachment streams for Downloads or temporary media without general frontend filesystem access.
+MCP sends call the scoped Telegram service directly. Request deadlines and account/group teardown control cancellation. The service reconciles confirmed records into existing read caches and retains only in-flight message IDs for deletion safety. It does not retain attachment inputs or failed sends for UI retry.
 
-The authenticated layout owns the Telegram chat interface lifetime. A Dashboard-only header button opens its drawer outside the background app shell. Local state retains topic selection and drafts across drawer closure and Settings visits. Leaving the authenticated layout clears this state and cancels UI transfers. MCP sends use independent request deadlines. Replacing the Telegram scope cancels both UI and MCP work. Drawer and media-dialog focus stay separate from background app shortcuts.
+Telegram's service lifetime belongs to the app-wide provider, independent of routing and Clockify authentication. The sign-in screen and Settings provide account setup. Settings also provides group selection. The Dashboard header has a Telegram button with no action. The authenticated layout mounts no chat component, draft state, history preloader, or read acknowledgement observer.
 
 ## Frontend providers
 

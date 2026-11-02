@@ -26,7 +26,7 @@ Clockify stays in charge of the time entries. Clockalong gives you a smaller, fa
 - Clockify is required and keeps the actual time entries.
 - Linear can show assigned issues and start issue-based timers.
 - GitHub can show selected repositories, issues, and pull requests, with persisted multi-author dashboard filtering.
-- Telegram is optional and supports QR login, saved sessions, and Dashboard chat for one connected group, with topics, replies, and attachments.
+- Telegram is optional. Settings supports QR login, saved sessions, and one connected group. Local agents can list its destinations and send text or files through MCP. The dashboard icon has no action; there is no chat or notification interface.
 - Quick Timers are local presets for reusable timers that are not tied to another app.
 
 ## Authentication
@@ -36,7 +36,7 @@ Clockalong uses user-owned credentials:
 - Clockify connects with a Clockify API key.
 - Linear connects through OAuth with PKCE.
 - GitHub connects with a fine-grained personal access token.
-- Telegram connects by scanning a QR code with an existing account in the official Telegram phone app.
+- Telegram connects from the sign-in screen or Settings by scanning a QR code with an existing account in the official Telegram phone app. Group selection is in Settings. Telegram account connection, saved sessions, and MCP tools work independently of Clockify authentication.
 
 Clockalong stores long-lived credentials in native secure storage. It only pulls out a working credential when it needs to talk to a connected service.
 
