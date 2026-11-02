@@ -6,6 +6,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useRef, useState } from 'react'
 
 import { queryKeys } from '../lib/query-client'
+import { clockifyEntryCache } from '../services/clockify/entry-cache'
+import { cacheClockifyEntryResult } from '../services/clockify/sync'
 import { MissingClockifyProjectError } from '../services/clockify/time-entries'
 import { getClockifyTimeEntryIntervalFromMinutes } from '../services/clockify/time-entry-interval'
 import { getErrorMessage } from '../utils/errors'
@@ -15,6 +17,7 @@ type ClockifyEntryTimeFormProps = {
   children?: ReactNode
   description: string
   entry?: TimeEntryWithRatesDtoV1
+  workspaceId?: string
   onCancel: () => void
   onMutate?: () => Promise<void>
   onSave: (interval: ClockifyTimeEntryInterval) => Promise<unknown>
@@ -43,6 +46,7 @@ export function ClockifyEntryTimeForm({
   children,
   description,
   entry,
+  workspaceId,
   onCancel,
   onMutate,
   onSave,
@@ -78,7 +82,11 @@ export function ClockifyEntryTimeForm({
 
       return onSave({ start: start.toISOString(), end: end.toISOString() })
     },
-    onMutate,
+    onMutate: async () => {
+      const lifecycle = clockifyEntryCache.getLifecycle()
+      await onMutate?.()
+      return lifecycle
+    },
     onError: error => {
       if (error instanceof MissingClockifyProjectError) {
         appToast.warning('Choose a Clockify project first', {
@@ -91,7 +99,27 @@ export function ClockifyEntryTimeForm({
         description: getErrorMessage(error),
       })
     },
-    onSuccess: () => {
+    onSuccess: async (response, _variables, lifecycle) => {
+      if (response && typeof response === 'object') {
+        try {
+          await cacheClockifyEntryResult(
+            response as TimeEntryWithRatesDtoV1,
+            {
+              ...entry,
+              workspaceId: entry?.workspaceId ?? workspaceId,
+              timeInterval: {
+                ...entry?.timeInterval,
+                start: new Date(times.start).toISOString(),
+                end: new Date(times.end).toISOString(),
+              },
+            },
+            lifecycle,
+          )
+        } catch (error) {
+          console.warn('[clockify sync] Could not cache saved entry:', error)
+          appToast.warning('Saved in Clockify, but the local cache could not be updated.')
+        }
+      }
       appToast.success(entry ? 'Clockify entry updated' : 'Clockify entry added')
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.entrySync() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })

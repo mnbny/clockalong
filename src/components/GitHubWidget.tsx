@@ -9,7 +9,6 @@ import {
   IconUserPlus,
   IconX,
 } from '@tabler/icons-react'
-import { and, eq, useLiveQuery } from '@tanstack/react-db'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -19,9 +18,11 @@ import { useClockifyTimerProject } from '../hooks/useClockifyTimerProject'
 import { useDexieQuery } from '../hooks/useDexieQuery'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
-import { type TimeEntryDtoImplV1 } from '../services/clockify/generated/clockify'
-import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
+import { clockifyEntryCache } from '../services/clockify/entry-cache'
+import { queryClockifySummaries } from '../services/clockify/entry-queries'
+import { cacheClockifyEntryResult } from '../services/clockify/sync'
 import { MissingClockifyProjectError } from '../services/clockify/time-entries'
+import { selectClockifyWorkspace } from '../services/clockify/workspaces'
 import { db } from '../services/db'
 import { createGithubClient } from '../services/github/client'
 import { getGithubRepositoryLabels } from '../services/github/labels'
@@ -42,9 +43,9 @@ import {
 import { type GithubPageCursor, queryGithubAuthors, queryGithubWorkItems } from '../services/github/work-item-queries'
 import {
   getClockifyEntryGithubWorkItem,
+  getGithubWorkItemInternalRef,
   type GithubWorkItemWithTracking,
   mergeGithubWorkItemTimeSummaries,
-  summarizeClockifyGithubWorkItemTimeEntries,
 } from '../services/github/work-item-summaries'
 import {
   type GithubSelectedAuthor,
@@ -54,7 +55,6 @@ import {
 import { useStorage } from '../services/storage/useStorage'
 import { cx } from '../utils/cx'
 import { getErrorMessage } from '../utils/errors'
-import { parseInternalRefs } from '../utils/templates'
 import { appToast } from './AppToaster'
 import { ClockifyEntryTimeDialog } from './ClockifyEntryTimeDialog'
 import { LastTrackedCell, TotalTrackedAmountCell, TotalTrackedCell } from './TrackingSummaryCells'
@@ -163,6 +163,7 @@ const githubWorkItemColumns: Array<ColumnDef<GithubWorkItemWithTracking>> = [
 
 const githubWorkItemTableCoreRowModel = getCoreRowModel<GithubWorkItemWithTracking>()
 const emptyGithubWorkItems: SyncedGithubWorkItem[] = []
+const emptyClockifySummaries = {}
 
 export function GitHubWidget() {
   const authState = useAppAuth()
@@ -250,7 +251,11 @@ function GitHubWidgetContent() {
     if (pagination.key !== filterKey) {
       setPagination({ key: filterKey, cursors: [] })
     } else if (page.data && pagination.revision !== page.data.revision) {
-      setPagination({ key: filterKey, cursors: [], revision: page.data.revision })
+      const revision = page.data.revision
+      setPagination(current => {
+        if (current.key !== filterKey || current.revision === revision) return current
+        return { key: filterKey, cursors: current.revision === undefined ? current.cursors : [], revision }
+      })
     }
   }, [page.data, pagination.key, pagination.revision, filterKey])
   const githubAvailableAuthors = useMemo(
@@ -276,11 +281,7 @@ function GitHubWidgetContent() {
       return null
     }
 
-    return (
-      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
-      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
-      workspaces[0]
-    )
+    return selectClockifyWorkspace(user, workspaces)
   }, [clockifyUserQuery.data, clockifyWorkspacesQuery.data])
   const runningEntryQuery = useQuery({
     enabled: Boolean(clockifyUserQuery.data?.id && selectedClockifyWorkspace?.id),
@@ -304,51 +305,22 @@ function GitHubWidgetContent() {
     const runningEntries = runningEntryQuery.data ?? []
     return runningEntries.find(entry => entry.userId === clockifyUserQuery.data?.id) ?? runningEntries[0] ?? null
   }, [clockifyUserQuery.data?.id, runningEntryQuery.data])
-  const syncedTimeEntriesQuery = useLiveQuery(
-    q => {
-      if (!clockifyUserQuery.data?.id || !selectedClockifyWorkspace?.id) {
-        return null
-      }
-
-      return q
-        .from({ syncedEntry: clockifyTimeEntriesCollection })
-        .where(({ syncedEntry }) =>
-          and(
-            eq(syncedEntry.userId, clockifyUserQuery.data.id!),
-            eq(syncedEntry.workspaceId, selectedClockifyWorkspace.id!),
-          ),
+  const readTracking = useCallback(() => {
+    const userId = clockifyUserQuery.data?.id
+    const workspaceId = selectedClockifyWorkspace?.id
+    return userId && workspaceId
+      ? queryClockifySummaries(
+          db,
+          { userId, workspaceId },
+          workItems,
+          item => item.id,
+          getGithubWorkItemInternalRef,
+          runningEntryQuery.data ?? [],
         )
-        .orderBy(({ syncedEntry }) => syncedEntry.startedAt)
-    },
-    [clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id],
-  )
-  const workItemTimeSummaries = useMemo(() => {
-    return summarizeClockifyGithubWorkItemTimeEntries({
-      entries: [
-        ...(syncedTimeEntriesQuery.data?.map(syncedEntry => syncedEntry.entry) ?? []),
-        ...(runningEntryQuery.data ?? []),
-      ],
-      workItems,
-    })
-  }, [runningEntryQuery.data, syncedTimeEntriesQuery.data, workItems])
-  useEffect(() => {
-    githubWidgetLog('clockify summary inputs', {
-      githubWorkItemCount: workItems.length,
-      runningEntryCount: runningEntryQuery.data?.length ?? 0,
-      sampleSyncedEntries: summarizeGithubWidgetSyncedEntries(syncedTimeEntriesQuery.data ?? []),
-      summaryCount: Object.keys(workItemTimeSummaries).length,
-      syncedEntryCount: syncedTimeEntriesQuery.data?.length ?? 0,
-      userId: clockifyUserQuery.data?.id,
-      workspaceId: selectedClockifyWorkspace?.id,
-    })
-  }, [
-    clockifyUserQuery.data?.id,
-    runningEntryQuery.data,
-    selectedClockifyWorkspace?.id,
-    syncedTimeEntriesQuery.data,
-    workItemTimeSummaries,
-    workItems.length,
-  ])
+      : Promise.resolve({})
+  }, [clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id, workItems, runningEntryQuery.data])
+  const trackingQuery = useDexieQuery(readTracking)
+  const workItemTimeSummaries = trackingQuery.data ?? emptyClockifySummaries
   const workItemsWithTracking = useMemo(
     () => mergeGithubWorkItemTimeSummaries(workItems, workItemTimeSummaries),
     [workItemTimeSummaries, workItems],
@@ -410,12 +382,14 @@ function GitHubWidgetContent() {
     },
   })
   const stopTrackingMutation = useMutation({
+    onMutate: () => clockifyEntryCache.getLifecycle(),
     mutationFn: async (item: SyncedGithubWorkItem) => {
       if (!runningEntry) {
         throw new MissingRunningClockifyEntryError()
       }
 
-      return stopClockifyTimerForEntry({ entry: runningEntry, item })
+      const entry = await stopClockifyTimerForEntry({ entry: runningEntry, item })
+      return { entry, original: runningEntry }
     },
     onError: error => {
       if (error instanceof MissingRunningClockifyEntryError) {
@@ -427,7 +401,13 @@ function GitHubWidgetContent() {
         description: getErrorMessage(error),
       })
     },
-    onSuccess: (_, item) => {
+    onSuccess: async ({ entry, original }, item, lifecycle) => {
+      try {
+        await cacheClockifyEntryResult(entry, original, lifecycle)
+      } catch (error) {
+        console.warn('[github widget] Could not cache stopped entry:', error)
+        appToast.warning('Timer stopped, but the local cache could not be updated.')
+      }
       appToast.success(`Stopped timer for ${getGithubWorkItemLabel(item)}`)
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
@@ -573,6 +553,15 @@ function GitHubWidgetContent() {
           </div>
         )}
 
+        {!!trackingQuery.error && (
+          <div role="alert" className="text-error px-4 py-2 text-sm">
+            Could not load Clockify totals. {getErrorMessage(trackingQuery.error)}{' '}
+            <button className="btn btn-sm" type="button" onClick={trackingQuery.retry}>
+              Retry
+            </button>
+          </div>
+        )}
+
         {!!(cacheQuery.isError || syncQuery.isError || page.error || authors.error) && (
           <div className="text-error grid min-h-48 place-items-center px-4 text-center text-sm">
             <span>
@@ -636,6 +625,7 @@ function GitHubWidgetContent() {
       {!!manualWorkItem && (
         <ClockifyEntryTimeDialog
           description={`${getGithubWorkItemLabel(manualWorkItem)}: ${manualWorkItem.title}`}
+          workspaceId={clockifyTimerProject?.workspaceId}
           onCancel={() => setManualWorkItem(null)}
           onSave={interval => {
             if (!clockifyTimerProject) throw new MissingClockifyProjectError()
@@ -1325,33 +1315,4 @@ class MissingRunningClockifyEntryError extends Error {
   constructor() {
     super('Missing running Clockify timer.')
   }
-}
-
-function summarizeGithubWidgetSyncedEntries(
-  entries: Array<{ entry: TimeEntryDtoImplV1; id: string; startedAt: string }>,
-) {
-  return entries.slice(0, 5).map(entry => ({
-    description: truncateGithubWidgetLogText(entry.entry.description),
-    end: entry.entry.timeInterval?.end,
-    id: entry.id,
-    refs: parseInternalRefs(entry.entry.description).map(ref => ref.provider),
-    startedAt: entry.startedAt,
-  }))
-}
-
-function truncateGithubWidgetLogText(value: string | undefined, maxLength = 140) {
-  if (!value) {
-    return value
-  }
-
-  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
-}
-
-function githubWidgetLog(message: string, details?: unknown) {
-  if (details === undefined) {
-    console.info(`[github widget] ${message}`)
-    return
-  }
-
-  console.info(`[github widget] ${message}`, details)
 }

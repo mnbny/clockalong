@@ -99,7 +99,7 @@ Use rate-derived amount language such as value or earned amount. Do not frame th
 
 Fetch the running timer from Clockify time entries with a tiny page size. Fetch today, week, and month totals from Clockify summary reports, not by loading broad time-entry pages and aggregating in the webview.
 
-Broad Clockify entry reads should come from the local synced entry collection in `src/services/clockify/sync.ts`, not from component-level Clockify pagination. The background sync stores recent entries according to the `clockifyEntrySyncDays` and `clockifyEntrySyncInterval` settings, and UI code should subscribe with TanStack DB live queries when it needs entry-level data.
+Clockify entry views use scoped Dexie live queries. Sync fetches the configured recent window and retains older entries as last-known data. Date-specific views query their own calendar ranges.
 
 Overlap detection reads completed synced entries and ignores running entries. The current periods are intentionally non-overlapping: today, the previous six days, and days seven through twenty-seven ago. Overlapping completed entries show an `Overlap detected` error badge under only the affected period.
 
@@ -124,7 +124,7 @@ Right-click a play button to add completed time for a Linear ticket, GitHub work
 
 Manual entry and duration editing share one form. Minutes are the main input and can include fractions. New entries end at the time the form opens. A change to the duration moves the start time backward. Users can also change the start and end dates. When users edit an existing entry, a change to the duration keeps the start time and moves the end time.
 
-Saving creates a completed Clockify entry without changing the running timer. Entries can overlap other entries. Provider entries retain their configured descriptions and internal references. New provider entries use the selected Clockify project and billable preference. Copies of existing entries preserve the same fields as timer resume. The entry cache and summary reports refresh after a successful save.
+Saving creates a completed Clockify entry without changing the running timer. Entries can overlap other entries. Provider entries retain their configured descriptions and internal references. New provider entries use the selected Clockify project and billable preference. Copies of existing entries preserve the same fields as timer resume. A successful save updates the local entry cache when the response identifies the entry. The app refreshes entry sync and summary reports.
 
 ## Clockify source matching
 
@@ -147,7 +147,7 @@ Do not reintroduce a local Clockify-entry-to-source-item registry as the normal 
 
 Current behavior:
 
-- Reads synced local Clockify entries for the selected Clockify user/workspace, plus the current running entry.
+- Reads completed matching entries for the selected Clockify user and workspace, plus the current running entry. Retained completed entries contribute to work-item totals. Cached open entries do not accrue time unless they match the current running response.
 - Matches entries whose descriptions contain a supported internal ref.
 - Produces summaries keyed by source item ID: `{ lastTrackedAt, totalTrackedSeconds, totalTrackedAmount, totalTrackedAmountCurrency }`.
 - Provider widgets merge those summaries into compact table rows before sorting and rendering.

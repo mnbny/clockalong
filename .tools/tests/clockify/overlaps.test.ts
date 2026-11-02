@@ -155,10 +155,13 @@ test.each([400, 403, 500])('a %s stops after partial success without replaying w
     .spyOn(clockify, 'replaceMany')
     .mockImplementationOnce(async body => updatedEntries(body))
     .mockRejectedValue(error)
+  const saved = vi.fn(async (_entries: TimeEntryDtoV1[]) => {})
   await expect(
-    fixClockifyTimeEntryOverlaps(getCompletedClockifyTimeEntryOverlapFixes(overlappingEntries(76))),
+    fixClockifyTimeEntryOverlaps(getCompletedClockifyTimeEntryOverlapFixes(overlappingEntries(76)), saved),
   ).rejects.toBe(error)
   expect(update.mock.calls.map(([body]) => body[0].id)).toStrictEqual(['entry-1', 'entry-26'])
+  expect(saved).toHaveBeenCalledOnce()
+  expect(saved.mock.calls[0][0]).toHaveLength(25)
 })
 
 test('a long Retry-After stops instead of retrying before the server permits it', async () => {

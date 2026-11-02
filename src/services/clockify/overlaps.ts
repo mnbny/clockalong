@@ -17,7 +17,10 @@ export type ClockifyTimeEntryOverlapFix = {
   start: Date
 }
 
-export async function fixClockifyTimeEntryOverlaps(fixes: ClockifyTimeEntryOverlapFix[]) {
+export async function fixClockifyTimeEntryOverlaps(
+  fixes: ClockifyTimeEntryOverlapFix[],
+  onUpdated?: (entries: TimeEntryWithRatesDtoV1[], fixes: ClockifyTimeEntryOverlapFix[]) => Promise<void>,
+) {
   if (!fixes.length) return 0
 
   const { userId, workspaceId } = fixes[0].entry
@@ -42,6 +45,7 @@ export async function fixClockifyTimeEntryOverlaps(fixes: ClockifyTimeEntryOverl
         if (body.some(entry => !updatedIds.has(entry.id))) {
           throw new Error('Clockify did not confirm every update. Refresh and review the remaining overlaps.')
         }
+        await onUpdated?.(entries, fixes.slice(offset, offset + batchSize))
         break
       } catch (error) {
         if (!axios.isAxiosError(error) || error.response?.status !== 429) throw error

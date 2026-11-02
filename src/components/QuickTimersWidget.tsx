@@ -193,7 +193,7 @@ export function QuickTimersWidget() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              {quickTimers.length > 0 ? (
+              {!!quickTimers.length && (
                 <button
                   className="btn btn-square btn-ghost btn-sm"
                   type="button"
@@ -202,7 +202,7 @@ export function QuickTimersWidget() {
                   onClick={toggleQuickTimersEditing}>
                   <IconPencil className="size-4" />
                 </button>
-              ) : null}
+              )}
               <button
                 className="btn btn-square btn-ghost btn-sm"
                 type="button"
@@ -213,7 +213,7 @@ export function QuickTimersWidget() {
             </div>
           </header>
 
-          {quickTimers.length > 0 ? (
+          {!!quickTimers.length && (
             <div
               className="grid gap-4 p-4"
               style={{ gridTemplateColumns: `repeat(${normalizedColumns}, minmax(0, 1fr))` }}>
@@ -267,7 +267,7 @@ export function QuickTimersWidget() {
                 </button>
               ))}
             </div>
-          ) : null}
+          )}
         </div>
       </section>
 
@@ -573,6 +573,7 @@ function QuickTimerStartForm({ manual, onCancel, quickTimerId }: QuickTimerStart
     return (
       <ClockifyEntryTimeForm
         description={quickTimerPreset.name}
+        workspaceId={clockifyTimerProject?.workspaceId}
         onCancel={onCancel}
         onMutate={() => persistQuickTimerValues({ preset: quickTimerPreset, values: form.getValues() })}
         onSave={interval => {
