@@ -11,6 +11,9 @@ import type {
   McpStopTimerResult,
 } from '../tauri/mcp-client'
 
+import { isTauri } from '@tauri-apps/api/core'
+
+import { getClockalongAuthState } from '../../hooks/useAppAuth'
 import { queryClient, queryKeys } from '../../lib/query-client'
 import { getErrorMessage } from '../../utils/errors'
 import { upsertSyncedClockifyEntry } from '../clockify/sync'
@@ -19,8 +22,9 @@ import {
   type ClockifyTimeEntryInterval,
   getClockifyTimeEntryIntervalFromMinutes,
 } from '../clockify/time-entry-interval'
-import { githubWorkItemsCollection } from '../github/sync'
+import { db } from '../db'
 import { createClockifyTimeEntryForGithubWorkItem, formatGithubWorkItemDescription } from '../github/timers'
+import { isGithubItemInScope } from '../github/work-item-cache'
 import { linearTicketsCollection } from '../linear/sync'
 import { createClockifyTimeEntryForTicket } from '../linear/timers'
 import {
@@ -56,6 +60,7 @@ export type McpCommandExecution =
 
 export type ExecuteMcpCommandContext = {
   clockifyConnected: boolean
+  githubConnected: boolean
   clockifyTimerProject: ClockifyProject | null
   linearViewerId: string | null
   runningEntry: TimeEntryWithRatesDtoV1 | null
@@ -139,6 +144,7 @@ async function executeCreateTimeEntry(
       break
     }
     case 'github': {
+      if (!context.githubConnected) return commandError('unknown_target', unknownTargetMessage)
       const workItem = await getGithubWorkItem(arguments_.id)
 
       if (!workItem) {
@@ -159,6 +165,12 @@ async function executeCreateTimeEntry(
         pullRequestTemplate,
         pullRequestTemplateFallback,
       })
+      if (
+        (isTauri() && !(await getClockalongAuthState()).githubAuthenticated) ||
+        !(await getGithubWorkItem(arguments_.id))
+      ) {
+        return commandError('unknown_target', unknownTargetMessage)
+      }
       entry = await createClockifyTimeEntryForGithubWorkItem({
         billable,
         interval,
@@ -266,8 +278,20 @@ function toLinearTicket(syncedTicket: SyncedLinearTicket): LinearTicket {
 }
 
 async function getGithubWorkItem(id: string) {
-  await githubWorkItemsCollection.preload()
-  return githubWorkItemsCollection.toArray.find(item => item.id === id) ?? null
+  const [item, repositories, visibleWorkItemTypes] = await Promise.all([
+    db.githubWorkItems.get(id),
+    storage.get('githubSelectedRepositories'),
+    storage.get('githubVisibleWorkItemTypes'),
+  ])
+  if (
+    !item ||
+    !isGithubItemInScope(item, {
+      repositories: repositories.map(repository => repository.fullName),
+      visibleWorkItemTypes,
+    })
+  )
+    return null
+  return item
 }
 
 function getStartTimerResult(

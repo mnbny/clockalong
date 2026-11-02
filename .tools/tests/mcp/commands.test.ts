@@ -4,11 +4,13 @@ import { afterEach, expect, test, vi } from 'vitest'
 
 import { queryClient } from '../../../src/lib/query-client'
 import { clockify } from '../../../src/services/clockify/client'
+import { githubWorkItemCache } from '../../../src/services/github/work-item-cache'
 import { executeMcpCommand, type ExecuteMcpCommandContext } from '../../../src/services/mcp/commands'
 import { storage } from '../../../src/services/storage/config'
 
 const context = {
   clockifyConnected: true,
+  githubConnected: true,
   clockifyTimerProject: {
     projectId: 'project',
     projectName: 'Project',
@@ -110,6 +112,84 @@ test('invalid duration, missing project, disconnected Clockify, and unknown work
   expect(unknown.ok).toBe(false)
   if (!unknown.ok) expect(unknown.error.code).toBe('unknown_target')
   expect(create).toHaveBeenCalledTimes(0)
+})
+
+test('GitHub commands resolve cached IDs and reject missing IDs without creating time', async () => {
+  const item = {
+    id: 'owner/repo:issue:7',
+    type: 'issue' as const,
+    number: 7,
+    title: 'Fix issue',
+    url: 'https://github.com/owner/repo/issues/7',
+    repositoryFullName: 'owner/repo',
+    repositoryOwner: 'owner',
+    repositoryUrl: 'https://github.com/owner/repo',
+    author: null,
+    authorAvatarUrl: null,
+    state: 'open',
+    updatedAt: '2026-01-01',
+    syncedAt: '2026-01-01',
+    item: { labels: [] },
+  }
+  await githubWorkItemCache.replace([item], githubWorkItemCache.beginSync(), {
+    repositories: ['owner/repo'],
+    visibleWorkItemTypes: { issues: true, pullRequests: true },
+  })
+  vi.spyOn(storage, 'get').mockImplementation(async key =>
+    key === 'githubSelectedRepositories'
+      ? [
+          {
+            fullName: 'owner/repo',
+            id: 1,
+            name: 'repo',
+            owner: 'owner',
+            private: false,
+            url: 'https://github.com/owner/repo',
+          },
+        ]
+      : storage.config[key].default,
+  )
+  vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(async () => {})
+  const create = vi.spyOn(clockify, 'createTimeEntry').mockImplementation(async body => ({
+    id: 'new-entry',
+    billable: body.billable,
+    description: body.description,
+    timeInterval: { start: body.start },
+  }))
+  try {
+    const missing = await executeMcpCommand(
+      { tool: 'start_timer', requestId: 'missing', arguments: { source: 'github', id: 'missing' } },
+      context,
+    )
+    expect(missing).toMatchObject({ ok: false, error: { code: 'unknown_target' } })
+    expect(create).not.toHaveBeenCalled()
+    const disconnected = await executeMcpCommand(
+      { tool: 'start_timer', requestId: 'disconnected', arguments: { source: 'github', id: item.id } },
+      { ...context, githubConnected: false },
+    )
+    expect(disconnected).toMatchObject({ ok: false, error: { code: 'unknown_target' } })
+    vi.mocked(storage.get)
+      .mockImplementationOnce(async () => true)
+      .mockImplementationOnce(async () => [])
+      .mockImplementationOnce(async () => ({ issues: true, pullRequests: true }))
+    const excluded = await executeMcpCommand(
+      { tool: 'start_timer', requestId: 'excluded', arguments: { source: 'github', id: item.id } },
+      context,
+    )
+    expect(excluded).toMatchObject({ ok: false, error: { code: 'unknown_target' } })
+    expect(create).not.toHaveBeenCalled()
+    const found = await executeMcpCommand(
+      { tool: 'start_timer', requestId: 'found', arguments: { source: 'github', id: item.id } },
+      context,
+    )
+    expect(found).toMatchObject({
+      ok: true,
+      result: { description: expect.stringContaining('ref:github:owner/repo:issue:7') },
+    })
+    expect(create).toHaveBeenCalledOnce()
+  } finally {
+    await githubWorkItemCache.clear()
+  }
 })
 
 afterEach(() => vi.restoreAllMocks())

@@ -10,9 +10,12 @@ import type { McpRefreshResult } from '../tauri/mcp-client'
 import type { BuildMcpSnapshotInput } from './snapshot'
 
 import { queryClient, queryKeys } from '../../lib/query-client'
+import { formatInternalRef, normalizeInternalRef, parseInternalRefs } from '../../utils/templates'
 import { clockifyTimeEntriesCollection } from '../clockify/sync'
-import { githubWorkItemsCollection } from '../github/sync'
+import { db } from '../db'
+import { isGithubItemInScope } from '../github/work-item-cache'
 import { linearTicketsCollection } from '../linear/sync'
+import { storage } from '../storage/config'
 import { syncProviders } from '../sync'
 import { mcp } from '../tauri/mcp-client'
 import { buildMcpSnapshot } from './snapshot'
@@ -41,6 +44,25 @@ export async function publishMcpSnapshot(input: BuildMcpSnapshotInput) {
     type: 'active',
     exact: false,
   })
+  const syncedClockifyEntries = clockifyTimeEntriesCollection.toArray
+  const runningEntry = runningEntries?.find(entry => entry.userId === user?.id) ?? runningEntries?.[0] ?? null
+  const refs = [runningEntry, ...syncedClockifyEntries.map(row => row.entry)]
+    .flatMap(entry => parseInternalRefs(entry?.description))
+    .filter(ref => ref.provider === 'github')
+    .map(ref => normalizeInternalRef(formatInternalRef(ref)))
+  const [githubItems, repositories, visibleWorkItemTypes] = input.githubConnected
+    ? await Promise.all([
+        refs.length
+          ? db.githubWorkItems
+              .where('refKey')
+              .anyOf([...new Set(refs)])
+              .toArray()
+          : [],
+        storage.get('githubSelectedRepositories'),
+        storage.get('githubVisibleWorkItemTypes'),
+      ])
+    : ([[], [], { issues: false, pullRequests: false }] as const)
+  const scope = { repositories: repositories.map(repository => repository.fullName), visibleWorkItemTypes }
   const snapshot = buildMcpSnapshot({
     ...input,
     clockifyProjects: queryClient.getQueryData<ProjectDtoImplV1[]>(
@@ -60,12 +82,23 @@ export async function publishMcpSnapshot(input: BuildMcpSnapshotInput) {
     clockifyUserId: user?.id,
     clockifyWorkspaceId: workspace?.id,
     clockifyWorkspaceName: workspace?.name ?? null,
-    githubWorkItems: githubWorkItemsCollection.toArray,
+    githubWorkItems: githubItems.filter(item => isGithubItemInScope(item, scope)),
     linearTickets: linearTicketsCollection.toArray,
     linearViewerId: linearSync?.state.data?.viewerId ?? null,
-    runningEntry: runningEntries?.find(entry => entry.userId === user?.id) ?? runningEntries?.[0] ?? null,
-    syncedClockifyEntries: clockifyTimeEntriesCollection.toArray,
+    runningEntry,
+    syncedClockifyEntries,
   })
-  await mcp.publishSnapshot(snapshot.capturedAt, snapshot)
+  const githubTracking = snapshot.trackableWork
+    .filter(row => row.source === 'github')
+    .map(({ id, isRunning, lastTrackedAt, totalTrackedAmount, totalTrackedAmountCurrency, totalTrackedSeconds }) => ({
+      id,
+      isRunning,
+      lastTrackedAt,
+      totalTrackedAmount,
+      totalTrackedAmountCurrency,
+      totalTrackedSeconds,
+    }))
+  snapshot.trackableWork = snapshot.trackableWork.filter(row => row.source !== 'github')
+  await mcp.publishSnapshot(snapshot.capturedAt, { ...snapshot, githubTracking })
   return snapshot
 }

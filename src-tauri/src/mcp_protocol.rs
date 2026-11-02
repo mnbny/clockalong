@@ -126,7 +126,61 @@ async fn call_tool<R: Runtime>(
     let output = match name {
         "list_trackable_work" => {
             let arguments = validate_list_trackable_work(&arguments)?;
-            list_work_with_refresh(state, arguments, || refresh_tool(app, state)).await
+            if matches!(arguments.source.as_deref(), Some("linear" | "quick_timer")) {
+                list_work_with_refresh(state, arguments, || refresh_tool(app, state)).await
+            } else {
+                query_list_with_refresh(
+                    state,
+                    arguments,
+                    || refresh_tool(app, state),
+                    |snapshot, arguments| async move {
+                        if snapshot
+                            .value
+                            .get("trackingStatus")
+                            .and_then(|status| status.get("githubConnected"))
+                            .and_then(Value::as_bool)
+                            != Some(true)
+                        {
+                            return list_trackable_work(&snapshot, arguments);
+                        }
+                        let rows = snapshot
+                            .value
+                            .get("trackableWork")
+                            .and_then(Value::as_array)
+                            .ok_or_else(|| {
+                                "MCP snapshot does not contain trackable work".to_string()
+                            })?;
+                        let github_tracking = snapshot
+                            .value
+                            .get("githubTracking")
+                            .and_then(Value::as_array)
+                            .ok_or_else(|| {
+                                "MCP snapshot is missing GitHub tracking data; refresh and retry"
+                                    .to_string()
+                            })?;
+                        state
+                            .dispatch_command(
+                                app,
+                                "list_trackable_work".to_string(),
+                                json!({
+                                    "capturedAt": snapshot.captured_at,
+                                    "nonGithubRows": rows,
+                                    "source": arguments.source,
+                                    "query": arguments.query,
+                                    "includeClosed": arguments.include_closed,
+                                    "limit": arguments.limit,
+                                    "githubConnected": snapshot.value.get("trackingStatus")
+                                        .and_then(|status| status.get("githubConnected"))
+                                        .and_then(Value::as_bool).unwrap_or(false),
+                                    "githubTracking": github_tracking,
+                                }),
+                            )
+                            .await
+                            .map_err(bridge_error_message)
+                    },
+                )
+                .await
+            }
         }
         "refresh" => {
             validate_empty_arguments(&arguments)?;
@@ -214,6 +268,25 @@ where
     read_tool(state, |snapshot| list_trackable_work(snapshot, arguments))
 }
 
+async fn query_list_with_refresh<F, Fut, Q, QueryFuture>(
+    state: &McpBridgeState,
+    arguments: ListTrackableWorkArguments,
+    refresh: F,
+    query: Q,
+) -> Result<Value, String>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<Value, String>>,
+    Q: FnOnce(CachedMcpSnapshot, ListTrackableWorkArguments) -> QueryFuture,
+    QueryFuture: std::future::Future<Output = Result<Value, String>>,
+{
+    if arguments.refresh {
+        refresh().await?;
+    }
+    let snapshot = state.snapshot().map_err(bridge_error_message)?;
+    query(snapshot, arguments).await
+}
+
 async fn write_tool<R: Runtime>(
     app: &AppHandle<R>,
     state: &McpBridgeState,
@@ -237,7 +310,10 @@ async fn write_tool<R: Runtime>(
             .get("id")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        if !snapshot_has_target(&snapshot, source, id) {
+        if (source == "github"
+            && status.get("githubConnected").and_then(Value::as_bool) != Some(true))
+            || (source != "github" && !snapshot_has_target(&snapshot, source, id))
+        {
             return Err(TARGET_ERROR.to_string());
         }
     } else if status.get("running").is_none_or(Value::is_null) {
@@ -1048,6 +1124,41 @@ mod tests {
             let result =
                 list_work_with_refresh(&state, fresh, || async { Err("Sync failed".to_string()) })
                     .await;
+            assert_eq!(result.unwrap_err(), "Sync failed");
+        });
+    }
+
+    #[test]
+    fn github_list_requires_webview_and_propagates_query_failure() {
+        tauri::async_runtime::block_on(async {
+            let state = McpBridgeState::default();
+            state
+                .publish_snapshot("cached".to_string(), json!({ "trackableWork": [] }))
+                .unwrap();
+            let arguments = validate_list_trackable_work(
+                &json!({ "source": "github", "query": "x", "refresh": false }),
+            )
+            .unwrap();
+            let result = query_list_with_refresh(
+                &state,
+                arguments,
+                || async { panic!("Must not refresh") },
+                |snapshot, args| async move {
+                    assert_eq!(snapshot.captured_at, "cached");
+                    assert_eq!(args.query.as_deref(), Some("x"));
+                    Err("webview unavailable".to_string())
+                },
+            )
+            .await;
+            assert_eq!(result.unwrap_err(), "webview unavailable");
+            let arguments = validate_list_trackable_work(&json!({ "source": "github" })).unwrap();
+            let result = query_list_with_refresh(
+                &state,
+                arguments,
+                || async { Err("Sync failed".to_string()) },
+                |_, _| async { panic!("Must not query") },
+            )
+            .await;
             assert_eq!(result.unwrap_err(), "Sync failed");
         });
     }

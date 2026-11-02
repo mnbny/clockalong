@@ -17,11 +17,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 
 import { queryKeys } from '../lib/query-client'
 import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
-import { githubWorkItemsCollection } from '../services/github/sync'
+import { db } from '../services/db'
 import { linearTicketsCollection, useLinearSync } from '../services/linear/sync'
 import { executeMcpCommand, type ExecuteMcpCommandContext } from '../services/mcp/commands'
 import { publishMcpSnapshot, refreshMcpSnapshot } from '../services/mcp/refresh'
 import { executeMcpTelegramCommand, type McpTelegramContext } from '../services/mcp/telegram'
+import { listMcpWork, type McpListWorkArguments } from '../services/mcp/work-list'
 import { useStorage } from '../services/storage/useStorage'
 import { clockalongMcpCommandEvent, mcp } from '../services/tauri/mcp-client'
 import { useTelegram } from '../services/telegram/session-provider'
@@ -29,6 +30,7 @@ import { getErrorMessage } from '../utils/errors'
 import { useAppAuth } from './useAppAuth'
 import { useAppInit } from './useAppInit'
 import { useClockifyTimerProject } from './useClockifyTimerProject'
+import { useDexieQuery } from './useDexieQuery'
 
 type IncomingMcpCommand = {
   deadlineAt: unknown
@@ -45,12 +47,19 @@ export function useMcpServerBridge() {
   const authState = useAppAuth()
   const linearSync = useLinearSync()
   const [mcpServerEnabled] = useStorage('mcpServerEnabled')
+  const [githubSelectedRepositories] = useStorage('githubSelectedRepositories')
+  const [githubVisibleWorkItemTypes] = useStorage('githubVisibleWorkItemTypes')
   const [quickTimers] = useStorage('quickTimers')
   const [quickTimersActiveEntry] = useStorage('quickTimersActiveEntry')
   const [quickTimersCache] = useStorage('quickTimersCache')
   const [quickTimersEnabled] = useStorage('quickTimersEnabled')
   const [commandListenerReady, setCommandListenerReady] = useState(false)
   const clockifyTimerProject = useClockifyTimerProject()
+  const githubRevisionQuery = useCallback(
+    () => (mcpServerEnabled ? db.githubCacheMeta.get('revision') : Promise.resolve(undefined)),
+    [mcpServerEnabled],
+  )
+  const githubRevision = useDexieQuery(githubRevisionQuery)
   const user = useCachedQueryData<UserDtoV1>(queryKeys.clockify.loggedUser, mcpServerEnabled)
   const workspaces = useCachedQueryData<WorkspaceDtoV1[]>(queryKeys.clockify.workspaces, mcpServerEnabled)
   const selectedWorkspace = useMemo(() => {
@@ -108,16 +117,6 @@ export function useMcpServerBridge() {
     },
     [mcpServerEnabled],
   )
-  const githubWorkItemsQuery = useLiveQuery(
-    query => {
-      if (!mcpServerEnabled) {
-        return null
-      }
-
-      return query.from({ syncedWorkItem: githubWorkItemsCollection })
-    },
-    [mcpServerEnabled],
-  )
   const clockifyEntriesQuery = useLiveQuery(
     query => {
       if (!mcpServerEnabled) {
@@ -147,7 +146,6 @@ export function useMcpServerBridge() {
         clockifyWorkspaceId: workspaceId,
         clockifyWorkspaceName: selectedWorkspace?.name ?? null,
         githubConnected,
-        githubWorkItems: githubWorkItemsQuery.data ?? [],
         linearConnected,
         linearTickets: linearTicketsQuery.data ?? [],
         linearViewerId: linearSync.lastSyncResult?.viewerId ?? null,
@@ -163,8 +161,10 @@ export function useMcpServerBridge() {
       clockifyEntriesQuery.data,
       clockifyProjects,
       clockifyTimerProject,
-      githubWorkItemsQuery.data,
       githubConnected,
+      githubRevision.data?.revision,
+      githubSelectedRepositories,
+      githubVisibleWorkItemTypes,
       linearSync.lastSyncResult?.viewerId,
       linearConnected,
       linearTicketsQuery.data,
@@ -184,11 +184,12 @@ export function useMcpServerBridge() {
   const commandContext = useMemo(
     () => ({
       clockifyConnected,
+      githubConnected,
       clockifyTimerProject,
       linearViewerId: linearSync.lastSyncResult?.viewerId ?? null,
       runningEntry,
     }),
-    [clockifyConnected, clockifyTimerProject, linearSync.lastSyncResult?.viewerId, runningEntry],
+    [clockifyConnected, githubConnected, clockifyTimerProject, linearSync.lastSyncResult?.viewerId, runningEntry],
   ) satisfies ExecuteMcpCommandContext
   const commandContextRef = useRef(commandContext)
   commandContextRef.current = commandContext
@@ -222,20 +223,56 @@ export function useMcpServerBridge() {
     setCommandListenerReady(false)
     let active = true
     let unlisten: (() => void) | undefined
+    const pendingLists = new Map<string, AbortController>()
+    const cancelledLists = new Set<string>()
 
-    listen<IncomingMcpCommand>(clockalongMcpCommandEvent, event => {
-      if (!active) {
-        return
+    listen<string>('clockalong-mcp:cancel', event => {
+      const controller = pendingLists.get(event.payload)
+      if (controller) controller.abort()
+      else {
+        cancelledLists.add(event.payload)
+        setTimeout(() => cancelledLists.delete(event.payload), 30_000)
       }
-
-      void handleMcpCommand(event.payload, commandContextRef, snapshotInputRef, telegramRef)
     })
-      .then(nextUnlisten => {
+      .then(async stopCancel => {
+        if (!active) {
+          stopCancel()
+          return
+        }
+        let stopCommands: () => void
+        try {
+          stopCommands = await listen<IncomingMcpCommand>(clockalongMcpCommandEvent, event => {
+            if (!active) return
+            const id = event.payload.requestId
+            const controller =
+              event.payload.tool === 'list_trackable_work' && typeof id === 'string' ? new AbortController() : undefined
+            if (controller && typeof id === 'string') {
+              pendingLists.set(id, controller)
+              if (cancelledLists.delete(id)) controller.abort()
+            }
+            void handleMcpCommand(
+              event.payload,
+              commandContextRef,
+              snapshotInputRef,
+              telegramRef,
+              controller?.signal,
+            ).finally(() => {
+              if (controller && typeof id === 'string') pendingLists.delete(id)
+            })
+          })
+        } catch (error) {
+          stopCancel()
+          throw error
+        }
         if (active) {
-          unlisten = nextUnlisten
+          unlisten = () => {
+            stopCancel()
+            stopCommands()
+          }
           setCommandListenerReady(true)
         } else {
-          nextUnlisten()
+          stopCancel()
+          stopCommands()
         }
       })
       .catch(() => {
@@ -244,6 +281,7 @@ export function useMcpServerBridge() {
 
     return () => {
       active = false
+      pendingLists.forEach(controller => controller.abort())
       unlisten?.()
     }
   }, [mcpServerEnabled])
@@ -282,6 +320,7 @@ async function handleMcpCommand(
   contextRef: { current: ExecuteMcpCommandContext },
   snapshotInputRef: { current: BuildMcpSnapshotInput },
   telegramRef: { current: McpTelegramContext },
+  signal?: AbortSignal,
 ) {
   if (typeof incoming.requestId !== 'string') {
     mcpBridgeLog('ignored command without request id')
@@ -296,6 +335,23 @@ async function handleMcpCommand(
   if (tool === 'list_telegram_destinations' || tool === 'send_telegram_message') {
     try {
       const result = await executeMcpTelegramCommand(incoming as McpTelegramCommand, () => telegramRef.current)
+      await completeMcpCommand({ requestId, result, tool })
+    } catch (error) {
+      await completeMcpCommand({ error: getErrorMessage(error), requestId, tool })
+    }
+    return
+  }
+
+  if (tool === 'list_trackable_work') {
+    try {
+      if (!isCommandArguments(incoming.arguments) || typeof incoming.deadlineAt !== 'number')
+        throw new Error('Invalid list request')
+      const result = await listMcpWork(
+        incoming.arguments as McpListWorkArguments,
+        snapshotInputRef.current,
+        incoming.deadlineAt,
+        signal,
+      )
       await completeMcpCommand({ requestId, result, tool })
     } catch (error) {
       await completeMcpCommand({ error: getErrorMessage(error), requestId, tool })

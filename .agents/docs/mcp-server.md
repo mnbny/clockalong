@@ -6,7 +6,7 @@ Clockalong exposes a local Model Context Protocol server for tracking context, t
 
 The server exposes ten tools:
 
-- `list_trackable_work` syncs connected providers. It returns available Linear tickets, GitHub issues and pull requests, and Quick Timer presets with tracked totals. Set `refresh` to false to use the cached snapshot.
+- `list_trackable_work` syncs connected providers. It returns available Linear tickets, GitHub issues and pull requests, and Quick Timer presets with tracked totals. Set `refresh` to false to use cached data.
 - `refresh` runs the full app sync without listing work. It returns the synced data groups and the snapshot capture time.
 - `get_tracking_status` returns provider connections, the active Clockify project, tracked summaries, and the running timer.
 - `list_recent_entries` returns completed entries from the local Clockify cache for the requested calendar-day bucket.
@@ -43,7 +43,7 @@ There is no persistent outbox or automatic resend. An unconfirmed send may alrea
 
 Rust owns the loopback listener and server status. It validates HTTP and MCP requests. It caches snapshots and owns snapshot responses and pending webview commands. The webview normalizes and publishes snapshots. It owns Clockify writes and Telegram discovery and sends through existing provider services.
 
-The webview publishes one normalized tracking snapshot when relevant cached data or settings change. Rust uses that snapshot for tracking status, recent entries, projects, and cached work listings without provider requests. Telegram discovery fetches current destinations through the webview and stays outside the tracking snapshot.
+The webview publishes a normalized tracking snapshot when relevant data or settings change. Rust uses it for tracking status, recent entries, projects, and non-GitHub work listings. The snapshot includes compact tracking summaries for GitHub items referenced by Clockify entries. GitHub work listings combine those summaries with bounded Dexie queries through the webview. A cached GitHub list does not fetch the provider, but it requires an active webview. A hidden app window remains available. Telegram discovery stays outside the tracking snapshot.
 
 Refresh uses the same full sync as the app header. It refreshes Clockify entries, the running timer, and summaries, plus connected Linear and GitHub sources. Concurrent callers share the sync and reuse provider requests already in progress. Manual sync settings do not prevent an explicit refresh.
 
@@ -52,6 +52,8 @@ After connectivity returns, an explicit refresh restarts paused provider request
 The webview reads the updated caches and publishes the snapshot before it completes a refresh request. A provider failure, an offline pause, or a publication failure returns an MCP tool error. A failed refresh does not return a cached work list as fresh data. Agents can request a cached list separately.
 
 Repository selections, provider sync limits, and list filters still apply after refresh. The snapshot capture time records when the snapshot was assembled. It does not record the last successful fetch for each provider.
+
+GitHub search uses an ordered index cursor for substring matches. The result size is bounded, but a search can scan many indexed records. Request deadlines and cancellation stop abandoned scans.
 
 Provider commands cross the bridge as events with a request identifier, tool name, validated arguments, and deadline. Rust waits up to 30 seconds for time-entry commands and Telegram discovery, or two minutes for refresh and Telegram sends. Telegram sends request cancellation ten seconds before the native deadline. File size alone does not guarantee completion within that time. Webview failures become MCP tool errors. Refresh does not require a selected Clockify project. It does not change time entries or the running timer.
 

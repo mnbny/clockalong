@@ -15,6 +15,7 @@ use tauri::{AppHandle, Emitter, Runtime};
 use tokio::sync::oneshot;
 
 pub const CLOCKALONG_MCP_COMMAND_EVENT: &str = "clockalong-mcp:command";
+const CLOCKALONG_MCP_CANCEL_EVENT: &str = "clockalong-mcp:cancel";
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const REFRESH_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -177,6 +178,11 @@ impl McpBridgeState {
             state: self,
             request_id: request_id.clone(),
         };
+        let mut cancel_guard = (tool == "list_trackable_work").then(|| CancelCommandGuard {
+            app: app.clone(),
+            request_id: request_id.clone(),
+            armed: true,
+        });
 
         log::info!(
             "MCP command dispatched request_id={request_id} tool={tool} pending_count={pending_count}"
@@ -193,7 +199,13 @@ impl McpBridgeState {
         .map_err(|error| McpBridgeError::Internal(error.to_string()))?;
 
         let completion = tokio::time::timeout(timeout, receiver).await;
+        if completion.is_ok() {
+            if let Some(guard) = cancel_guard.as_mut() {
+                guard.armed = false;
+            }
+        }
         drop(pending_guard);
+        drop(cancel_guard);
 
         match completion {
             Ok(Ok(Ok(result))) => Ok(result),
@@ -308,6 +320,20 @@ pub fn read_telegram_attachment(path: &Path) -> Result<Vec<u8>, String> {
 struct PendingCommandGuard<'a> {
     state: &'a McpBridgeState,
     request_id: String,
+}
+
+struct CancelCommandGuard<R: Runtime> {
+    app: AppHandle<R>,
+    request_id: String,
+    armed: bool,
+}
+
+impl<R: Runtime> Drop for CancelCommandGuard<R> {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = self.app.emit(CLOCKALONG_MCP_CANCEL_EVENT, &self.request_id);
+        }
+    }
 }
 
 impl Drop for PendingCommandGuard<'_> {
