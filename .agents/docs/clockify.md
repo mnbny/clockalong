@@ -22,7 +22,7 @@ Rust owns Clockify credential storage and auth state. Clockify API calls stay in
 - Validate a saved key by calling `GET /v1/user`.
 - Startup validation should mark Clockify disconnected whenever validation does not succeed; Clockalong does not support offline authenticated Clockify mode.
 - Clear the saved key only when validation clearly fails because the credential is invalid or revoked. Keep the saved key after network or provider failures so the app can retry without asking the user to paste it again.
-- Clockify disconnect should clear the saved key, reset all Clockify TanStack Query cache, clear the local synced Clockify entry collection, and remove workspace-bound Clockify settings such as the selected default project, dashboard project override, and active Quick Timer association. This keeps API-key rotation from showing the previous user's workspace, entries, or running timer.
+- Clockify disconnect should clear the saved key, reset all Clockify TanStack Query cache, clear the local Clockify entries and indexes, and remove workspace-bound Clockify settings such as the selected default project, dashboard project override, and active Quick Timer association. This keeps API-key rotation from showing the previous user's workspace, entries, or running timer.
 - Subdomain and regional workspaces may require a workspace-specific key or alternate base URL. Keep base URL handling configurable instead of hard-coding every request to the global host.
 
 Clockify also has a CAKE.com Marketplace add-on model that uses `X-Addon-Token` and add-on scopes. That path is for marketplace add-ons embedded in or installed into Clockify workspaces. It is not the right auth model for Clockalong's local Tauri desktop app.
@@ -88,7 +88,7 @@ Clockalong implementation:
 - Keep the Clockify API client in the frontend.
 - Generate a Zodios client from Clockify's OpenAPI spec with `openapi-zod-client`.
 - Use `@zodios/core`, `axios`, and the generated Zod schemas/types for request and response typing.
-- Use `@tanstack/react-db` for the local Clockify time-entry collection when UI needs recent entry-level data.
+- Use Dexie for local Clockify time-entry storage and live reads.
 - Keep Rust limited to authentication/token responsibilities: secure key storage, auth-state initialization, validation, clearing credentials, and token/key retrieval according to the app's chosen bridge contract.
 - Do not build a Rust Clockify API client.
 
@@ -104,7 +104,7 @@ The Clockalong setup lives under `src/services/clockify/`:
 - `generated/reports.ts`: generated Zodios client for Clockify's reports host.
 - `client.ts`: app-facing client factories and default client instances.
 - `projects.ts`: project-list helpers for selecting the default Clockify project.
-- `sync.ts`: TanStack DB localStorage-backed entry collection plus the `ClockifySyncProvider` that periodically reconciles recent Clockify entries.
+- `sync.ts`: the `ClockifySyncProvider` and recent entry pagination. The shared Dexie database stores Clockify entries.
 - `work-item-summaries.ts`: provider-neutral dashboard aggregation of Clockify time entries whose descriptions contain a supported `ref:*` internal marker.
 - `ticket-summaries.ts`: Linear wrapper around provider-neutral work-item summaries.
 
@@ -129,21 +129,17 @@ For Clockalong, adapt that pattern to Clockify:
 
 ## Entry sync
 
-`src/services/clockify/sync.ts` owns broad Clockify time-entry pagination. It syncs recent entries into a TanStack DB collection persisted through browser localStorage under `clockalong.clockify.timeEntries.v1`.
+Clockify entry sync fetches all pages before it changes the local database. The fetch sends a start lookback and omits an end parameter. An explicit end can exclude current local-day entries when time zones differ.
 
-The synced row shape keeps the original Clockify entry plus local query fields: entry ID, workspace ID, user ID, started-at timestamp, and synced-at timestamp. UI code should query those indexed fields with TanStack DB live queries instead of repeatedly paging Clockify from routes or widgets.
+After a complete fetch, one transaction stores entries and removes missing entries inside the fetched window. A failed or partial fetch does not reconcile the cache. Entries outside the window remain as last-known data. A shorter sync window does not remove older entries. Edits and deletions outside the window remain unknown until a fetch covers them.
 
-`ClockifySyncProvider` mounts inside the frontend provider stack after `QueryClientProvider`. It resolves the authenticated Clockify user and active/default workspace, then runs the entry sync on the configured interval and whenever callers invalidate or refetch `queryKeys.clockify.entrySync()`.
-
-For broad entry sync, send a `start` lookback but omit `end`. Clockify's user time-entry endpoint treats explicit `end` filters in a timezone-sensitive way that can exclude a user's current local-day entries when their machine timezone differs from the workspace/user timezone. Let Clockify default the upper bound to its own "now", then let local live queries decide which entries belong to today, week, or month.
-
-The sync must fetch every page before it reconciles the cache. After all page requests succeed, treat the returned entry IDs as the authoritative local snapshot for the selected user and workspace. Persist new entries, changed entries, and stale deletions in one collection transaction. Remove cached rows that were not returned, including rows outside the configured lookback, so Clockify-side deletions and sync-window reductions cannot leave stale entries behind. Before pagination starts, snapshot the rows eligible for removal. This prevents the current reconciliation from deleting entries written to the cache during pagination. Never prune the cache after a partial or failed pagination run.
+Each entry belongs to a Clockify user and workspace. Indexed reads use that scope and normalized start times. A sync cannot overwrite or delete an entry that changed after the sync began. Newer syncs and disconnect prevent older syncs from committing. The app does not import rows from the obsolete localStorage cache.
 
 The `clockifyEntrySyncDays` setting controls the lookback window. Current supported values are `5`, `15`, and `30`, with `30` as the default. Keep this setting as a UX/performance knob, not as a correctness boundary for the Clockify API client.
 
-The `clockifyEntrySyncInterval` setting controls background sync frequency. Current supported values are `manual`, `5m`, `15m`, `30m`, and `1h`, with `30m` as the default. Manual mode still allows the app header's global sync action.
+The `clockifyEntrySyncInterval` setting controls background sync frequency. Current supported values are `manual`, `5m`, `15m`, `30m`, and `1h`, with `30m` as the default. Manual mode still performs the initial fetch and allows the app header's global sync action.
 
-Direct `getTimeEntries` reads are still appropriate for tiny single-purpose reads, especially the active running timer with page size `1`. Any feature that needs broad recent completed entries should use the synced collection.
+Direct `getTimeEntries` reads are still appropriate for tiny single-purpose reads, especially the active running timer with page size `1`. Features that need local completed entries query the scoped database.
 
 The reports generator uses a media-type expression that accepts Clockify's `*/*` report responses as JSON. Keep that logic in `scripts/generate-clockify-client.mjs`; do not put long generator pipelines directly in `package.json`.
 

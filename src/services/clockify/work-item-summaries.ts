@@ -10,69 +10,32 @@ export type ClockifyWorkItemTimeSummary = {
 
 export type ClockifyWorkItemTimeSummaries = Record<string, ClockifyWorkItemTimeSummary>
 
-export type SummarizeClockifyWorkItemTimeEntriesOptions<TWorkItem> = {
-  entries: TimeEntryWithRatesDtoV1[]
-  getFallbackEntryWorkItem?: (entry: TimeEntryWithRatesDtoV1, workItems: TWorkItem[]) => TWorkItem | null
-  getWorkItemId: (workItem: TWorkItem) => string
-  getWorkItemInternalRef: (workItem: TWorkItem) => string
-  now?: Date
-  workItems: TWorkItem[]
-}
-
-export function summarizeClockifyWorkItemTimeEntries<TWorkItem>({
-  entries,
-  getFallbackEntryWorkItem,
-  getWorkItemId,
-  getWorkItemInternalRef,
-  now = new Date(),
-  workItems,
-}: SummarizeClockifyWorkItemTimeEntriesOptions<TWorkItem>) {
-  const uniqueEntries = getUniqueClockifyEntries(entries)
-  const workItemByInternalRef = getWorkItemByInternalRef({
-    getWorkItemInternalRef,
-    workItems,
-  })
-  const summaries: ClockifyWorkItemTimeSummaries = {}
-
-  for (const entry of uniqueEntries.values()) {
-    const workItem =
-      getClockifyEntryWorkItemByInternalRef({ entry, workItemByInternalRef }) ??
-      getFallbackEntryWorkItem?.(entry, workItems) ??
-      null
-
-    if (!workItem) {
-      continue
-    }
-
-    const workItemId = getWorkItemId(workItem)
-    const currentSummary = summaries[workItemId] ?? {
-      lastTrackedAt: null,
-      totalTrackedAmount: null,
-      totalTrackedAmountCurrency: null,
-      totalTrackedSeconds: 0,
-    }
-    const lastTrackedAt = getEntryLastTrackedAt(entry)
-    const entryAmount = getEntryTrackedAmount(entry, now)
-
-    summaries[workItemId] = {
-      lastTrackedAt: getLatestDateString(currentSummary.lastTrackedAt, lastTrackedAt),
-      totalTrackedAmount: getNextTrackedAmount(currentSummary, entryAmount),
-      totalTrackedAmountCurrency: currentSummary.totalTrackedAmountCurrency ?? entryAmount?.currency ?? null,
-      totalTrackedSeconds: currentSummary.totalTrackedSeconds + getEntryDurationSeconds(entry, now),
-    }
+export function addClockifyEntrySummary(
+  current: ClockifyWorkItemTimeSummary | undefined,
+  entry: TimeEntryWithRatesDtoV1,
+  now: Date,
+) {
+  const summary = current ?? {
+    lastTrackedAt: null,
+    totalTrackedAmount: null,
+    totalTrackedAmountCurrency: null,
+    totalTrackedSeconds: 0,
   }
-
-  return summaries
+  const amount = getEntryTrackedAmount(entry, now)
+  return {
+    lastTrackedAt: getLatestDateString(summary.lastTrackedAt, getEntryLastTrackedAt(entry)),
+    totalTrackedAmount: getNextTrackedAmount(summary, amount),
+    totalTrackedAmountCurrency: summary.totalTrackedAmountCurrency ?? amount?.currency ?? null,
+    totalTrackedSeconds: summary.totalTrackedSeconds + getEntryDurationSeconds(entry, now),
+  }
 }
 
 export function getClockifyEntryWorkItem<TWorkItem>({
   entry,
-  getFallbackEntryWorkItem,
   getWorkItemInternalRef,
   workItems,
 }: {
   entry: TimeEntryWithRatesDtoV1 | null
-  getFallbackEntryWorkItem?: (entry: TimeEntryWithRatesDtoV1, workItems: TWorkItem[]) => TWorkItem | null
   getWorkItemInternalRef: (workItem: TWorkItem) => string
   workItems: TWorkItem[]
 }) {
@@ -80,26 +43,15 @@ export function getClockifyEntryWorkItem<TWorkItem>({
     return null
   }
 
-  return (
-    getClockifyEntryWorkItemByInternalRef({
-      entry,
-      workItemByInternalRef: getWorkItemByInternalRef({ getWorkItemInternalRef, workItems }),
-    }) ??
-    getFallbackEntryWorkItem?.(entry, workItems) ??
-    null
-  )
+  return createClockifyEntryMatcher(workItems, getWorkItemInternalRef)(entry)
 }
 
-function getUniqueClockifyEntries(entries: TimeEntryWithRatesDtoV1[]) {
-  const uniqueEntries = new Map<string, TimeEntryWithRatesDtoV1>()
-
-  for (const entry of entries) {
-    if (entry.id) {
-      uniqueEntries.set(entry.id, entry)
-    }
-  }
-
-  return uniqueEntries
+export function createClockifyEntryMatcher<TWorkItem>(
+  workItems: TWorkItem[],
+  getWorkItemInternalRef: (item: TWorkItem) => string,
+) {
+  const workItemByInternalRef = getWorkItemByInternalRef({ getWorkItemInternalRef, workItems })
+  return (entry: TimeEntryWithRatesDtoV1) => getClockifyEntryWorkItemByInternalRef({ entry, workItemByInternalRef })
 }
 
 function getWorkItemByInternalRef<TWorkItem>({

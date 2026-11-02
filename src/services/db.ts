@@ -1,3 +1,4 @@
+import type { ClockifyEntryRef, StoredClockifyEntry } from './clockify/entry-cache'
 import type { SyncedGithubWorkItem } from './github/sync'
 import type { GithubAuthorIndex, GithubWorkItemIndex, StoredGithubWorkItem } from './github/work-item-index'
 
@@ -10,6 +11,9 @@ export class DB extends Dexie {
   declare githubWorkItemIndex: Table<GithubWorkItemIndex, [string, string, string]>
   declare githubAuthors: Table<GithubAuthorIndex, string>
   declare githubCacheMeta: Table<{ key: string; revision: number }, string>
+  declare clockifyEntries: Table<StoredClockifyEntry, [string, string, string]>
+  declare clockifyEntryRefs: Table<ClockifyEntryRef, [string, string, string, string]>
+  declare clockifyCacheMeta: Table<{ key: string; revision: number }, string>
 
   constructor(name = 'clockalong') {
     super(name)
@@ -35,6 +39,12 @@ export class DB extends Dexie {
           lastId = batch[batch.length - 1].id
         }
       })
+    this.version(3).stores({
+      clockifyEntries: '[userId+workspaceId+id],[userId+workspaceId+startedAt+id]',
+      clockifyEntryRefs:
+        '[userId+workspaceId+refKey+entryId],[userId+workspaceId+refKey+startedAt+entryId],[userId+workspaceId+entryId]',
+      clockifyCacheMeta: 'key',
+    })
   }
 }
 

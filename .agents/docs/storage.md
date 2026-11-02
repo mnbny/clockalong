@@ -65,24 +65,23 @@ Conversation data is excluded from Settings backups, browser persistence, and MC
 
 ## Local cache field budgets
 
-The webview enforces a per-origin localStorage quota of about 5 MB, shared by the caches that use localStorage. The packaged app and the Vite dev server are separate origins. GitHub work items use IndexedDB instead.
+The webview enforces a per-origin localStorage quota of about 5 MB, shared by the caches that use localStorage. The packaged app and the Vite dev server are separate origins. Clockify entries and GitHub work items use IndexedDB.
 
-Local caches must persist only the fields UI consumes. Each sync module declares an explicit field allowlist and maps raw provider payloads through `pick` from `src/utils/objects.ts`:
-
-- `storedClockifyEntryFields` in `src/services/clockify/sync.ts`
-- `storedGithubIssueItemFields` and `storedGithubPullRequestItemFields` in `src/services/github/sync.ts`
+Local caches must persist only fields that the app uses. Clockify and GitHub apply explicit field allowlists to provider responses.
 
 Extend the matching list when UI needs another field. Do not persist raw provider responses. A raw Octokit pull request averages about 25 KB, and the generated Clockify schema is `passthrough`, so hydrated responses carry whole project, task, tag, and user objects that never appear in `TimeEntryWithRatesDtoV1`.
 
-A provider sync collects all successful pages in memory before it changes its local collection. It then reconciles inserts, updates, and stale deletions in one transaction. Do not persist individual rows or pages. Do not reconcile a partial or failed pagination run.
+A provider sync collects all successful pages in memory before it changes the local cache. It then reconciles inserts, updates, and stale deletions in one transaction. Do not persist individual rows or pages. Do not reconcile a partial or failed pagination run.
 
 The shared database uses Dexie's native schema versions. Future versions can declare schema changes with `version().stores()` and data upgrades with `upgrade()`. If an upgrade fails, IndexedDB rolls back the upgrade transaction and the database open fails.
 
 ## Local Clockify entry cache
 
-Recent Clockify time entries are persisted by TanStack DB through browser localStorage under `clockalong.clockify.timeEntries.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for recent entry-level UI, rebuilt by `ClockifySyncProvider` from Clockify's API.
+Clockify entries use the shared IndexedDB database. Dexie owns storage and live reads. Indexes scope entries by user, workspace, start time, and work reference. The app stores compact entry fields and reference projections. Settings and credentials stay outside this cache.
 
-Clear this cache on Clockify disconnect. Clockify user and workspace identity can change when the user rotates API keys, so the app should not keep showing the previous user's synced entries while the new key is loading.
+A complete sync reconciles the selected user and workspace within the fetched time window. Entries outside that window remain as last-known data. The app does not revalidate older entries unless a later fetch includes them. Direct writes protect the affected entries from older syncs. Disconnect invalidates in-flight syncs. It clears only Clockify rows and projections.
+
+The app removes the obsolete Clockify localStorage key without importing its rows. The initial sync runs in manual mode. Local database reads work offline when the app has a known scope. Native startup validation still requires a successful Clockify connection.
 
 ## Local Linear ticket cache
 

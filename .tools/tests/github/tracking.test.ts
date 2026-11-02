@@ -3,12 +3,14 @@ import type { SyncedGithubWorkItem } from '../../../src/services/github/sync'
 
 import { expect, test } from 'vitest'
 
+import { queryClockifySummaries } from '../../../src/services/clockify/entry-queries'
+import { DB } from '../../../src/services/db'
 import { formatGithubWorkItemDescription } from '../../../src/services/github/timers'
 import {
   getClockifyEntryGithubWorkItem,
-  summarizeClockifyGithubWorkItemTimeEntries,
+  getGithubWorkItemInternalRef,
 } from '../../../src/services/github/work-item-summaries'
-import { buildMcpSnapshot } from '../../../src/services/mcp/snapshot'
+import { buildGithubWorkRows, buildMcpSnapshot } from '../../../src/services/mcp/snapshot'
 
 const common = {
   author: null,
@@ -33,7 +35,7 @@ const pullRequest: SyncedGithubWorkItem = {
   headBranch: 'feature',
 }
 
-test('issue and PR templates, running matches, summaries and MCP rows keep distinct identities', () => {
+test('issue and PR templates, running matches, summaries and MCP rows keep distinct identities', async () => {
   const options = {
     issueTemplate: 'Issue {number} {author} [{internal-ref}]',
     issueTemplateFallback: 'unknown',
@@ -51,9 +53,23 @@ test('issue and PR templates, running matches, summaries and MCP rows keep disti
   }
   const now = new Date('2026-01-01T00:10:00Z')
   expect(getClockifyEntryGithubWorkItem(running, [issue, pullRequest])?.id).toBe(pullRequest.id)
-  expect(
-    summarizeClockifyGithubWorkItemTimeEntries({ entries: [running, running], workItems: [issue, pullRequest], now }),
-  ).toMatchObject({ [pullRequest.id]: { totalTrackedSeconds: 600 } })
+  const db = new DB(`github-tracking-${crypto.randomUUID()}`)
+  let summaries
+  try {
+    summaries = await queryClockifySummaries(
+      db,
+      { userId: 'user', workspaceId: 'workspace' },
+      [issue, pullRequest],
+      item => item.id,
+      getGithubWorkItemInternalRef,
+      [running, running],
+      now,
+    )
+  } finally {
+    db.close()
+    await db.delete()
+  }
+  expect(summaries).toMatchObject({ [pullRequest.id]: { totalTrackedSeconds: 600 } })
   const snapshot = buildMcpSnapshot({
     clockifyConnected: true,
     githubConnected: true,
@@ -62,7 +78,9 @@ test('issue and PR templates, running matches, summaries and MCP rows keep disti
     runningEntry: running,
   })
   expect(
-    snapshot.trackableWork.map(row => ({ id: row.id, isRunning: row.isRunning, seconds: row.totalTrackedSeconds })),
+    buildGithubWorkRows([issue, pullRequest], summaries, snapshot.trackingStatus.running?.sourceId ?? null).map(
+      row => ({ id: row.id, isRunning: row.isRunning, seconds: row.totalTrackedSeconds }),
+    ),
   ).toEqual([
     { id: issue.id, isRunning: false, seconds: 0 },
     { id: pullRequest.id, isRunning: true, seconds: 600 },

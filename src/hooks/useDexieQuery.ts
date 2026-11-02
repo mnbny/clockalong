@@ -9,7 +9,7 @@ export function useDexieQuery<T>(query: () => Promise<T>) {
   })
   const retry = useCallback(() => setAttempt(current => current + 1), [])
   useEffect(() => {
-    const subscription = liveQuery(query).subscribe({
+    const subscription = liveQuery(async () => query()).subscribe({
       next: data => setState({ query, attempt, data }),
       error: error => setState({ query, attempt, error }),
     })
