@@ -85,6 +85,8 @@ export const queryKeys = {
     repositoryPullRequests: (keys?: QueryKeySegments<GithubRepositoryQueryParams>) =>
       ['github', 'repository-pull-requests', ...spreadQueryKeySegments(keys)] as const,
     viewer: ['github', 'viewer'] as const,
+    // Hydration is local and must not be removed with account-scoped GitHub queries.
+    workItemCache: (databaseName: string) => ['github-work-items-cache', databaseName] as const,
     workItemSync: (keys?: QueryKeySegments<GithubWorkItemSyncQueryParams>) =>
       ['github', 'work-item-sync', ...spreadQueryKeySegments(keys)] as const,
   },

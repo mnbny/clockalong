@@ -160,7 +160,7 @@ Existing Clockify entries that have been backfilled for Clockalong should contai
 
 The dashboard GitHub section is a repository-scoped work-item table for issues and pull requests, not a broad GitHub browser.
 
-GitHub work items should come from the local synced collection in `src/services/github/sync.ts`, not from component-level GitHub pagination. The background sync stores rows for selected repositories according to `githubSelectedRepositories`, `githubVisibleWorkItemTypes`, and `githubWorkItemSyncLimit`, and `GitHubWidget` subscribes with TanStack DB live queries.
+GitHub work items come from the local Dexie database. The background sync fetches rows for selected repositories and enabled types. The widget uses reactive, bounded pages ordered by update time and item ID. Older in-scope rows remain as last-known data.
 
 Current columns:
 
