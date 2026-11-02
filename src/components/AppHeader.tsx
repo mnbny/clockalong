@@ -1,7 +1,7 @@
 import { useHotkeys } from '@mantine/hooks'
-import { IconLogout, IconPalette, IconRefresh, IconSettings } from '@tabler/icons-react'
+import { IconBrandTelegram, IconLogout, IconPalette, IconRefresh, IconSettings } from '@tabler/icons-react'
 import { useIsFetching } from '@tanstack/react-query'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { capitalCase } from 'change-case'
 import { useRef } from 'react'
 
@@ -19,6 +19,7 @@ import { MoonBunnyLogo } from './MoonBunnyLogo'
 
 export function AppHeader() {
   const navigate = useNavigate()
+  const dashboard = useRouterState({ select: state => state.location.pathname === '/dashboard' })
   const { theme, setTheme } = useTheme()
   const themeSelectRef = useRef<HTMLSelectElement>(null)
   const authState = useAppAuth()
@@ -55,7 +56,11 @@ export function AppHeader() {
       <div className="flex items-center gap-1 justify-self-end">
         {authenticated ? (
           <>
-            <div id="telegram-chat-launcher" className="contents" />
+            {dashboard && (
+              <button className="btn btn-square btn-ghost" type="button" aria-label="Telegram" title="Telegram">
+                <IconBrandTelegram className="size-5" />
+              </button>
+            )}
             <button
               className="btn btn-square btn-ghost"
               type="button"
