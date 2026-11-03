@@ -1,29 +1,29 @@
-import { liveQuery } from 'dexie'
-import { useCallback, useEffect, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { useEffect, useMemo, useReducer } from 'react'
 
-export function useDexieQuery<T>(query: (signal: AbortSignal) => Promise<T>) {
-  const [attempt, setAttempt] = useState(0)
-  const [state, setState] = useState<{
-    query: (signal: AbortSignal) => Promise<T>
-    attempt: number
-    data?: T
-    error?: unknown
-  }>({
-    query,
-    attempt,
-  })
-  const retry = useCallback(() => setAttempt(current => current + 1), [])
-  useEffect(() => {
+export function useDexieQuery<T>(query: (signal: AbortSignal) => Promise<T>, scopeKey?: string) {
+  const [attempt, retry] = useReducer(value => value + 1, 0)
+  const request = useMemo(
+    () => ({ scopeKey, controller: undefined as AbortController | undefined }),
+    [query, scopeKey, attempt],
+  )
+  useEffect(() => () => request.controller?.abort(), [request])
+  const result = useLiveQuery(async () => {
+    // Our paged scans need a public signal in addition to Dexie's subscription cleanup.
+    request.controller?.abort()
     const controller = new AbortController()
-    const subscription = liveQuery(async () => query(controller.signal)).subscribe({
-      next: data => setState({ query, attempt, data }),
-      error: error => setState({ query, attempt, error }),
-    })
-    return () => {
-      controller.abort()
-      subscription.unsubscribe()
+    request.controller = controller
+    try {
+      return { request, data: await query(controller.signal), error: undefined }
+    } catch (error) {
+      return { request, data: undefined, error }
     }
-  }, [query, attempt])
-  const current = state.query === query && state.attempt === attempt
-  return { data: current ? state.data : undefined, error: current ? state.error : undefined, retry }
+  }, [request])
+  const current = result?.request === request
+  return {
+    data: result?.request.scopeKey === scopeKey ? result?.data : undefined,
+    error: current ? result?.error : undefined,
+    isPending: !current,
+    retry,
+  }
 }

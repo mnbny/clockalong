@@ -10,6 +10,7 @@
 - Use TanStack `Link` directly with daisyUI/Tailwind classes. daisyUI provides classes, not React components.
 - TanStack Query owns remote fetch execution.
 - A shared Dexie database owns the IndexedDB schema for durable bulk caches. Clockify, Linear, and GitHub use Dexie for storage and reactive reads.
+- Dexie's official React hook owns live-query subscriptions and result retention. Widget adapters add inline errors, retry, account scoping, and cancellation for paged scans.
 - App shell and window behavior spans frontend layout/CSS plus Tauri window config and capabilities.
 - Reusable frontend components live in `src/components/`; shared frontend helpers live in `src/utils/`.
 - Frontend-to-Rust bridge calls live in clients under `src/services/tauri/`; route code should use those clients instead of raw `invoke`.

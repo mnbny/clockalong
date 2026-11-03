@@ -40,6 +40,7 @@ catalog:
   daisyui: 5.6.3
   dayjs: 1.11.21
   dexie: 4.4.7
+  dexie-react-hooks: 4.4.0
   eslint: 10.6.0
   eslint-config-prettier: 10.1.8
   eslint-formatter-pretty: 7.1.0

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import type { Root } from 'react-dom/client'
 
-import { act, createElement, useCallback, useState } from 'react'
+import { act, createElement, StrictMode, useCallback, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import { afterEach, expect, test, vi } from 'vitest'
@@ -89,7 +89,7 @@ test('replacing a live query cancels its in-flight scan and the replacement and 
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  await act(async () => root?.render(createElement(Harness)))
+  await act(async () => root?.render(createElement(StrictMode, null, createElement(Harness))))
   await vi.waitFor(() => expect(container!.textContent).toContain('Ticket 2999'))
   expect(firstSignal?.aborted).toBe(true)
   expect(scans).toBeLessThan(25)
