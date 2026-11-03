@@ -6,7 +6,7 @@ import Dexie, { type Transaction } from 'dexie'
 import { normalizeInternalRef } from '../../utils/templates'
 import { getLinearTicketInternalRef } from '../clockify/ticket-summaries'
 import { db } from '../db'
-import { toLinearTicket } from './tickets'
+import { AssignedIssueNodeSchema, toLinearTicket } from './tickets'
 
 export type StoredLinearTicket = {
   viewerId: string
@@ -22,27 +22,6 @@ export type StoredLinearTicket = {
 function dateKey(value: string) {
   const time = Date.parse(value)
   return Number.isFinite(time) ? time : 0
-}
-
-function compactTicket(ticket: AssignedIssueNode): AssignedIssueNode {
-  const { id, identifier, title, url, createdAt, updatedAt, state, assignee } = ticket
-  return {
-    id,
-    identifier,
-    title,
-    url,
-    createdAt,
-    updatedAt,
-    state: { id: state.id, name: state.name, type: state.type, color: state.color, position: state.position },
-    assignee: assignee && {
-      id: assignee.id,
-      name: assignee.name,
-      displayName: assignee.displayName,
-      initials: assignee.initials,
-      avatarUrl: assignee.avatarUrl,
-      avatarBackgroundColor: assignee.avatarBackgroundColor,
-    },
-  }
 }
 
 export function createLinearTicketCache(database: DB) {
@@ -87,22 +66,23 @@ export function createLinearTicketCache(database: DB) {
         checkViewer(id, token)
         const previous = await database.linearCacheMeta.get('state')
         let sequence = previous?.sequence ?? 0
-        const unique = new Map(tickets.map(ticket => [ticket.id, ticket]))
-        for (const original of unique.values()) {
-          const ticket = compactTicket(original)
-          const existing = await database.linearTickets.get([id, ticket.id])
-          await database.linearTickets.put({
+        const unique = [...new Map(tickets.map(ticket => [ticket.id, ticket])).values()].map(ticket =>
+          AssignedIssueNodeSchema.parse(ticket),
+        )
+        const existing = await database.linearTickets.bulkGet(unique.map(ticket => [id, ticket.id]))
+        await database.linearTickets.bulkPut(
+          unique.map((ticket, index) => ({
             id: ticket.id,
             viewerId: id,
             ticket,
             syncedAt,
-            sequence: existing?.sequence ?? ++sequence,
+            sequence: existing[index]?.sequence ?? ++sequence,
             refKey: normalizeInternalRef(getLinearTicketInternalRef(toLinearTicket(ticket))),
             createdAtMs: dateKey(ticket.createdAt),
             updatedAtMs: dateKey(ticket.updatedAt),
-          })
-          stored++
-        }
+          })),
+        )
+        stored = unique.length
         await database.linearCacheMeta.put({ key: 'state', sequence, revision: (previous?.revision ?? 0) + 1 })
         requireCurrent(token)
       })

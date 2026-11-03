@@ -5,7 +5,7 @@ import type { SyncedClockifyTimeEntry } from './sync'
 import Dexie from 'dexie'
 
 import { pick } from '../../utils/objects'
-import { formatInternalRef, normalizeInternalRef, parseInternalRefs } from '../../utils/templates'
+import { getInternalRefKeys } from '../../utils/templates'
 import { db } from '../db'
 
 export type ClockifyScope = { userId: string; workspaceId: string }
@@ -74,14 +74,21 @@ export function createClockifyEntryCache(database: DB) {
     }
   }
 
-  async function put(row: StoredClockifyEntry) {
+  function referencesFor(row: StoredClockifyEntry) {
     const { userId, workspaceId, id: entryId, startedAt } = row
-    await refs.where('[userId+workspaceId+entryId]').equals([userId, workspaceId, entryId]).delete()
-    const keys = [
-      ...new Set(parseInternalRefs(row.entry.description).map(ref => normalizeInternalRef(formatInternalRef(ref)))),
-    ]
+    return getInternalRefKeys(row.entry.description).map(refKey => ({
+      userId,
+      workspaceId,
+      entryId,
+      startedAt,
+      refKey,
+    }))
+  }
+
+  async function put(row: StoredClockifyEntry) {
+    await refs.where('[userId+workspaceId+entryId]').equals([row.userId, row.workspaceId, row.id]).delete()
     await entries.put(row)
-    if (keys.length) await refs.bulkPut(keys.map(refKey => ({ userId, workspaceId, entryId, startedAt, refKey })))
+    await refs.bulkPut(referencesFor(row))
   }
 
   async function upsert(
@@ -123,8 +130,7 @@ export function createClockifyEntryCache(database: DB) {
         else rows.set(row.id, row)
       }
       let inserted = 0,
-        updated = 0,
-        deleted = 0
+        updated = 0
       const candidates = await entries
         .where('[userId+workspaceId+startedAt+id]')
         .between(
@@ -134,21 +140,22 @@ export function createClockifyEntryCache(database: DB) {
           true,
         )
         .toArray()
-      for (const row of candidates) {
-        if (row.revision > initialRevision || rows.has(row.id)) continue
-        await refs.where('[userId+workspaceId+entryId]').equals([scope.userId, scope.workspaceId, row.id]).delete()
-        await entries.delete([scope.userId, scope.workspaceId, row.id])
-        deleted++
-      }
-      for (const row of rows.values()) {
-        const existing = await entries.get([scope.userId, scope.workspaceId, row.id])
-        if (existing && existing.revision > initialRevision) continue
-        await put(row)
-        if (existing) updated++
+      const removed = candidates.filter(row => row.revision <= initialRevision && !rows.has(row.id))
+      const incomingRows = [...rows.values()]
+      const existing = await entries.bulkGet(incomingRows.map(row => [scope.userId, scope.workspaceId, row.id]))
+      const stored = incomingRows.filter((_row, index) => {
+        if (existing[index] && existing[index].revision > initialRevision) return false
+        if (existing[index]) updated++
         else inserted++
-      }
+        return true
+      })
+      const changed = [...removed, ...stored].map(row => [scope.userId, scope.workspaceId, row.id])
+      if (changed.length) await refs.where('[userId+workspaceId+entryId]').anyOf(changed).delete()
+      await entries.bulkDelete(removed.map(row => [scope.userId, scope.workspaceId, row.id]))
+      await entries.bulkPut(stored)
+      await refs.bulkPut(stored.flatMap(referencesFor))
       if (generation !== syncGeneration) throw new Error('Clockify sync superseded')
-      return { inserted, updated, stored: inserted + updated, skipped, deleted }
+      return { inserted, updated, stored: inserted + updated, skipped, deleted: removed.length }
     })
   }
 

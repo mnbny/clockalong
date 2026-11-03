@@ -1,5 +1,5 @@
 import type { DB } from '../db'
-import type { ClockifyScope, StoredClockifyEntry } from './entry-cache'
+import type { ClockifyScope } from './entry-cache'
 import type { TimeEntryWithRatesDtoV1 } from './generated/clockify'
 
 import Dexie from 'dexie'
@@ -30,7 +30,6 @@ export async function recentClockifyEntries(
   runningId: string | undefined,
   limit: number,
 ) {
-  const rows: StoredClockifyEntry[] = []
   const titles = new Set<string>()
   const collection = database.clockifyEntries
     .where('[userId+workspaceId+startedAt+id]')
@@ -39,17 +38,16 @@ export async function recentClockifyEntries(
       [scope.userId, scope.workspaceId, Dexie.maxKey],
     )
     .reverse()
-  await collection
-    .until(row => {
+  return collection
+    .filter(row => {
       if (row.id === runningId || !row.entry.timeInterval?.end) return false
       const title = getClockifyTimeEntryTitle(row.entry).trim()
       if (titles.has(title)) return false
       titles.add(title)
-      rows.push(row)
-      return rows.length >= limit
-    }, true)
-    .each(() => {})
-  return rows
+      return true
+    })
+    .limit(limit)
+    .toArray()
 }
 
 export async function queryClockifySummaries<T>(

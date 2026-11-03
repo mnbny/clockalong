@@ -7,7 +7,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { createClockifyEntryCache } from '../../../src/services/clockify/entry-cache'
 import { DB } from '../../../src/services/db'
 import { createLinearTicketCache } from '../../../src/services/linear/ticket-cache'
-import { queryLinearPage } from '../../../src/services/linear/ticket-queries'
+import { queryLinearMcpRows, queryLinearPage } from '../../../src/services/linear/ticket-queries'
 import { toLinearTicket } from '../../../src/services/linear/tickets'
 import { compareLinearTickets } from '../../../src/services/linear/tickets-sorting'
 
@@ -94,7 +94,7 @@ test('a failed transaction rolls back and clear increments revision without touc
   const c = cache()
   await c.replace('viewer', [issue('one')], c.beginSync(), 'now')
   const before = await c.database.linearCacheMeta.get('state')
-  vi.spyOn(c.database.linearTickets, 'put').mockRejectedValueOnce(new Error('disk full'))
+  vi.spyOn(c.database.linearCacheMeta, 'put').mockRejectedValueOnce(new Error('disk full'))
   await expect(c.replace('viewer', [issue('two')], c.beginSync(), 'later')).rejects.toThrow('disk full')
   expect((await c.database.linearTickets.toArray()).map(row => row.id)).toEqual(['one'])
   expect(await c.database.linearCacheMeta.get('state')).toEqual(before)
@@ -105,6 +105,44 @@ test('a failed transaction rolls back and clear increments revision without touc
   expect(cleared!.revision).toBeGreaterThan(before!.revision)
   expect(after!.revision).toBeGreaterThan(cleared!.revision)
   expect(after!.sequence).toBeGreaterThan(before!.sequence)
+})
+
+test('batch updates preserve first-seen order and the last payload for duplicate IDs', async () => {
+  const c = cache()
+  await c.replace('viewer', [issue('b'), issue('a')], c.beginSync(), 'first')
+  await c.replace(
+    'viewer',
+    [issue('c'), issue('a'), { ...issue('c'), title: 'Last payload' }, issue('d')],
+    c.beginSync(),
+    'second',
+  )
+  const rows = await queryLinearMcpRows(c.database, 'viewer', 10, true, null, Infinity)
+  expect(rows.map(row => row.id)).toEqual(['b', 'a', 'c', 'd'])
+  expect(rows.find(row => row.id === 'c')?.title).toBe('Last payload')
+  expect((await c.database.linearCacheMeta.get('state'))?.sequence).toBe(4)
+})
+
+test('MCP search applies viewer and closed filters before its output limit', async () => {
+  const c = cache()
+  const rows = [
+    ...Array.from({ length: 140 }, (_, index) => ({
+      ...issue(`closed-${index}`, undefined, 'completed'),
+      title: 'Needle',
+    })),
+    ...Array.from({ length: 140 }, (_, index) => issue(`unmatched-${index}`)),
+    ...Array.from({ length: 3 }, (_, index) => ({ ...issue(`hit-${index}`), title: 'Needle' })),
+  ]
+  await c.replace('viewer', rows, c.beginSync(), 'now')
+  const foreign = createLinearTicketCache(c.database)
+  await foreign.replace('other', [{ ...issue('foreign'), title: 'Needle' }], foreign.beginSync(), 'now')
+  expect((await queryLinearMcpRows(c.database, 'viewer', 1, false, 'nEeDlE', Infinity)).map(row => row.id)).toEqual([
+    'hit-0',
+    'hit-1',
+  ])
+  expect((await queryLinearMcpRows(c.database, 'viewer', 1, true, 'nEeDlE', Infinity)).map(row => row.id)).toEqual([
+    'closed-0',
+    'closed-1',
+  ])
 })
 
 test.each(['created', 'updated', 'alphabetical', 'status', 'custom'] as const)(
@@ -168,10 +206,10 @@ test('page cursors reset after a live revision and scans stop on cancellation', 
 test('a newer sync aborts an in-progress write transaction', async () => {
   const c = cache()
   await c.replace('viewer', [issue('saved')], c.beginSync(), 'now')
-  const original = c.database.linearTickets.put.bind(c.database.linearTickets)
+  const original = c.database.linearTickets.bulkPut.bind(c.database.linearTickets)
   let current = 0
-  vi.spyOn(c.database.linearTickets, 'put').mockImplementationOnce(row =>
-    original(row).then(key => {
+  vi.spyOn(c.database.linearTickets, 'bulkPut').mockImplementationOnce(rows =>
+    original(rows).then(key => {
       current = c.beginSync()
       return key
     }),

@@ -1,6 +1,8 @@
 import type { LinearTicketSyncOrderByOption } from './ticket-settings'
 import type { Issue, LinearClient, User, WorkflowState } from '@linear/sdk'
 
+import { z } from 'zod'
+
 import { auth } from '../tauri/auth-client'
 import { createLinearClient } from './client'
 
@@ -39,6 +41,26 @@ export type AssignedIssueNode = SerializedIssueFields & {
   state: LinearTicketStatus
 }
 
+export const AssignedIssueNodeSchema = z.object({
+  id: z.string().min(1),
+  identifier: z.string().min(1),
+  title: z.string().min(1),
+  url: z.string().min(1),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+  state: z.object({ id: z.string(), name: z.string(), type: z.string(), color: z.string(), position: z.number() }),
+  assignee: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      displayName: z.string(),
+      initials: z.string(),
+      avatarUrl: z.string().nullish(),
+      avatarBackgroundColor: z.string(),
+    })
+    .nullable(),
+}) satisfies z.ZodType<AssignedIssueNode>
+
 export function toLinearTicket(issue: AssignedIssueNode): LinearTicket {
   return {
     assignee: issue.assignee,
@@ -68,7 +90,10 @@ type AssignedIssuesResponse = {
     }
   }
 }
-export type AssignedIssuesPage = AssignedIssuesResponse['viewer']['assignedIssues']
+export const AssignedIssuesPageSchema = z.object({
+  nodes: z.array(AssignedIssueNodeSchema),
+  pageInfo: z.object({ hasNextPage: z.boolean(), endCursor: z.string().nullish() }),
+})
 export type AssignedIssuesVariables = {
   after?: string | null
   first: number

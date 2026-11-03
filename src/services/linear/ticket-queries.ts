@@ -7,9 +7,10 @@ import type { LinearTicket } from './tickets'
 
 import Dexie from 'dexie'
 
-import { formatInternalRef, normalizeInternalRef, parseInternalRefs } from '../../utils/templates'
+import { getInternalRefKeys } from '../../utils/templates'
 import { queryClockifySummaries } from '../clockify/entry-queries'
 import { getLinearTicketInternalRef } from '../clockify/ticket-summaries'
+import { resolveClockifyEntryOwners } from '../clockify/work-item-summaries'
 import { toLinearTicket } from './tickets'
 import { compareLinearTickets, isLinearTicketTerminal } from './tickets-sorting'
 
@@ -70,26 +71,14 @@ export async function queryLinearSummaries(
 }
 
 export async function resolveLinearEntryOwners(database: DB, viewerId: string, entries: TimeEntryWithRatesDtoV1[]) {
-  const values = entries.map(entry => ({
-    id: entry.id,
-    refs: parseInternalRefs(entry.description)
-      .filter(ref => ref.provider === 'linear')
-      .map(ref => normalizeInternalRef(formatInternalRef(ref))),
-  }))
-  const refs = [...new Set(values.flatMap(value => value.refs))]
+  const refs = [...new Set(entries.flatMap(entry => getInternalRefKeys(entry.description, 'linear')))]
   const matches = refs.length
     ? await database.linearTickets
         .where('[viewerId+refKey]')
         .anyOf(refs.map(ref => [viewerId, ref]))
         .toArray()
     : []
-  const byRef = new Map(matches.map(row => [row.refKey, row.id]))
-  return new Map(
-    values.flatMap(value => {
-      const owner = value.refs.map(ref => byRef.get(ref)).find(Boolean)
-      return value.id && owner ? [[value.id, owner] as const] : []
-    }),
-  )
+  return resolveClockifyEntryOwners(entries, 'linear', new Map(matches.map(row => [row.refKey, row.id])))
 }
 
 function withSummary(ticket: LinearTicket, summaries: ClockifyWorkItemTimeSummaries) {
@@ -144,9 +133,9 @@ export async function queryLinearPage(database: DB, options: PageOptions): Promi
         for (const ticket of candidates) {
           if (cursor && compare(ticket, cursor.ticket) <= 0) continue
           selected.push(ticket)
-          selected.sort(compare)
-          if (selected.length > limit + 1) selected.pop()
         }
+        selected.sort(compare)
+        selected.length = Math.min(selected.length, limit + 1)
         const last = batch[batch.length - 1]
         position = [last[dateField], last.id]
         if (selected.length > limit) {
@@ -191,9 +180,9 @@ export async function queryLinearPage(database: DB, options: PageOptions): Promi
             const candidate = withSummary(ticket, summaries)
             if (cursor && compare(candidate, cursor.ticket) <= 0) continue
             selected.push(candidate)
-            selected.sort(compare)
-            if (selected.length > limit + 1) selected.pop()
           }
+          selected.sort(compare)
+          selected.length = Math.min(selected.length, limit + 1)
           const last = batch[batch.length - 1]
           after = [last.sequence, last.id]
         }
@@ -237,31 +226,21 @@ export async function queryLinearMcpRows(
   deadlineAt: number,
   signal?: AbortSignal,
 ) {
-  const result: LinearTicket[] = []
-  let after: [number, string] | undefined
   const text = search?.toLowerCase()
-  while (result.length <= limit) {
-    checkDeadline(deadlineAt, signal)
-    const batch = await database.linearTickets
-      .where('[viewerId+sequence+id]')
-      .between(
-        [viewerId, after?.[0] ?? Dexie.minKey, after?.[1] ?? Dexie.minKey],
-        [viewerId, Dexie.maxKey],
-        !after,
-        true,
-      )
-      .limit(128)
-      .toArray()
-    if (!batch.length) break
-    for (const row of batch) {
+  checkDeadline(deadlineAt, signal)
+  const rows = await database.linearTickets
+    .where('[viewerId+sequence+id]')
+    .between([viewerId, Dexie.minKey, Dexie.minKey], [viewerId, Dexie.maxKey])
+    .filter(row => {
+      checkDeadline(deadlineAt, signal)
       const ticket = toLinearTicket(row.ticket)
-      if (!includeClosed && isLinearTicketTerminal(ticket)) continue
-      if (text && ![ticket.title, ticket.identifier].some(value => value.toLowerCase().includes(text))) continue
-      result.push(ticket)
-      if (result.length > limit) break
-    }
-    const last = batch[batch.length - 1]
-    after = [last.sequence, last.id]
-  }
-  return result
+      return (
+        (includeClosed || !isLinearTicketTerminal(ticket)) &&
+        (!text || [ticket.title, ticket.identifier].some(value => value.toLowerCase().includes(text)))
+      )
+    })
+    .limit(limit + 1)
+    .toArray()
+  checkDeadline(deadlineAt, signal)
+  return rows.map(row => toLinearTicket(row.ticket))
 }

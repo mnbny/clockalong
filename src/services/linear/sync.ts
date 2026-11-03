@@ -14,7 +14,7 @@ import {
   type LinearTicketSyncOrderByOption,
   normalizeLinearTicketSyncLimit,
 } from './ticket-settings'
-import { type AssignedIssueNode, requestAssignedIssuesPage } from './tickets'
+import { type AssignedIssueNode, AssignedIssuesPageSchema, requestAssignedIssuesPage } from './tickets'
 
 type LinearTicketSyncOptions = {
   orderBy: LinearTicketSyncOrderByOption
@@ -139,34 +139,14 @@ export async function syncLinearTickets({ orderBy, syncLimit }: LinearTicketSync
     }
     viewerId = responseViewerId
     pagesFetched++
-    if (
-      !Array.isArray(page.nodes) ||
-      !page.pageInfo ||
-      typeof page.pageInfo.hasNextPage !== 'boolean' ||
-      page.nodes.length > first
-    ) {
+    const parsed = AssignedIssuesPageSchema.safeParse(page)
+    if (!parsed.success || parsed.data.nodes.length > first) {
       throw new Error('Invalid Linear assigned-issues page')
     }
-    for (const ticket of page.nodes) {
-      if (
-        !ticket.id ||
-        !ticket.identifier ||
-        !ticket.title ||
-        !ticket.url ||
-        !ticket.createdAt ||
-        !ticket.updatedAt ||
-        !ticket.state ||
-        typeof ticket.state.type !== 'string' ||
-        typeof ticket.state.name !== 'string' ||
-        typeof ticket.state.position !== 'number'
-      ) {
-        throw new Error('Invalid Linear ticket')
-      }
-    }
-    ticketsToSync.push(...page.nodes)
-    if (!page.pageInfo.hasNextPage) break
-    const cursor = page.pageInfo.endCursor
-    if (!cursor || !page.nodes.length || cursors.has(cursor)) throw new Error('Invalid Linear pagination cursor')
+    ticketsToSync.push(...parsed.data.nodes)
+    if (!parsed.data.pageInfo.hasNextPage) break
+    const cursor = parsed.data.pageInfo.endCursor
+    if (!cursor || !parsed.data.nodes.length || cursors.has(cursor)) throw new Error('Invalid Linear pagination cursor')
     cursors.add(cursor)
     after = cursor
   }

@@ -93,6 +93,35 @@ test('a thrown later page preserves previous rows and never applies the first pa
   expect((await db.linearTickets.toArray()).map(row => row.id)).toEqual(['saved'])
 })
 
+test('sync accepts nullable assignees and stores only selected fields at each level', async () => {
+  const assigned = ticket('assigned')
+  const expanded = {
+    ...assigned,
+    description: 'excluded body',
+    state: { ...assigned.state, extra: 'excluded status data' },
+    assignee: { ...assigned.assignee!, email: 'excluded@example.test' },
+  }
+  vi.spyOn(linearApi, 'requestAssignedIssuesPage').mockResolvedValue(
+    page('viewer', [expanded, { ...ticket('unassigned'), assignee: null }]),
+  )
+  await syncLinearTickets(options)
+  expect((await db.linearTickets.get(['viewer', 'assigned']))?.ticket).toEqual(assigned)
+  expect((await db.linearTickets.get(['viewer', 'unassigned']))?.ticket.assignee).toBeNull()
+})
+
+test('a malformed ticket on a later page prevents all fetched writes', async () => {
+  await put('saved')
+  vi.spyOn(linearApi, 'requestAssignedIssuesPage')
+    .mockResolvedValueOnce(page('viewer', [ticket('first')], true, 'next'))
+    .mockResolvedValueOnce(
+      page('viewer', [
+        { ...ticket('bad'), state: { ...ticket('bad').state, position: 'bad' } } as unknown as AssignedIssueNode,
+      ]),
+    )
+  await expect(syncLinearTickets(options)).rejects.toThrow('Invalid Linear')
+  expect((await db.linearTickets.toArray()).map(row => row.id)).toEqual(['saved'])
+})
+
 test('a valid empty response establishes the viewer and retains prior rows', async () => {
   await put('saved')
   vi.spyOn(linearApi, 'requestAssignedIssuesPage').mockResolvedValue(page('viewer', []))
