@@ -74,12 +74,10 @@ async function mount(spoiler = false) {
   return host.querySelector('button')!
 }
 
-test('hover preloads once and clicking shares the pending full-image request', async () => {
+test('arrival preloads immediately and clicking shares the same client and pending full-image request', async () => {
   const full = deferred<Blob>()
   chat.notificationImage.mockImplementation((_message, original) => (original ? full.promise : Promise.resolve(null)))
   const button = await mount()
-  expect(chat.notificationImage.mock.calls.every(call => call[1] === false)).toBe(true)
-  await act(async () => button.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' })))
   expect(chat.notificationImage.mock.calls.filter(call => call[1])).toHaveLength(1)
   await act(async () => button.click())
   await act(async () => {
@@ -88,12 +86,13 @@ test('hover preloads once and clicking shares the pending full-image request', a
   })
   await vi.waitFor(() => expect(host!.querySelector('[data-image]')).not.toBeNull())
   expect(chat.notificationImage.mock.calls.filter(call => call[1])).toHaveLength(1)
+  expect(chat.notificationImage.mock.contexts.every(context => context === chat)).toBe(true)
   const url = host!.querySelector('[data-image]')!.getAttribute('data-image')!
   await act(async () => (host!.querySelector('[aria-label="Close viewer"]') as HTMLButtonElement).click())
   expect(URL.revokeObjectURL).toHaveBeenCalledWith(url)
 })
 
-test('an unrevealed spoiler does not fetch a thumbnail or preload on hover and focus', async () => {
+test('an unrevealed spoiler does not preload on arrival, hover, or focus', async () => {
   chat.notificationImage.mockResolvedValue(null)
   const button = await mount(true)
   await act(async () => {

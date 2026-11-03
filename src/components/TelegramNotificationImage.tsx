@@ -3,7 +3,7 @@ import type { TelegramNotification } from '../services/telegram/notification-sto
 
 import { IconPhoto } from '@tabler/icons-react'
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query'
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 
 import { useBlobUrl } from '../hooks/useBlobUrl'
 import { useCachedTelegramImage } from '../hooks/useCachedTelegramImage'
@@ -49,9 +49,9 @@ export function TelegramNotificationImage({ row }: { row: TelegramNotification }
   })
   const url = useBlobUrl(preview.data ?? cached)
   const name = attachment.name || 'Photo'
-  const preload = () => {
+  useEffect(() => {
     if (active && revealed) void queryClient.prefetchQuery(fullImageQuery(chat, row))
-  }
+  }, [active, revealed, queryClient, chat, row])
 
   return (
     <>
@@ -60,10 +60,6 @@ export function TelegramNotificationImage({ row }: { row: TelegramNotification }
         className="rounded-box bg-primary-content/10 hover:outline-primary-content relative flex size-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden hover:outline-2 focus-visible:outline-2 disabled:cursor-default"
         aria-label={attachment.spoiler && !revealed ? 'Reveal image spoiler' : `View image: ${name}`}
         disabled={!active}
-        onPointerEnter={event => {
-          if (event.pointerType !== 'touch') preload()
-        }}
-        onFocus={preload}
         onClick={() => {
           setRevealed(true)
           setOpenScope(chat?.scope)
