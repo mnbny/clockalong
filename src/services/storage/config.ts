@@ -150,6 +150,11 @@ const storageConfig = {
     default: true,
     version: 1,
   },
+  telegramNotificationsSnoozedUntil: {
+    type: 'number',
+    default: 0,
+    version: 1,
+  },
   quickTimersColumns: {
     type: 'number',
     default: 5,

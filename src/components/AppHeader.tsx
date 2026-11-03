@@ -1,7 +1,7 @@
 import { useHotkeys } from '@mantine/hooks'
-import { IconBrandTelegram, IconLogout, IconPalette, IconRefresh, IconSettings } from '@tabler/icons-react'
+import { IconLogout, IconPalette, IconRefresh, IconSettings } from '@tabler/icons-react'
 import { useIsFetching } from '@tanstack/react-query'
-import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { capitalCase } from 'change-case'
 import { useRef } from 'react'
 
@@ -19,7 +19,6 @@ import { MoonBunnyLogo } from './MoonBunnyLogo'
 
 export function AppHeader() {
   const navigate = useNavigate()
-  const dashboard = useRouterState({ select: state => state.location.pathname === '/dashboard' })
   const { theme, setTheme } = useTheme()
   const themeSelectRef = useRef<HTMLSelectElement>(null)
   const authState = useAppAuth()
@@ -54,13 +53,8 @@ export function AppHeader() {
       </h1>
 
       <div className="flex items-center gap-1 justify-self-end">
-        {authenticated ? (
+        {authenticated && (
           <>
-            {dashboard && (
-              <button className="btn btn-square btn-ghost" type="button" aria-label="Telegram" title="Telegram">
-                <IconBrandTelegram className="size-5" />
-              </button>
-            )}
             <button
               className="btn btn-square btn-ghost"
               type="button"
@@ -81,7 +75,7 @@ export function AppHeader() {
               <IconLogout className="size-5" />
             </button>
           </>
-        ) : null}
+        )}
         <label
           className="btn btn-square btn-ghost relative has-focus-visible:outline-2 has-focus-visible:outline-offset-2"
           title={`Theme: ${capitalCase(theme.theme)} (⌘⇧A)`}>

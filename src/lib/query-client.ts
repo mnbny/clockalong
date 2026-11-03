@@ -51,6 +51,12 @@ function spreadQueryKeySegments(keys?: QueryKeySegments<unknown>) {
 export const queryKeys = {
   telegram: {
     all: ['telegram'] as const,
+    reply: (keys?: QueryKeySegments<{ messageId: number; outsideGroup: boolean }>) =>
+      ['telegram', 'reply', ...spreadQueryKeySegments(keys)] as const,
+    image: (keys?: QueryKeySegments<{ messageId: number; mediaId: string; full: boolean }>) =>
+      ['telegram', 'image', ...spreadQueryKeySegments(keys)] as const,
+    avatar: (keys?: QueryKeySegments<{ senderId: string; photoId: string }>) =>
+      ['telegram', 'avatar', ...spreadQueryKeySegments(keys)] as const,
     summary: (keys?: QueryKeySegments<unknown>) => ['telegram', 'summary', ...spreadQueryKeySegments(keys)] as const,
     topics: (keys?: QueryKeySegments<unknown>) => ['telegram', 'topics', ...spreadQueryKeySegments(keys)] as const,
     topic: (keys?: QueryKeySegments<{ topicId: number }>) =>
