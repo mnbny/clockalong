@@ -263,11 +263,59 @@ test('image projection selects a full photo separately from its thumbnail and ex
   expect(ephemeral.image).toBeUndefined()
 })
 
+test('notification images reuse collected references and the same client, then use disk after restart', async () => {
+  onTestFinished(() => {
+    vi.restoreAllMocks()
+  })
+  const media: tl.RawMessageMediaPhoto = {
+    _: 'messageMediaPhoto',
+    photo: {
+      _: 'photo',
+      id: Long.ONE,
+      accessHash: Long.ONE,
+      dcId: 2,
+      date: 0,
+      fileReference: new Uint8Array([1]),
+      sizes: [{ _: 'photoSize', type: 'y', w: 100, h: 100, size: 6 }],
+    },
+  }
+  const { chat, sdk, calls } = fixture(basic, async () => ({
+    _: 'messages.messages',
+    messages: [message(7, { media })],
+    users: [user],
+    chats: [chatRaw],
+  }))
+  const disk = new Map<string, Uint8Array<ArrayBuffer>>()
+  vi.spyOn(telegramImageCache, 'scope').mockResolvedValue('token')
+  vi.spyOn(telegramImageCache, 'read').mockImplementation(async (_token, key) => disk.get(key) ?? new Uint8Array())
+  vi.spyOn(telegramImageCache, 'write').mockImplementation(async (_token, key, bytes) => {
+    disk.set(key, new Uint8Array(bytes))
+  })
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3])
+  const blob = new Blob([bytes], { type: 'image/jpeg' })
+  const preview = vi.spyOn(chatFiles, 'downloadPreview').mockResolvedValue(blob)
+  const full = vi.spyOn(chatFiles, 'downloadImage').mockResolvedValue(blob)
+  const history = await chat.fetchNotificationHistory(null)
+  const row = history.items[0]
+  await chat.notificationImage(row.view, false)
+  await chat.notificationImage(row.view, true)
+  expect(calls.map(call => call._)).toEqual(['messages.getHistory'])
+  expect(preview).toHaveBeenCalledWith(sdk, expect.objectContaining({ dcId: 2 }), expect.any(AbortSignal))
+  expect(full).toHaveBeenCalledWith(sdk, expect.objectContaining({ dcId: 2 }), expect.any(AbortSignal))
+  const restarted = fixture()
+  const cached = await restarted.chat.notificationImage(row.view, true)
+  expect(new Uint8Array(await cached!.arrayBuffer())).toEqual(bytes)
+  expect(restarted.calls).toHaveLength(0)
+  expect(full).toHaveBeenCalledTimes(1)
+})
+
 test('notification image reads refresh an expired reference and reject replaced attachments', async () => {
   onTestFinished(() => {
     vi.restoreAllMocks()
   })
   const { chat } = fixture()
+  let now = Date.now()
+  vi.spyOn(Date, 'now').mockImplementation(() => now)
   const photo = record(7)
   photo.view.attachment = { kind: 'photo', id: '1', size: 100, mime: 'image/jpeg', downloadable: true, spoiler: false }
   photo.image = {
@@ -291,6 +339,7 @@ test('notification image reads refresh an expired reference and reject replaced 
   expect(await chat.notificationImage(photo.view, true)).toBe(blob)
   expect(read).toHaveBeenCalledTimes(2)
   expect(download).toHaveBeenCalledTimes(2)
+  now += 5 * 60_000 + 1
   read.mockResolvedValue([{ ...photo, view: { ...photo.view, attachment: { ...photo.view.attachment, id: '2' } } }])
   expect(await chat.notificationImage(photo.view, true)).toBeNull()
   expect(download).toHaveBeenCalledTimes(2)

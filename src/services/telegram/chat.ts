@@ -73,6 +73,7 @@ export class TelegramChat {
   private startup: Promise<void> = Promise.resolve()
   private readonly images: TelegramChatImages
   private messageListeners = new Set<(event: TelegramMessageEvent) => void>()
+  private notificationRecords = new Map<number, { record: MessageRecord; expiresAt: number }>()
 
   get notificationScope() {
     return `${this.group.accountId}:${this.group.kind}:${this.group.id}`
@@ -87,7 +88,31 @@ export class TelegramChat {
     }
   }
   private emitMessage(event: TelegramMessageEvent) {
+    if (event.type === 'message') this.rememberNotificationRecords([event.record])
+    else if (event.type === 'deleted') event.ids.forEach(id => this.notificationRecords.delete(id))
+    else this.notificationRecords.clear()
     for (const listener of this.messageListeners) listener(event)
+  }
+
+  private rememberNotificationRecords(records: MessageRecord[]) {
+    if (!this.isReady) return records
+    for (const record of records) {
+      const existing = this.notificationRecords.get(record.view.id)
+      if (existing && (existing.record.view.editDate ?? 0) > (record.view.editDate ?? 0)) continue
+      this.notificationRecords.delete(record.view.id)
+      this.notificationRecords.set(record.view.id, { record, expiresAt: Date.now() + 5 * 60_000 })
+    }
+    while (this.notificationRecords.size > 256)
+      this.notificationRecords.delete(this.notificationRecords.keys().next().value!)
+    return records
+  }
+
+  private async notificationRecord(id: number, signal: AbortSignal, refresh = false) {
+    const cached = this.notificationRecords.get(id)
+    if (!refresh && cached && cached.expiresAt > Date.now()) return cached.record
+    this.notificationRecords.delete(id)
+    const records = await this.fetchNotificationMessages([id], signal)
+    return records[0]
   }
 
   constructor(
@@ -192,9 +217,11 @@ export class TelegramChat {
       const peers = PeersIndex.from(response)
       const last = response.messages[response.messages.length - 1]
       return {
-        items: response.messages
-          .map(raw => projectMessage(this.group, raw, peers))
-          .filter((record): record is MessageRecord => !!record),
+        items: this.rememberNotificationRecords(
+          response.messages
+            .map(raw => projectMessage(this.group, raw, peers))
+            .filter((record): record is MessageRecord => !!record),
+        ),
         newestId: Math.max(0, ...response.messages.map(raw => raw.id)),
         nextBefore: last ? { id: last.id, date: last._ === 'messageEmpty' ? 0 : last.date } : undefined,
       }
@@ -204,9 +231,11 @@ export class TelegramChat {
     return this.run(signal, async signal => {
       const messages = await getMessages(this.client, inputPeer(this.group), ids)
       this.check(signal)
-      return messages
-        .map(message => (message ? projectMessage(this.group, message.raw, message._peers) : null))
-        .filter((record): record is MessageRecord => !!record)
+      return this.rememberNotificationRecords(
+        messages
+          .map(message => (message ? projectMessage(this.group, message.raw, message._peers) : null))
+          .filter((record): record is MessageRecord => !!record),
+      )
     })
   }
   private async refreshAccess() {
@@ -471,8 +500,8 @@ export class TelegramChat {
       if (message.protected || !isImageAttachment(message.attachment)) return null
       const mediaId = message.attachment!.id!
       const download = async () => {
-        const read = async () => {
-          const [record] = await this.fetchNotificationMessages([message.id], signal)
+        const read = async (refresh = false) => {
+          const record = await this.notificationRecord(message.id, signal, refresh)
           if (!record || record.view.protected || !isImageAttachment(record.view.attachment)) return null
           if (record.view.attachment?.id !== mediaId || record.view.attachment.kind !== message.attachment?.kind)
             return null
@@ -485,13 +514,15 @@ export class TelegramChat {
           return await fetch(this.client, ref, signal)
         } catch (error) {
           if (!(error instanceof TelegramFileError) || error.category !== 'unavailable') throw error
-          const fresh = await read()
+          const fresh = await read(true)
           return fresh ? fetch(this.client, fresh, signal) : null
         }
       }
-      return full
-        ? download()
-        : this.images.load(`notification-preview:${message.attachment!.kind}:${mediaId}`, download, signal)
+      return this.images.load(
+        `${full ? 'notification-image' : 'notification-preview'}:${message.attachment!.kind}:${mediaId}`,
+        download,
+        signal,
+      )
     })
   }
   preview(messageId: number, signal?: AbortSignal) {
@@ -522,7 +553,7 @@ export class TelegramChat {
       const senderId = `${sender.kind}:${sender.id}`
       const matches = (ref: AvatarReference | undefined): ref is AvatarReference =>
         !!ref && ref.senderId === senderId && ref.photoId === sender.avatarId
-      const refresh = async () => (await this.fetchNotificationMessages([message.id], signal))[0]?.avatar
+      const refresh = async (force = false) => (await this.notificationRecord(message.id, signal, force))?.avatar
       return this.images.load(
         `avatar:${senderId}:${sender.avatarId}:small`,
         async () => {
@@ -533,7 +564,7 @@ export class TelegramChat {
             return await downloadAvatar(this.client, ref, signal)
           } catch (error) {
             if (!(error instanceof TelegramFileError) || error.category !== 'unavailable') throw error
-            const fresh = await refresh()
+            const fresh = await refresh(true)
             if (!matches(fresh)) return null
             return downloadAvatar(this.client, fresh, signal)
           }
@@ -548,6 +579,7 @@ export class TelegramChat {
     this.unsubscribe()
     this.operations.clear()
     this.messageListeners.clear()
+    this.notificationRecords.clear()
     this.cache.dispose()
     return this.startup.then(async () => {
       if (this.group.kind === 'supergroup') await closeChat(this.client, inputPeer(this.group)).catch(() => {})
