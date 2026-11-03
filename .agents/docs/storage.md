@@ -65,13 +65,13 @@ Conversation data is excluded from Settings backups, browser persistence, and MC
 
 ## Local cache field budgets
 
-The webview enforces a per-origin localStorage quota of about 5 MB, shared by the caches that use localStorage. The packaged app and the Vite dev server are separate origins. Clockify entries and GitHub work items use IndexedDB.
+The webview enforces a per-origin localStorage quota of about 5 MB, shared by the caches that use localStorage. The packaged app and the Vite dev server are separate origins. Clockify entries, Linear tickets, and GitHub work items use IndexedDB.
 
-Local caches must persist only fields that the app uses. Clockify and GitHub apply explicit field allowlists to provider responses.
+Local caches must persist only fields that the app uses. Clockify, Linear, and GitHub apply explicit field allowlists to provider responses.
 
 Extend the matching list when UI needs another field. Do not persist raw provider responses. A raw Octokit pull request averages about 25 KB, and the generated Clockify schema is `passthrough`, so hydrated responses carry whole project, task, tag, and user objects that never appear in `TimeEntryWithRatesDtoV1`.
 
-A provider sync collects all successful pages in memory before it changes the local cache. It then reconciles inserts, updates, and stale deletions in one transaction. Do not persist individual rows or pages. Do not reconcile a partial or failed pagination run.
+A provider sync collects all successful pages in memory before it changes the local cache. It then commits the applicable inserts, updates, and deletions in one transaction. Do not persist individual rows or pages. Do not reconcile a partial or failed pagination run.
 
 The shared database uses Dexie's native schema versions. Future versions can declare schema changes with `version().stores()` and data upgrades with `upgrade()`. If an upgrade fails, IndexedDB rolls back the upgrade transaction and the database open fails.
 
@@ -85,7 +85,11 @@ The app removes the obsolete Clockify localStorage key without importing its row
 
 ## Local Linear ticket cache
 
-Assigned Linear ticket rows are persisted by TanStack DB through browser localStorage under `clockalong.linear.tickets.v1`. This cache is not a Tauri store key and does not contain provider credentials. Treat it as a local read model for compact ticket-list UI, rebuilt by `LinearSyncProvider` from Linear's API.
+Linear tickets use the shared IndexedDB database. Dexie owns storage and live reads. Rows are scoped to the verified viewer. The sync stores compact ticket fields and retains older rows as last-known data. Older rows may no longer be assigned and are not necessarily revalidated by the latest fetch.
+
+A complete valid fetch commits its rows in one transaction. Failed or partial fetches do not change the cache. Disconnect clears only Linear rows and prevents late syncs from restoring them. The app removes the obsolete Linear localStorage key without importing its rows.
+
+A complete valid fetch establishes the viewer for the current session. A known viewer remains available after an ordinary offline fetch failure. On a fresh launch, cached rows stay hidden until a fetch verifies the viewer. Credentials and settings stay outside this cache.
 
 ## Local GitHub work-item cache
 

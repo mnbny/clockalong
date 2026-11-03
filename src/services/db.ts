@@ -1,6 +1,7 @@
 import type { ClockifyEntryRef, StoredClockifyEntry } from './clockify/entry-cache'
 import type { SyncedGithubWorkItem } from './github/sync'
 import type { GithubAuthorIndex, GithubWorkItemIndex, StoredGithubWorkItem } from './github/work-item-index'
+import type { StoredLinearTicket } from './linear/ticket-cache'
 
 import Dexie, { type Table } from 'dexie'
 
@@ -14,6 +15,8 @@ export class DB extends Dexie {
   declare clockifyEntries: Table<StoredClockifyEntry, [string, string, string]>
   declare clockifyEntryRefs: Table<ClockifyEntryRef, [string, string, string, string]>
   declare clockifyCacheMeta: Table<{ key: string; revision: number }, string>
+  declare linearTickets: Table<StoredLinearTicket, [string, string]>
+  declare linearCacheMeta: Table<{ key: string; revision: number; sequence: number }, string>
 
   constructor(name = 'clockalong') {
     super(name)
@@ -44,6 +47,11 @@ export class DB extends Dexie {
       clockifyEntryRefs:
         '[userId+workspaceId+refKey+entryId],[userId+workspaceId+refKey+startedAt+entryId],[userId+workspaceId+entryId]',
       clockifyCacheMeta: 'key',
+    })
+    this.version(4).stores({
+      linearTickets:
+        '[viewerId+id],[viewerId+refKey],[viewerId+sequence+id],[viewerId+createdAtMs+id],[viewerId+updatedAtMs+id]',
+      linearCacheMeta: 'key',
     })
   }
 }

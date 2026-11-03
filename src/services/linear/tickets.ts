@@ -39,6 +39,23 @@ export type AssignedIssueNode = SerializedIssueFields & {
   state: LinearTicketStatus
 }
 
+export function toLinearTicket(issue: AssignedIssueNode): LinearTicket {
+  return {
+    assignee: issue.assignee,
+    createdAt: issue.createdAt,
+    id: issue.id,
+    identifier: issue.identifier,
+    lastTrackedAt: null,
+    status: issue.state,
+    title: issue.title,
+    totalTrackedAmount: null,
+    totalTrackedAmountCurrency: null,
+    totalTrackedSeconds: null,
+    updatedAt: issue.updatedAt,
+    url: issue.url,
+  }
+}
+
 type AssignedIssuesResponse = {
   viewer: {
     id: string

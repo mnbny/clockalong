@@ -11,6 +11,7 @@ import {
   getUnknownClockifyDescriptionTemplateTokens,
   sampleClockifyDescriptionTemplateValues,
 } from '../services/clockify/description-template'
+import { withLinearSessionChange } from '../services/linear/sync'
 import {
   defaultLinearTicketSyncLimit,
   getLinearTicketSortOrderLabel,
@@ -40,7 +41,7 @@ export function LinearSettings() {
     setConnecting(true)
 
     try {
-      await auth.connectLinear()
+      await withLinearSessionChange(() => auth.connectLinear())
       appToast.success('Linear connected.')
     } catch (error) {
       appToast.error('Could not connect Linear.', {

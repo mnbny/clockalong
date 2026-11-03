@@ -39,24 +39,28 @@ The first Clockalong issue query should be based on the authenticated viewer, fo
 
 ## Assigned ticket sync
 
-The Linear ticket list is backed by a local TanStack DB collection, not route-owned pagination. `src/services/linear/sync.ts` owns the background sync for the authenticated viewer's assigned issues across all workflow statuses.
+The Linear ticket list uses the shared Dexie database. The sync fetches assigned issues for the verified viewer across all workflow statuses.
 
 Implementation constraints:
 
 - Use `viewer.assignedIssues(first, after, orderBy)` with cursor pagination.
-- Store compact assigned-ticket rows in the local collection under the authenticated Linear viewer ID.
-- `linearTicketSyncLimit` controls the maximum number of assigned issues to sync.
+- Store compact ticket rows under the verified Linear viewer ID.
+- `linearTicketSyncLimit` controls the maximum number of issues in each fetch. It does not limit the displayed cache.
 - `linearTicketSyncOrderBy` maps to Linear's `PaginationOrderBy` field for the fetch. Current exposed values are `createdAt` and `updatedAt`.
 - `viewer.assignedIssues` does not expose a sort-direction argument. Do not treat client-side ordering as an API fetch direction.
 - `linearTicketSyncInterval` controls the provider's background sync interval.
-- `src/components/LinearWidget.tsx` should subscribe to the local collection with TanStack DB live queries instead of starting its own Linear pagination loop.
+- The widget uses live database queries and paged results. Created and updated sorting use date indexes. Relevance, status, and alphabetical sorting scan the viewer scope in bounded batches.
 - Linear dashboard and settings UI should gate itself on `useAppAuth().value.linearAuthenticated` and render no Linear data controls when disconnected.
 - Use focused raw GraphQL when the dashboard only needs a compact row DTO.
 - If a compact assigned-ticket request receives `401`, refresh the native Linear credential and retry once with a new SDK client.
 - Fetch status `color`, `type`, and `position`; `position` is used for Linear-like status ordering.
 - Fetch assignee display fields and avatar fields for the row avatar.
 
-The current dashboard row DTO is intentionally small: identifier, title, created/updated timestamps, status, assignee, and nullable tracking fields. Linear fetches initialize tracking fields as empty; the dashboard fills them by merging Clockify ticket summaries keyed by Linear issue ID. Full issue descriptions, labels, comments, and project/cycle detail belong in future detail surfaces that actually need them.
+The dashboard row DTO is small: identifier, title, created/updated timestamps, status, assignee, and nullable tracking fields. Linear fetches initialize tracking fields as empty; the dashboard fills them by merging Clockify ticket summaries keyed by Linear issue ID. Full issue descriptions, labels, comments, and project/cycle detail belong in future detail surfaces that actually need them.
+
+A successful fetch retains older tickets that fall outside the fetch limit. These rows are last-known data and may no longer be assigned. Empty valid responses also retain old rows. Failed, malformed, or mixed-viewer responses do not change the cache. Disconnect removes the Linear rows.
+
+The app verifies the viewer for each session before it displays saved rows. A known viewer remains available after an offline fetch failure. A fresh offline launch cannot display the cache until a fetch verifies the viewer.
 
 Linear workflow states expose one `color` hex value. The API does not provide separate light/dark status tokens. Clockalong uses that color directly for the status badge background and computes a contrasting foreground locally.
 

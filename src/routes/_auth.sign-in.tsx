@@ -12,7 +12,7 @@ import { useAppAuth } from '../hooks/useAppAuth'
 import { queryClient, queryKeys } from '../lib/query-client'
 import { clearSyncedClockifyTimeEntries } from '../services/clockify/sync'
 import { clearSyncedGithubWorkItems } from '../services/github/sync'
-import { clearSyncedLinearTickets } from '../services/linear/sync'
+import { clearSyncedLinearTickets, withLinearSessionChange } from '../services/linear/sync'
 import { storage } from '../services/storage/config'
 import { auth, type ClockalongAuthProvider } from '../services/tauri/auth-client'
 import { useTelegram } from '../services/telegram/session-provider'
@@ -37,7 +37,7 @@ function SignInScreen() {
     setPendingProvider('linear')
 
     try {
-      const result = await auth.connectLinear()
+      const result = await withLinearSessionChange(() => auth.connectLinear())
       signInLog(`connectLinear: status=${result.status}`)
       appToast.success('Linear connected.')
     } catch (error) {
@@ -84,8 +84,11 @@ function SignInScreen() {
         return
       }
 
-      const result = await auth.disconnectLinear()
-      const clearedTickets = await clearSyncedLinearTickets()
+      const { result, clearedTickets } = await withLinearSessionChange(async () => {
+        const result = await auth.disconnectLinear()
+        const clearedTickets = await clearSyncedLinearTickets()
+        return { result, clearedTickets }
+      })
       signInLog(`disconnectProvider: linear disconnected revocation_status=${result.revocationStatus}`)
       signInLog(`disconnectProvider: cleared_linear_tickets=${clearedTickets}`)
       appToast.success('Linear disconnected.')

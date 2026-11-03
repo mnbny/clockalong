@@ -72,6 +72,7 @@ export const queryKeys = {
     workspaces: ['clockify', 'workspaces'] as const,
   },
   linear: {
+    all: ['linear'] as const,
     ticketSync: (keys?: QueryKeySegments<LinearTicketSyncQueryParams>) =>
       ['linear', 'ticket-sync', ...spreadQueryKeySegments(keys)] as const,
   },
