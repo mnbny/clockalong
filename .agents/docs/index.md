@@ -73,8 +73,8 @@ Add each document using this format:
 
 #### [telegram.md](./telegram.md)
 
-- Description: Telegram connections, selected-group read services, agent sends, and data boundaries.
-- Tags: `telegram`, `authentication`, `groups`, `mcp`, `realtime`, `files`, `cache`
+- Description: Telegram connections, persistent notifications, agent sends, and data boundaries.
+- Tags: `telegram`, `authentication`, `groups`, `notifications`, `mcp`, `realtime`, `files`, `cache`
 
 #### [linear.md](./linear.md)
 

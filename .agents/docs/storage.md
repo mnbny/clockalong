@@ -6,11 +6,11 @@ The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults 
 
 ## Settings backup
 
-The App settings section can download the raw `settings.json` snapshot and import it later. Import restores only the supported settings in the file. It ignores store metadata, unknown keys, and `quickTimersActiveEntry`; missing backup keys leave current settings unchanged.
+The App settings section can download the raw `settings.json` snapshot and import it later. Import restores only the supported settings in the file. It ignores store metadata, unknown keys, the notification snooze deadline, and `quickTimersActiveEntry`; missing backup keys leave current settings unchanged.
 
-The Reset action first downloads the same raw backup, then clears those supported settings. It does not affect credentials, synced caches, or `quickTimersActiveEntry`.
+The Reset action first downloads the same raw backup, then clears those supported settings. It does not affect credentials, synced caches, the notification snooze deadline, or `quickTimersActiveEntry`.
 
-Backups include Quick Timer presets and their last-used template values. They do not include Stronghold credentials or the local Clockify, Linear, and GitHub caches. The active Quick Timer association stays local because it refers to a specific Clockify entry in a specific workspace.
+Backups include Quick Timer presets and their last-used template values. They exclude Stronghold credentials, Telegram notifications, and the local Clockify, Linear, and GitHub caches. The active Quick Timer association stays local because it refers to a specific Clockify entry in a specific workspace.
 
 ## Keys
 
@@ -57,11 +57,25 @@ Telegram history, topics, group metadata, and selected-group sender data live on
 
 Avatar and preview bytes use a native disk cache that survives restarts. It stores no messages, credentials, or transfer references. Account, group, and image identity determine reuse. Storage is limited to 64 MiB and 1,024 images, with a 512 KiB limit per image. Eviction removes the least recently used images. Native code owns all paths and restricts directory and file access to the current user on Unix.
 
-Unlink, disconnect, and invalid-session cleanup remove cached images and invalidate handles before late downloads can write. Account or group changes discard the previous image cache. Normal teardown retains cached images. Cache failure falls back to a download.
+Unlink, disconnect, and invalid-session cleanup remove cached images and invalidate handles before late downloads can write. Account or group changes discard the previous image cache. Normal teardown retains cached images. Cache failure falls back to a download. Reading the saved group makes its cached images available before network restoration.
 
-Each account and group connection has a separate Query cache scope. Unlink, disconnect, invalid-session cleanup, and teardown cancel operations and remove that memory scope. Late responses cannot restore it. No interface preloads history, and the cache is not a persistent notification inbox.
+Full images for the attachment viewer use a separate memory cache. Hover and keyboard focus can preload them. Unused entries expire after 30 seconds. These images and their transfer references stay outside browser persistence, native disk storage, Settings backups, and MCP snapshots.
 
-Conversation data is excluded from Settings backups, browser persistence, and MCP snapshots. Native startup removes the obsolete app-owned full-media cache. This cleanup leaves credentials, the image cache, and existing user Downloads intact.
+Each account and group connection has a separate Query cache scope. Unlink, disconnect, invalid-session cleanup, and teardown cancel operations and remove that memory scope. Late responses cannot restore it. Notification collection uses a separate persistent store and does not depend on mounted history queries.
+
+Memory conversation records and private transfer references are excluded from Settings backups, browser persistence, and MCP snapshots. Native startup removes the obsolete app-owned full-media cache. This cleanup leaves credentials, the image cache, and existing user Downloads intact.
+
+## Telegram notifications
+
+The notification snooze deadline is a timestamp in local settings. It survives reloads and hides the feed until expiry without changing notification records. Expired timestamps are inactive. The raw settings export includes the deadline, but import and reset leave this temporary local state unchanged.
+
+The shared Dexie database stores compact notification content, sender data, topic labels, timestamps, attachment metadata, and local clear state. Account, group kind, group ID, and message ID define each record. The database stores no Telegram credentials, private access hashes, SDK messages, avatar references, or preview references.
+
+Clear timestamps preserve dismissed identities across restarts. A separate checkpoint records successful collection progress. Clear all changes one scope in a transaction; it never advances the collection checkpoint. Deleted source messages retain their notification identity until manual clearing.
+
+Normal teardown, unlink, and disconnect retain notification records and clear identities. Only the selected account and group can display their records. The feed can use the saved scope during a temporary restore failure. Notifications stay outside Settings backups and MCP snapshots. Browser storage remains subject to quota and eviction.
+
+Development replay uses a separate per-reload marker on records. Production visibility depends only on normal clear state.
 
 ## Local cache field budgets
 

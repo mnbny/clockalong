@@ -4,9 +4,9 @@
 
 Telegram is an optional account connection for one selected group. Settings provides controls for account login, session retry, disconnect, and group connection. Users need an existing Telegram account and the official Telegram phone app.
 
-The Dashboard header contains a Telegram icon button with no action or unread badge. There is no conversation interface, composer, attachment viewer, or download control. Account connection is available on the sign-in screen and in Settings. Group selection is available in Settings. Telegram account connection, saved sessions, and the local MCP tools work independently of Clockify authentication.
+A floating notification feed shows messages from other accounts in the selected group. Cards remain visible across routes until the user clears them. There is no conversation interface, composer, or file-download control. Account connection is available on the sign-in screen and in Settings. Group selection is available in Settings. Telegram account connection, saved sessions, and the local MCP tools work independently of Clockify authentication.
 
-The optional MCP server lists destinations and sends text or one local file within the selected group. It exposes no other groups or message history. Existing history, realtime, message projection, avatar, and preview services remain available for a later notification feed. That feed is not implemented.
+The optional MCP server lists destinations and sends text or one local file within the selected group. It exposes no other groups or message history. The notification collector uses selected-group history and realtime events. MCP sends from the connected account do not create notifications.
 
 ## Ownership
 
@@ -42,7 +42,7 @@ Settings accepts an existing invite link for a group the signed-in account alrea
 
 Basic groups and supergroups with or without topics are supported. Broadcast channels, gigagroups, monoforums, and inaccessible groups are rejected. A migrated basic group must be unlinked and connected again with its current invite link. Verification refreshes the title and whether the group has topics.
 
-Rust stores one group reference bound to the account in Stronghold, including private access data for supergroups. The provider exposes group identity, verification state, and scoped conversation operations. Invite links are temporary input and are not stored. Group data stays outside Settings backups, browser storage, and logs.
+Rust stores one group reference bound to the account in Stronghold, including private access data for supergroups. The provider exposes group identity, verification state, and scoped conversation operations. Invite links are temporary input and are not stored. The saved group reference stays outside Settings backups, browser storage, and logs. Notification records contain only the account and group identifiers needed for scope isolation.
 
 After account restore succeeds, the service verifies the saved group. Group failure keeps the selection for Retry and does not disconnect the account. Saved identity remains visible when account restore fails so Unlink works offline. Unlink removes only the local selection; it never leaves the Telegram group. If removal fails, conversation work stays stopped and the saved selection remains available for Retry or Unlink.
 
@@ -58,7 +58,29 @@ Realtime updates reconcile new messages, edits, deletions, sender changes, and m
 
 Routine metadata refreshes retain existing pages until replacement data arrives. Reconnects and detected update gaps reset pagination cursors. Temporary network failure can retain stale data; group access failure makes the service unavailable until retry. Supergroup update subscriptions belong to the service lifetime.
 
-No interface preloads history. Realtime reconciliation updates existing history queries; it does not create a notification inbox. Messages are not persisted across restarts. The service has no notification dismissal, clear state, or restart catch-up policy. Telegram read counters remain provider metadata, not local notification state.
+## Persistent notifications
+
+Group connection starts the collector independently of routes and Clockify authentication. Initial collection stores the last three eligible messages across all topics. Eligible messages exclude the connected account, outgoing messages, and service events. Subsequent collection retains new messages without a display limit or expiry.
+
+Dexie owns notification records and live visibility. Cards contain sender, topic, timestamp, text, and attachment metadata. Sender photos use the native image cache, with initials when a photo is unavailable. The feed has its own scroll container. Each card has a Clear control; Clear all stays below the scrolling cards. Ordinary app toasts use a separate surface.
+
+Snooze hides the feed for 15 minutes without clearing notifications or stopping collection. A saved wake-up timestamp preserves the remaining interval across reloads. The app root owns expiry and checks again on focus or visibility changes after sleep. New and retained notifications appear when the interval ends.
+
+Photos from the same Telegram album share a card within the same account, group, topic, and sender. Clearing that card clears its displayed messages together. Later arrivals remain visible.
+
+Image attachments appear as rounded thumbnails in a wrapping row. Clicking a thumbnail opens a zoomable lightbox with a dark backdrop and themed controls. Opening or closing the viewer does not clear the notification. Spoilers require an explicit reveal before thumbnail loading or preloading.
+
+Replies show the original sender and a short plain-text excerpt above the new message. The preview uses a retained notification when available, or fetches the source within the selected group. It does not create another notification. Unavailable replies show a placeholder, and quoted spoilers stay hidden. The quoted preview has no separate link.
+
+Supergroup cards can open their source message in the installed Telegram app, with topic context when available. Basic groups have no message-link control. Opening a source message does not clear its notification.
+
+Clearing records a local timestamp and keeps the message identity. Replayed history and later edits cannot restore a cleared card. Clear all changes the currently uncleared records in the selected scope in one transaction. Arrivals stored after that transaction remain visible. Clearing does not change Telegram read status.
+
+A separate collection checkpoint tracks the last successful history scan. Realtime messages do not advance this checkpoint. Restart, reconnect, and periodic scans collect missed messages without skipping gaps. A failed history scan preserves the previous checkpoint and cards. Restart and reconnect also refresh retained cards. Edits update existing content; source deletion leaves a Message deleted card until the user clears it.
+
+Saved cards remain visible during a temporary connection failure when the saved account and group scope is known. Unlink or disconnect hides that scope. Its records and clear identities remain local, so reconnecting the same account and group does not restore cleared cards. A different account or group cannot see those records.
+
+An optional local development flag shows the latest three eligible past messages on each app reload. A per-reload marker controls this exception without changing normal clear timestamps. Clearing within that reload survives retries and reconnects. Production builds ignore the flag.
 
 ## Agent sends
 
@@ -78,9 +100,11 @@ MCP accepts one absolute local file path through a bounded native reader. Files 
 
 MP4 classification uses a browser decoder without playback. Failed or stalled probes use the document path. Media mode does not promise compression or video transcoding. Upload limits also follow Telegram's account configuration within the installed SDK's supported limits.
 
-Read services fetch only bounded avatars and attachment previews. They preserve attachment metadata and incoming protection rules. Protected and ephemeral content has no downloadable preview. An expired image reference permits one scoped refresh and retry. The service cannot download, resume, save, or display full-size attachments.
+Read services fetch bounded avatars, attachment previews, and viewable images. Photos and JPEG, PNG, WebP, and GIF image documents support viewing up to 20 MiB. Other attachments remain metadata with access through Telegram. Protected and ephemeral content has no downloadable image or preview. An expired image reference permits one scoped refresh and retry.
 
-Avatars and previews use a native disk cache before a download. Telegram image identity determines reuse; changed images use new entries. The cache survives restarts for the same account and group. It stores only image bytes, with limits of 512 KiB per image, 64 MiB total, and 1,024 images. Eviction removes the least recently used images. Cache failures permit normal downloads.
+Hover or keyboard focus preloads a full image in the background. Opening the viewer reuses that request. Full images stay in memory and expire after 30 seconds without an active viewer. They do not enter the native disk cache. Changing the connection cancels its image requests. Closing the viewer releases its image URL.
+
+Avatars and previews use a native disk cache before a download. Saved images can render while Telegram reconnects; a network connection is required only for missing images. Telegram image identity determines reuse; changed images use new entries. The cache survives restarts for the same account and group. It stores only image bytes, with limits of 512 KiB per image, 64 MiB total, and 1,024 images. Eviction removes the least recently used images. Cache failures permit normal downloads.
 
 Unlink, disconnect, and revoked-session cleanup remove the image cache and invalidate active handles. Late downloads cannot restore removed entries. A different account or group cannot reuse the previous cache. Normal teardown retains it. The installed SDK cannot download files that require its unsupported CDN redirect path.
 
@@ -98,4 +122,4 @@ Use one Telegram-enabled Clockalong instance. Auth development requires a full r
 
 The MVP excludes phone/code login, password recovery, cross-process coordination, and seamless hot reload. Browser preview renders a disconnected fallback and explains that login requires the desktop app.
 
-Message search, reactions, typing indicators, topic administration, and notification UI are outside the current scope.
+Message search, reactions, typing indicators, and topic administration are outside the current scope.
