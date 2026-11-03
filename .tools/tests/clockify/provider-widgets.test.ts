@@ -70,7 +70,7 @@ test.each([
   let renders = 0
   const read =
     _name === 'Linear'
-      ? vi.spyOn(linearQueries, 'queryLinearPage').mockRejectedValue(new Error('Totals unavailable'))
+      ? vi.spyOn(linearQueries, 'queryLinearTickets').mockRejectedValue(new Error('Totals unavailable'))
       : vi.spyOn(entryQueries, 'queryClockifySummaries').mockRejectedValue(new Error('Totals unavailable'))
   container = document.createElement('div')
   document.body.append(container)
@@ -101,7 +101,7 @@ test.each([
   expect(renders).toBeLessThan(60)
   const callsBeforeRetry = read.mock.calls.length
   if (_name === 'Linear')
-    vi.mocked(linearQueries.queryLinearPage).mockResolvedValue({ rows: [], hasMore: false, reset: false })
+    vi.mocked(linearQueries.queryLinearTickets).mockResolvedValue({ rows: [], activeId: undefined })
   else vi.mocked(entryQueries.queryClockifySummaries).mockResolvedValue({})
   const retry = [...container!.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Retry')!
   await act(async () => retry.click())

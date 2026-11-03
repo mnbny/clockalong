@@ -5,7 +5,7 @@ import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
 import { IconExternalLink, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
 import { useClockifyTimerProject } from '../hooks/useClockifyTimerProject'
@@ -18,7 +18,7 @@ import { MissingClockifyProjectError } from '../services/clockify/time-entries'
 import { selectClockifyWorkspace } from '../services/clockify/workspaces'
 import { db } from '../services/db'
 import { useLinearSync } from '../services/linear/sync'
-import { type LinearPage, type LinearPageCursor, queryLinearPage } from '../services/linear/ticket-queries'
+import { queryLinearTickets } from '../services/linear/ticket-queries'
 import {
   getLinearTicketSortOrderLabel,
   type LinearTicketSortOrderOption,
@@ -195,40 +195,18 @@ function LinearWidgetContent() {
     const runningEntries = runningEntryQuery.data ?? []
     return runningEntries.find(entry => entry.userId === clockifyUserQuery.data?.id) ?? runningEntries[0] ?? null
   }, [clockifyUserQuery.data?.id, runningEntryQuery.data])
-  const filterKey = JSON.stringify({
-    viewerId: linearViewerId,
-    sortOrder: linearTicketSortOrder,
-    showAll: showAllLinearTickets,
-    userId: clockifyUserQuery.data?.id,
-    workspaceId: selectedClockifyWorkspace?.id,
-    runningEntry,
-  })
-  const initialNow = useMemo(() => Date.now(), [filterKey])
-  const [pagination, setPagination] = useState<{
-    key: string
-    cursors: LinearPageCursor[]
-    now: number
-    linearRevision?: number
-    clockifyRevision?: number
-  }>({ key: filterKey, cursors: [], now: initialNow })
-  const cursors = pagination.key === filterKey ? pagination.cursors : []
-  const cursor = cursors[cursors.length - 1]
-  const pageNow = pagination.key === filterKey ? pagination.now : initialNow
-  const readPage = useCallback(
+  const readTickets = useCallback(
     (signal: AbortSignal) => {
-      if (!linearViewerId)
-        return Promise.resolve<LinearPage>({ rows: emptyLinearTickets, hasMore: false, reset: false })
+      if (!linearViewerId) return Promise.resolve({ rows: emptyLinearTickets, activeId: undefined })
       const userId = clockifyUserQuery.data?.id
       const workspaceId = selectedClockifyWorkspace?.id
-      return queryLinearPage(db, {
+      return queryLinearTickets(db, {
         viewerId: linearViewerId,
         clockifyScope: userId && workspaceId ? { userId, workspaceId } : null,
         runningEntries: runningEntry ? [runningEntry] : [],
         sortOrder: linearTicketSortOrder,
         showAll: showAllLinearTickets,
-        now: new Date(pageNow),
-        limit: 50,
-        cursor,
+        now: new Date(),
         signal,
       })
     },
@@ -239,38 +217,15 @@ function LinearWidgetContent() {
       runningEntry,
       linearTicketSortOrder,
       showAllLinearTickets,
-      pageNow,
-      cursor,
     ],
   )
-  const page = useDexieQuery(
-    readPage,
+  const result = useDexieQuery(
+    readTickets,
     JSON.stringify([linearViewerId, clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id]),
   )
-  useEffect(() => {
-    if (pagination.key !== filterKey) setPagination({ key: filterKey, cursors: [], now: initialNow })
-    else if (!page.isPending && page.data?.linearRevision !== undefined && page.data.clockifyRevision !== undefined) {
-      const { linearRevision, clockifyRevision } = page.data
-      const changed =
-        pagination.linearRevision !== undefined &&
-        (pagination.linearRevision !== linearRevision || pagination.clockifyRevision !== clockifyRevision)
-      if (changed || page.data.reset)
-        setPagination({ key: filterKey, cursors: [], now: Date.now(), linearRevision, clockifyRevision })
-      else if (pagination.linearRevision === undefined)
-        setPagination(current => ({ ...current, linearRevision, clockifyRevision }))
-    }
-  }, [
-    pagination.key,
-    pagination.linearRevision,
-    pagination.clockifyRevision,
-    filterKey,
-    initialNow,
-    page.data,
-    page.isPending,
-  ])
-  const tickets = page.data?.rows ?? emptyLinearTickets
+  const tickets = result.data?.rows ?? emptyLinearTickets
   const runningEntryId = runningEntry?.id ?? null
-  const activeLinearIssueId = page.data?.activeId
+  const activeLinearIssueId = result.data?.activeId
   const startTrackingMutation = useMutation({
     mutationFn: async (ticket: LinearTicket) => {
       clockifyTimerLog('start mutation requested', {
@@ -509,44 +464,16 @@ function LinearWidgetContent() {
           </table>
         </div>
 
-        {!!page.data && !page.data.reset && (
-          <div className="flex justify-end gap-2 px-4 py-2">
-            <button
-              className="btn btn-sm"
-              type="button"
-              disabled={page.isPending || !cursors.length}
-              onClick={() =>
-                setPagination(current => ({ ...current, key: filterKey, cursors: cursors.slice(0, -1), now: pageNow }))
-              }>
-              Previous
-            </button>
-            <button
-              className="btn btn-sm"
-              type="button"
-              disabled={page.isPending || !page.data.hasMore}
-              onClick={() => {
-                if (page.data?.cursor)
-                  setPagination(current => ({
-                    ...current,
-                    key: filterKey,
-                    cursors: [...cursors, page.data!.cursor!],
-                    now: pageNow,
-                  }))
-              }}>
-              Next
-            </button>
-          </div>
-        )}
         {linearSyncQuery.isLoading && (
           <div className="grid min-h-48 place-items-center">
             <span className="loading loading-spinner loading-md" />
           </div>
         )}
 
-        {!!page.error && (
+        {!!result.error && (
           <div role="alert" className="text-error px-4 py-2 text-sm">
-            Could not load Linear tickets. {getErrorMessage(page.error)}{' '}
-            <button className="btn btn-sm" type="button" onClick={page.retry}>
+            Could not load Linear tickets. {getErrorMessage(result.error)}{' '}
+            <button className="btn btn-sm" type="button" onClick={result.retry}>
               Retry
             </button>
           </div>
@@ -558,7 +485,7 @@ function LinearWidgetContent() {
           </div>
         )}
 
-        {linearSyncQuery.isSuccess && !!linearViewerId && !!page.data && !page.error && tickets.length === 0 && (
+        {linearSyncQuery.isSuccess && !!linearViewerId && !!result.data && !result.error && tickets.length === 0 && (
           <div className="text-base-content/60 grid min-h-48 place-items-center px-4 text-center text-sm">
             No assigned tickets found.
           </div>

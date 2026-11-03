@@ -14,25 +14,13 @@ import { resolveClockifyEntryOwners } from '../clockify/work-item-summaries'
 import { toLinearTicket } from './tickets'
 import { compareLinearTickets, isLinearTicketTerminal } from './tickets-sorting'
 
-export type LinearPageCursor = { ticket: LinearTicket; linearRevision: number; clockifyRevision: number }
-export type LinearPage = {
-  rows: LinearTicket[]
-  hasMore: boolean
-  reset: boolean
-  activeId?: string
-  cursor?: LinearPageCursor
-  linearRevision?: number
-  clockifyRevision?: number
-}
-type PageOptions = {
+type TicketQueryOptions = {
   viewerId: string
   clockifyScope: ClockifyScope | null
   runningEntries: TimeEntryWithRatesDtoV1[]
   sortOrder: LinearTicketSortOrderOption
   showAll: boolean
   now: Date
-  limit: number
-  cursor?: LinearPageCursor
   deadlineAt?: number
   signal?: AbortSignal
 }
@@ -85,8 +73,8 @@ function withSummary(ticket: LinearTicket, summaries: ClockifyWorkItemTimeSummar
   return { ...ticket, ...summaries[ticket.id] }
 }
 
-export async function queryLinearPage(database: DB, options: PageOptions): Promise<LinearPage> {
-  const { viewerId, clockifyScope, runningEntries, sortOrder, showAll, now, limit, deadlineAt, signal } = options
+export async function queryLinearTickets(database: DB, options: TicketQueryOptions) {
+  const { viewerId, clockifyScope, runningEntries, sortOrder, showAll, now, deadlineAt, signal } = options
   return database.transaction(
     'r',
     database.linearTickets,
@@ -95,124 +83,52 @@ export async function queryLinearPage(database: DB, options: PageOptions): Promi
     database.clockifyEntryRefs,
     database.clockifyCacheMeta,
     async () => {
-      const linearRevision = (await database.linearCacheMeta.get('state'))?.revision ?? 0
-      const clockifyRevision = (await database.clockifyCacheMeta.get('revision'))?.revision ?? 0
-      const reset =
-        !!options.cursor &&
-        (options.cursor.linearRevision !== linearRevision || options.cursor.clockifyRevision !== clockifyRevision)
-      const cursor = reset ? undefined : options.cursor
-      const active = runningEntries[0]?.id
+      checkDeadline(deadlineAt, signal)
+      // Track updates across the async summary reads, whose dependencies can escape the live query.
+      await database.linearCacheMeta.get('state')
+      await database.clockifyCacheMeta.get('revision')
+      const activeId = runningEntries[0]?.id
         ? (await Dexie.waitFor(resolveLinearEntryOwners(database, viewerId, [runningEntries[0]]))).get(
             runningEntries[0].id,
           )
         : undefined
-      const compare = (a: LinearTicket, b: LinearTicket) =>
-        compareLinearTickets(a, b, { sortOrder, activeLinearIssueId: active }, now.getTime())
-      const selected: LinearTicket[] = []
-      const dateField = sortOrder === 'created' ? 'createdAtMs' : sortOrder === 'updated' ? 'updatedAtMs' : null
-      const indexName = `[viewerId+${dateField}+id]`
-      let position: [number, string] | undefined
-      let done = false
-      while (dateField && !done) {
+      const rows: LinearTicket[] = []
+      let after: [number, string] | undefined
+      while (true) {
         checkDeadline(deadlineAt, signal)
-        const cursorDate = cursor
-          ? Date.parse(dateField === 'createdAtMs' ? cursor.ticket.createdAt : cursor.ticket.updatedAt)
-          : NaN
-        const upper = position
-          ? [viewerId, position[0], position[1]]
-          : cursor
-            ? [viewerId, Number.isFinite(cursorDate) ? cursorDate : 0, Dexie.maxKey]
-            : [viewerId, Dexie.maxKey]
-        const lower = [viewerId, Dexie.minKey, Dexie.minKey]
-        const collection = database.linearTickets.where(indexName).between(lower, upper, true, !position)
-        const batch = await collection.reverse().limit(128).toArray()
+        const batch = await database.linearTickets
+          .where('[viewerId+sequence+id]')
+          .between(
+            [viewerId, after?.[0] ?? Dexie.minKey, after?.[1] ?? Dexie.minKey],
+            [viewerId, Dexie.maxKey],
+            !after,
+            true,
+          )
+          .limit(128)
+          .toArray()
         if (!batch.length) break
         const candidates = batch
           .map(row => toLinearTicket(row.ticket))
           .filter(ticket => showAll || !isLinearTicketTerminal(ticket))
-        for (const ticket of candidates) {
-          if (cursor && compare(ticket, cursor.ticket) <= 0) continue
-          selected.push(ticket)
-        }
-        selected.sort(compare)
-        selected.length = Math.min(selected.length, limit + 1)
-        const last = batch[batch.length - 1]
-        position = [last[dateField], last.id]
-        if (selected.length > limit) {
-          const worst = selected[selected.length - 1]
-          const parsed = Date.parse(dateField === 'createdAtMs' ? worst.createdAt : worst.updatedAt)
-          const worstDate = Number.isFinite(parsed) ? parsed : 0
-          if (position[0] < worstDate) done = true
-        }
-      }
-      if (!dateField) {
-        let after: [number, string] | undefined
-        while (true) {
-          checkDeadline(deadlineAt, signal)
-          const batch = await database.linearTickets
-            .where('[viewerId+sequence+id]')
-            .between(
-              [viewerId, after?.[0] ?? Dexie.minKey, after?.[1] ?? Dexie.minKey],
-              [viewerId, Dexie.maxKey],
-              !after,
-              true,
+        const summaries = clockifyScope
+          ? await queryLinearSummaries(
+              database,
+              viewerId,
+              clockifyScope,
+              candidates,
+              runningEntries,
+              now,
+              deadlineAt,
+              signal,
             )
-            .limit(128)
-            .toArray()
-          if (!batch.length) break
-          const candidates = batch
-            .map(row => toLinearTicket(row.ticket))
-            .filter(ticket => showAll || !isLinearTicketTerminal(ticket))
-          const summaries =
-            sortOrder === 'custom' && clockifyScope
-              ? await queryLinearSummaries(
-                  database,
-                  viewerId,
-                  clockifyScope,
-                  candidates,
-                  runningEntries,
-                  now,
-                  deadlineAt,
-                  signal,
-                )
-              : {}
-          for (const ticket of candidates) {
-            const candidate = withSummary(ticket, summaries)
-            if (cursor && compare(candidate, cursor.ticket) <= 0) continue
-            selected.push(candidate)
-          }
-          selected.sort(compare)
-          selected.length = Math.min(selected.length, limit + 1)
-          const last = batch[batch.length - 1]
-          after = [last.sequence, last.id]
-        }
+          : {}
+        rows.push(...candidates.map(ticket => withSummary(ticket, summaries)))
+        const last = batch[batch.length - 1]
+        after = [last.sequence, last.id]
       }
-      const rows = selected.slice(0, limit)
-      if (sortOrder !== 'custom' && clockifyScope) {
-        const summaries = await queryLinearSummaries(
-          database,
-          viewerId,
-          clockifyScope,
-          rows,
-          runningEntries,
-          now,
-          deadlineAt,
-          signal,
-        )
-        rows.forEach((row, index) => {
-          rows[index] = withSummary(row, summaries)
-        })
-      }
-      const last = rows[rows.length - 1]
-      return {
-        rows,
-        hasMore: selected.length > limit,
-        reset,
-        linearRevision,
-        clockifyRevision,
-        activeId: active,
-        cursor: last ? { ticket: last, linearRevision, clockifyRevision } : undefined,
-      }
+      checkDeadline(deadlineAt, signal)
+      rows.sort((a, b) => compareLinearTickets(a, b, { sortOrder, activeLinearIssueId: activeId }, now.getTime()))
+      return { rows, activeId }
     },
   )
 }

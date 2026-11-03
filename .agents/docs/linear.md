@@ -49,7 +49,7 @@ Implementation constraints:
 - `linearTicketSyncOrderBy` maps to Linear's `PaginationOrderBy` field for the fetch. Current exposed values are `createdAt` and `updatedAt`.
 - `viewer.assignedIssues` does not expose a sort-direction argument. Do not treat client-side ordering as an API fetch direction.
 - `linearTicketSyncInterval` controls the provider's background sync interval.
-- The widget uses live database queries and paged results. Created and updated sorting use date indexes. Relevance, status, and alphabetical sorting scan the viewer scope in bounded batches.
+- The widget shows all saved tickets that match its filters in one sorted list, without pagination. Live database queries scan the viewer scope in bounded batches.
 - Linear dashboard and settings UI should gate itself on `useAppAuth().value.linearAuthenticated` and render no Linear data controls when disconnected.
 - Use focused raw GraphQL when the dashboard only needs a compact row DTO.
 - If a compact assigned-ticket request receives `401`, refresh the native Linear credential and retry once with a new SDK client.

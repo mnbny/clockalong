@@ -67,9 +67,9 @@ Use Day.js relative time for last-tracked values, `humanize-duration` for total 
 
 The dashboard Linear section is a data table, not a kanban or full Linear browser. Keep row density high enough for scanning.
 
-The Linear widget uses paged live queries on the shared ticket database. Sync stores compact tickets for the verified viewer. The sync settings control the fetch. Older retained tickets remain visible as last-known data.
+The Linear widget shows all saved tickets that match its filters, without pagination. Live queries update the sorted list when tickets or tracked time change. Sync stores compact tickets for the verified viewer. The sync settings control the fetch. Older retained tickets remain visible as last-known data.
 
-Local lists retain their last result while display filters, sorting, or pages change. The new result replaces the visible rows when the read completes. Account, workspace, and repository-scope changes clear the previous result. Paging controls wait for the new result, and local read errors provide a retry action.
+Local lists retain their last result while display filters or sorting change. GitHub also retains its last result during page changes. The new result replaces the visible rows when the read completes. Account, workspace, and repository-scope changes clear the previous result. GitHub paging controls wait for the new result. Local read errors provide a retry action.
 
 Current columns:
 

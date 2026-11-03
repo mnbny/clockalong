@@ -1,4 +1,3 @@
-import type { LinearTicketSortOrderOption } from '../../../src/services/linear/ticket-settings'
 import type { AssignedIssueNode } from '../../../src/services/linear/tickets'
 
 import { liveQuery } from 'dexie'
@@ -7,9 +6,9 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { createClockifyEntryCache } from '../../../src/services/clockify/entry-cache'
 import { DB } from '../../../src/services/db'
 import { createLinearTicketCache } from '../../../src/services/linear/ticket-cache'
-import { queryLinearMcpRows, queryLinearPage } from '../../../src/services/linear/ticket-queries'
+import { queryLinearMcpRows, queryLinearTickets } from '../../../src/services/linear/ticket-queries'
 import { toLinearTicket } from '../../../src/services/linear/tickets'
-import { compareLinearTickets } from '../../../src/services/linear/tickets-sorting'
+import { compareLinearTickets, isLinearTicketTerminal } from '../../../src/services/linear/tickets-sorting'
 
 const caches: ReturnType<typeof createLinearTicketCache>[] = []
 function cache(name = crypto.randomUUID()) {
@@ -83,41 +82,38 @@ test('MCP search applies viewer and closed filters before its output limit', asy
   ])
 })
 
-test.each(['updated', 'custom'] as const)(
-  '%s pages match the full comparator across equal-date boundaries',
-  async (sortOrder: LinearTicketSortOrderOption) => {
-    const c = cache()
-    const rows = Array.from({ length: 160 }, (_, i) =>
-      issue(
-        String(i).padStart(3, '0'),
-        i < 120 ? '2026-01-01T00:00:00Z' : '2026-01-02T00:00:00Z',
-        i % 5 === 0 ? 'completed' : 'started',
-      ),
-    )
-    await c.replace('viewer', rows, c.beginSync(), 'now')
-    const expected = rows
-      .map(toLinearTicket)
-      .sort((a, b) => compareLinearTickets(a, b, { sortOrder }, Date.parse('2026-01-10')))
-      .map(row => row.id)
-    const actual: string[] = []
-    let cursor
-    do {
-      const page = await queryLinearPage(c.database, {
-        viewerId: 'viewer',
-        clockifyScope: null,
-        runningEntries: [],
-        sortOrder,
-        showAll: true,
-        now: new Date('2026-01-10'),
-        limit: 13,
-        cursor,
-      })
-      actual.push(...page.rows.map(row => row.id))
-      cursor = page.hasMore ? page.cursor : undefined
-    } while (cursor)
-    expect(actual).toEqual(expected)
-  },
-)
+test.each(
+  (['alphabetical', 'created', 'custom', 'status', 'updated'] as const).flatMap(sortOrder =>
+    [false, true].map(showAll => ({ sortOrder, showAll })),
+  ),
+)('returns every matching ticket in $sortOrder order with showAll=$showAll', async ({ sortOrder, showAll }) => {
+  const c = cache()
+  const rows = Array.from({ length: 320 }, (_, i) =>
+    issue(
+      String(i).padStart(3, '0'),
+      i < 220 ? '2026-01-01T00:00:00Z' : '2026-01-02T00:00:00Z',
+      i % 5 === 0 ? 'completed' : 'started',
+    ),
+  )
+  await c.replace('viewer', rows, c.beginSync(), 'now')
+  const foreign = createLinearTicketCache(c.database)
+  await foreign.replace('other', [issue('foreign')], foreign.beginSync(), 'now')
+  const expected = rows
+    .map(toLinearTicket)
+    .filter(ticket => showAll || !isLinearTicketTerminal(ticket))
+    .sort((a, b) => compareLinearTickets(a, b, { sortOrder }, Date.parse('2026-01-10')))
+    .map(row => row.id)
+  const result = await queryLinearTickets(c.database, {
+    viewerId: 'viewer',
+    clockifyScope: null,
+    runningEntries: [],
+    sortOrder,
+    showAll,
+    now: new Date('2026-01-10'),
+  })
+  expect(result.rows.map(row => row.id)).toEqual(expected)
+  expect(result.rows).toHaveLength(showAll ? 320 : 256)
+})
 
 test('a newer sync aborts an in-progress write transaction', async () => {
   const c = cache()
@@ -151,16 +147,15 @@ test('live relevance and summaries move with a tracked entry reference in the se
   await clockify.upsert(entry('ref:linear:acme:TASK-2', other), other)
   const observed: Array<Array<[string, number | null]>> = []
   const subscription = liveQuery(() =>
-    queryLinearPage(c.database, {
+    queryLinearTickets(c.database, {
       viewerId: 'viewer',
       clockifyScope: scope,
       runningEntries: [],
       sortOrder: 'custom',
       showAll: true,
       now: new Date('2026-01-02'),
-      limit: 50,
     }),
-  ).subscribe(page => observed.push(page.rows.map(row => [row.id, row.totalTrackedSeconds])))
+  ).subscribe(result => observed.push(result.rows.map(row => [row.id, row.totalTrackedSeconds])))
   try {
     await vi.waitFor(() => expect(observed).toContainEqual(expect.arrayContaining([['1', 3600]])))
     await clockify.upsert(entry('ref:linear:acme:TASK-2'), scope)

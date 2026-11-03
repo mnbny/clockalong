@@ -129,7 +129,7 @@ test('widget displays retained rows beyond the fetch limit and sorts them and Sh
   expect(rowCommits.every(count => count > 0)).toBe(true)
 })
 
-test('paging resets when filters change and when a live ticket edit changes ordering', async () => {
+test('all matching rows stay visible across filters and live edits without pagination', async () => {
   const tickets = Array.from({ length: 56 }, (_, index) =>
     ticket(
       String(index).padStart(2, '0'),
@@ -162,17 +162,15 @@ test('paging resets when filters change and when a live ticket edit changes orde
     container!.querySelector<HTMLInputElement>(
       'input[aria-label="Show all Linear tickets, including terminal states"]',
     )!
-  await vi.waitFor(() => expect(button('Next')?.disabled).toBe(false))
+  const rowCount = () => container!.querySelectorAll('tbody tr').length
+  await vi.waitFor(() => expect(rowCount()).toBe(55))
+  expect(button('Next')).toBeUndefined()
+  expect(button('Previous')).toBeUndefined()
   rowCommits = []
-  await act(async () => button('Next').click())
-  await vi.waitFor(() => expect(button('Previous').disabled).toBe(false))
   await act(async () => showAll().click())
-  await vi.waitFor(() => expect(button('Previous').disabled).toBe(true))
+  await vi.waitFor(() => expect(rowCount()).toBe(56))
   await act(async () => showAll().click())
-  await vi.waitFor(() => expect(button('Previous').disabled).toBe(true))
-  await vi.waitFor(() => expect(button('Next').disabled).toBe(false))
-  await act(async () => button('Next').click())
-  await vi.waitFor(() => expect(button('Previous').disabled).toBe(false))
+  await vi.waitFor(() => expect(rowCount()).toBe(55))
   await act(async () =>
     linearTicketCache.replace(
       'viewer',
@@ -181,7 +179,7 @@ test('paging resets when filters change and when a live ticket edit changes orde
       'later',
     ),
   )
-  await vi.waitFor(() => expect(button('Previous').disabled).toBe(true))
-  expect(container!.textContent).toContain('Updated live')
+  await vi.waitFor(() => expect(container!.textContent).toContain('Updated live'))
+  expect(rowCount()).toBe(55)
   expect(rowCommits.every(count => count > 0)).toBe(true)
 })
