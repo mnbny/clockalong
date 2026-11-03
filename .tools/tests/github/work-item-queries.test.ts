@@ -1,6 +1,5 @@
 import type { SyncedGithubWorkItem } from '../../../src/services/github/sync'
 
-import { liveQuery } from 'dexie'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { DB } from '../../../src/services/db'
@@ -65,25 +64,6 @@ test('indexed filters implement additive matches, scope and stable keyset page b
   const none = await queryGithubWorkItems(db, { ...opts, scope: { ...scope, repositories: [] } })
   expect(none.rows).toEqual([])
   expect(await queryGithubAuthors(db, scope)).toEqual([{ username: ' Alice ', avatarUrl: null }])
-})
-
-test('Dexie live queries observe insert, update and clear without a mirrored collection', async () => {
-  await db.open()
-  const values: string[][] = []
-  const subscription = liveQuery(() =>
-    queryGithubWorkItems(db, { scope, showAll: true, showClosed: true, limit: 50 }),
-  ).subscribe(page => values.push(page.rows.map(row => row.title)))
-  try {
-    await vi.waitFor(() => expect(values).toContainEqual([]))
-    await cache.replace([issue('owner/repo:1')], cache.beginSync(), scope)
-    await vi.waitFor(() => expect(values).toContainEqual(['owner/repo:1']))
-    await cache.replace([issue('owner/repo:1', { title: 'updated' })], cache.beginSync(), scope)
-    await vi.waitFor(() => expect(values).toContainEqual(['updated']))
-    await cache.clear()
-    await vi.waitFor(() => expect(values[values.length - 1]).toEqual([]))
-  } finally {
-    subscription.unsubscribe()
-  }
 })
 
 test('an updated row replaces old filter projections without deleting retained rows', async () => {

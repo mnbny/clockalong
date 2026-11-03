@@ -64,9 +64,11 @@ test('scope changes hide previous rows immediately and ignore an abandoned query
   const filterGate = deferred()
   const accountGate = deferred()
   let oldSignal: AbortSignal | undefined
+  let currentSignal: AbortSignal | undefined
   function Harness({ scope, filter }: { scope: string; filter: string }) {
     const query = useCallback(
       async (signal: AbortSignal) => {
+        currentSignal = signal
         if (filter === 'pending') {
           oldSignal = signal
           await Promise.resolve(filterGate.promise)
@@ -96,6 +98,9 @@ test('scope changes hide previous rows immediately and ignore an abandoned query
   expect(container.textContent).toBe('loading')
   await act(async () => accountGate.resolve())
   await vi.waitFor(() => expect(container!.textContent).toBe('other/new'))
+  await act(async () => root?.unmount())
+  root = undefined
+  expect(currentSignal!.aborted).toBe(true)
 })
 
 test('retry reopens after a failed upgrade, reports another failure and preserves saved rows', async () => {

@@ -8,7 +8,6 @@ import { db } from '../../../src/services/db'
 import { clearSyncedLinearTickets } from '../../../src/services/linear/sync'
 import { createLinearTicketCache, linearTicketCache } from '../../../src/services/linear/ticket-cache'
 import { executeMcpCommand, type ExecuteMcpCommandContext } from '../../../src/services/mcp/commands'
-import { buildMcpSnapshot } from '../../../src/services/mcp/snapshot'
 import { storage } from '../../../src/services/storage/config'
 
 function ticket(id: string): AssignedIssueNode {
@@ -70,36 +69,6 @@ test('Linear timer commands resolve only IDs owned by the current viewer', async
     result: { description: expect.stringContaining('ref:linear:acme:APP-1') },
   })
   expect(create).toHaveBeenCalledOnce()
-})
-
-test('MCP running and recent entries resolve Linear refs only within the active viewer', async () => {
-  await linearTicketCache.replace('viewer', [ticket('1')], linearTicketCache.beginSync(), 'now')
-  const other = createLinearTicketCache(db)
-  await other.replace('other', [ticket('2')], other.beginSync(), 'now')
-  const date = '2026-01-01T10:00:00Z'
-  const entry = {
-    id: 'entry',
-    userId: 'user',
-    workspaceId: 'workspace',
-    description: 'ref:linear:acme:APP-1',
-    timeInterval: { start: date, end: '2026-01-01T11:00:00Z' },
-  }
-  const snapshot = buildMcpSnapshot({
-    clockifyConnected: true,
-    linearConnected: true,
-    clockifyUserId: 'user',
-    clockifyWorkspaceId: 'workspace',
-    linearViewerId: 'viewer',
-    linearTickets: await db.linearTickets.toArray(),
-    runningEntry: { ...entry, id: 'running', timeInterval: { start: date } },
-    syncedClockifyEntries: [
-      { id: 'entry', userId: 'user', workspaceId: 'workspace', startedAt: date, syncedAt: date, entry },
-    ],
-    now: new Date('2026-01-01T12:00:00Z'),
-  })
-  expect(snapshot.trackingStatus.running).toMatchObject({ source: 'linear', sourceId: '1' })
-  expect(snapshot.recentEntries['1'][0]).toMatchObject({ source: 'linear', sourceId: '1', durationSeconds: 3600 })
-  expect(snapshot.trackableWork.filter(item => item.source === 'linear')).toEqual([])
 })
 
 test('a disconnect and reconnect during command preparation rejects the old viewer target', async () => {

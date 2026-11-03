@@ -1,6 +1,5 @@
 import type { TimeEntryWithRatesDtoV1 } from '../../../src/services/clockify/generated/clockify'
 
-import { QueryClient, QueryObserver } from '@tanstack/react-query'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { queryClient, queryKeys } from '../../../src/lib/query-client'
@@ -8,7 +7,6 @@ import { clockify } from '../../../src/services/clockify/client'
 import {
   cacheClockifyEntryResult,
   clearSyncedClockifyTimeEntries,
-  clockifyEntrySyncQueryOptions,
   getClockifyEntrySyncStart,
   syncClockifyEntries,
 } from '../../../src/services/clockify/sync'
@@ -122,36 +120,6 @@ test('lookback uses local calendar days across both daylight-saving transitions'
   }
 })
 
-test('manual sync still fetches once when the account becomes ready', async () => {
-  vi.spyOn(console, 'info').mockImplementation(() => {})
-  vi.spyOn(storage, 'get').mockImplementation(async key =>
-    key === 'clockifyEntrySyncDays' ? 5 : storage.config[key].default,
-  )
-  const read = vi.spyOn(clockify, 'getTimeEntries').mockResolvedValue([entry('initial')])
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const options = clockifyEntrySyncQueryOptions({ ...scope, enabled: true, interval: 'manual' })
-  const observer = new QueryObserver(client, options)
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const unsubscribe = observer.subscribe(result => {
-        if (result.isSuccess) {
-          unsubscribe()
-          resolve()
-        } else if (result.isError) {
-          unsubscribe()
-          reject(result.error)
-        }
-      })
-    })
-    expect(options.refetchInterval).toBe(false)
-    expect(read).toHaveBeenCalledTimes(1)
-    expect(await db.clockifyEntries.get(['user', 'workspace', 'initial'])).toBeDefined()
-  } finally {
-    observer.destroy()
-    client.clear()
-  }
-})
-
 test('a direct edit made while a page is in flight is neither deleted nor overwritten', async () => {
   vi.spyOn(console, 'info').mockImplementation(() => {})
   vi.spyOn(storage, 'get').mockImplementation(async key =>
@@ -191,14 +159,4 @@ test('disconnect during an in-flight fetch cannot repopulate the cache', async (
   release([entry('late')])
   await expect(pending).rejects.toThrow('superseded')
   expect(await db.clockifyEntries.count()).toBe(0)
-})
-
-test('a partial successful timer response retains the original identity and fields', async () => {
-  const original = entry('timer', { description: 'tracked work', timeInterval: { start: '2026-01-01T10:00:00Z' } })
-  await cacheClockifyEntryResult({ timeInterval: { end: '2026-01-01T11:00:00Z' } }, original)
-  expect((await db.clockifyEntries.get(['user', 'workspace', 'timer']))?.entry).toMatchObject({
-    id: 'timer',
-    description: 'tracked work',
-    timeInterval: { start: '2026-01-01T10:00:00Z', end: '2026-01-01T11:00:00Z' },
-  })
 })

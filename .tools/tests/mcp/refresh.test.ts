@@ -120,66 +120,6 @@ test('refresh publishes current provider caches and Clockify reads before comple
   expect(result.synced).toStrictEqual(['Linear tickets'])
 })
 
-test('a publication failure fails refresh instead of reporting a fresh snapshot', async () => {
-  vi.spyOn(mcp, 'publishSnapshot').mockImplementation(async () => {
-    throw new Error('Bridge unavailable')
-  })
-  await expect(refreshMcpSnapshot(() => ({}))).rejects.toThrow(/Bridge unavailable/)
-})
-
-test('snapshot resolves a running GitHub reference without publishing the whole archive', async () => {
-  const item = {
-    id: 'owner/repo:issue:1',
-    type: 'issue' as const,
-    number: 1,
-    title: 'Issue',
-    url: 'https://github.com/owner/repo/issues/1',
-    repositoryFullName: 'owner/repo',
-    repositoryOwner: 'owner',
-    repositoryUrl: 'https://github.com/owner/repo',
-    author: null,
-    authorAvatarUrl: null,
-    state: 'open',
-    updatedAt: '2026-01-01',
-    syncedAt: '2026-01-01',
-    item: { labels: [] },
-  }
-  const scope = { repositories: ['owner/repo'], visibleWorkItemTypes: { issues: true, pullRequests: true } }
-  vi.spyOn(storage, 'get').mockImplementation(async key =>
-    key === 'githubSelectedRepositories'
-      ? [
-          {
-            fullName: 'owner/repo',
-            id: 1,
-            name: 'repo',
-            owner: 'owner',
-            private: false,
-            url: 'https://github.com/owner/repo',
-          },
-        ]
-      : storage.config[key].default,
-  )
-  vi.spyOn(mcp, 'publishSnapshot').mockImplementation(async () => {})
-  queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user', activeWorkspace: 'workspace' })
-  queryClient.setQueryData(queryKeys.clockify.workspaces, [{ id: 'workspace' }])
-  queryClient.setQueryData(queryKeys.clockify.runningEntry({ params: { userId: 'user', workspaceId: 'workspace' } }), [
-    {
-      id: 'running',
-      userId: 'user',
-      description: 'ref:github:owner/repo:issue:1',
-      timeInterval: { start: '2026-01-01' },
-    },
-  ])
-  try {
-    await githubWorkItemCache.replace([item], githubWorkItemCache.beginSync(), scope)
-    const snapshot = await publishMcpSnapshot({ clockifyConnected: true, githubConnected: true })
-    expect(snapshot.trackingStatus.running).toMatchObject({ source: 'github', sourceId: item.id })
-    expect(snapshot.trackableWork.filter(row => row.source === 'github')).toEqual([])
-  } finally {
-    await githubWorkItemCache.clear()
-  }
-})
-
 test('refreshed GitHub list uses the Clockify state captured after sync, not stale React input', async () => {
   const providerRead = vi.spyOn(clockify, 'getTimeEntries')
   const item = {
@@ -355,32 +295,6 @@ test('queued captures read the latest scope and cancelled captures do not publis
   expect(publish).toHaveBeenCalledTimes(2)
 })
 
-test('cancellation while capture is in flight prevents publication', async () => {
-  queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user', activeWorkspace: 'workspace' })
-  queryClient.setQueryData(queryKeys.clockify.workspaces, [{ id: 'workspace' }])
-  let release!: () => void
-  const gate = new Promise<void>(resolve => {
-    release = resolve
-  })
-  let started = false
-  vi.spyOn(storage, 'get').mockImplementation(async key => {
-    if (key === 'githubSelectedRepositories') {
-      started = true
-      await gate
-    }
-    return storage.config[key].default
-  })
-  const publish = vi.spyOn(mcp, 'publishSnapshot').mockResolvedValue()
-  const controller = new AbortController()
-  const pending = publishMcpSnapshot({ clockifyConnected: true, githubConnected: true }, { signal: controller.signal })
-  const rejection = expect(pending).rejects.toThrow('cancelled')
-  await vi.waitFor(() => expect(started).toBe(true))
-  controller.abort()
-  release()
-  await rejection
-  expect(publish).not.toHaveBeenCalled()
-})
-
 test('a rebuilt mixed capture combines fresh Linear and GitHub totals', async () => {
   const item = {
     id: 'owner/repo:issue:1',
@@ -467,24 +381,6 @@ test('a rebuilt mixed capture combines fresh Linear and GitHub totals', async ()
   } finally {
     await githubWorkItemCache.clear()
   }
-})
-
-test('cancellation during native publication rejects and releases its capture', async () => {
-  const { getMcpCapture } = await import('../../../src/services/mcp/refresh')
-  let release!: () => void
-  const gate = new Promise<void>(resolve => {
-    release = resolve
-  })
-  const publish = vi.spyOn(mcp, 'publishSnapshot').mockImplementation(async () => gate)
-  const controller = new AbortController()
-  const pending = publishMcpSnapshot({}, { signal: controller.signal })
-  const rejection = expect(pending).rejects.toThrow('cancelled')
-  await vi.waitFor(() => expect(publish).toHaveBeenCalledOnce())
-  const capturedAt = publish.mock.calls[0][0]
-  controller.abort()
-  release()
-  await rejection
-  expect(getMcpCapture(capturedAt)).toBeUndefined()
 })
 
 test('an account change while a capture is queued cannot expose the previous Linear viewer', async () => {

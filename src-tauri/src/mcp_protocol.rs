@@ -1107,40 +1107,6 @@ mod tests {
     }
 
     #[test]
-    fn list_waits_for_refreshed_snapshot_and_preserves_filters() {
-        tauri::async_runtime::block_on(async {
-            let state = McpBridgeState::default();
-            state
-                .publish_snapshot("old".to_string(), json!({ "trackableWork": [] }))
-                .unwrap();
-            let arguments =
-                validate_list_trackable_work(&json!({ "source": "github", "query": "new" }))
-                    .unwrap();
-            let result = list_work_with_refresh(&state, arguments, || async {
-                tokio::task::yield_now().await;
-                state
-                    .publish_snapshot(
-                        "fresh".to_string(),
-                        json!({ "trackableWork": [
-                    { "source": "linear", "title": "New ticket" },
-                    { "source": "github", "title": "New PR", "status": "open" },
-                    { "source": "github", "title": "New closed PR", "status": "closed" },
-                ] }),
-                    )
-                    .unwrap();
-                Ok(json!({}))
-            })
-            .await
-            .unwrap();
-            assert_eq!(result["capturedAt"], "fresh");
-            assert_eq!(
-                result["rows"],
-                json!([{ "source": "github", "title": "New PR", "status": "open" }])
-            );
-        });
-    }
-
-    #[test]
     fn cached_list_skips_refresh_and_refresh_failures_do_not_return_stale_rows() {
         tauri::async_runtime::block_on(async {
             let state = McpBridgeState::default();

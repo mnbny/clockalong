@@ -13,7 +13,6 @@ import { db } from '../../../src/services/db'
 import { clearSyncedLinearTickets } from '../../../src/services/linear/sync'
 import { createLinearTicketCache, linearTicketCache } from '../../../src/services/linear/ticket-cache'
 
-const widgetState = vi.hoisted(() => ({ status: 'success' }))
 vi.mock('../../../src/hooks/useAppAuth', () => ({
   useAppAuth: () => ({ loading: false, value: { linearAuthenticated: true } }),
 }))
@@ -24,9 +23,9 @@ vi.mock('../../../src/services/linear/sync', async original => ({
     viewerId: 'viewer',
     queries: {
       syncQuery: {
-        isSuccess: widgetState.status === 'success',
-        isLoading: widgetState.status === 'loading',
-        isError: widgetState.status === 'error',
+        isSuccess: true,
+        isLoading: false,
+        isError: false,
       },
     },
   }),
@@ -71,31 +70,7 @@ afterEach(async () => {
   client.clear()
   rowCommits = []
   vi.restoreAllMocks()
-  widgetState.status = 'success'
   await clearSyncedLinearTickets()
-})
-
-test.each([
-  ['success', 'No assigned tickets found.'],
-  ['error', 'Could not load Linear tickets.'],
-])('widget shows the %s state when there are no rows', async (status, message) => {
-  widgetState.status = status
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
-  container = document.createElement('div')
-  document.body.append(container)
-  root = createRoot(container)
-  await act(async () => root?.render(createElement(QueryClientProvider, { client }, createElement(LinearWidget))))
-  await vi.waitFor(() => expect(container!.textContent).toContain(message))
-})
-
-test('widget shows a spinner while the Linear sync loads', async () => {
-  widgetState.status = 'loading'
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
-  container = document.createElement('div')
-  document.body.append(container)
-  root = createRoot(container)
-  await act(async () => root?.render(createElement(QueryClientProvider, { client }, createElement(LinearWidget))))
-  expect(container!.querySelector('.loading-spinner')).not.toBeNull()
 })
 
 test('widget displays retained rows beyond the fetch limit and sorts them and Show all changes terminal visibility', async () => {

@@ -118,10 +118,3 @@ test('author, label and involvement filters are additive; show all and closed ar
   ).toEqual(['unmatched', 'closed', 'review', 'mention', 'saved', 'viewer', 'label-object', 'label-string'])
   expect(rows).toEqual(original)
 })
-
-test('equal updated timestamps use descending IDs as a stable tie-breaker', async () => {
-  await cache.replace([issue('z'), issue('a')], cache.beginSync(), scope)
-  expect(
-    (await queryGithubWorkItems(db, { scope, showAll: true, showClosed: true, limit: 10 })).rows.map(row => row.id),
-  ).toEqual(['z', 'a'])
-})

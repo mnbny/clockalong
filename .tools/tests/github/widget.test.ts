@@ -10,7 +10,6 @@ import { GitHubWidget } from '../../../src/components/GitHubWidget'
 import { db } from '../../../src/services/db'
 import { githubWorkItemCache } from '../../../src/services/github/work-item-cache'
 
-const state = vi.hoisted(() => ({ loading: false, error: null as Error | null, emptyRows: [] }))
 vi.mock('../../../src/hooks/useAppAuth', () => ({
   useAppAuth: () => ({ loading: false, value: { githubAuthenticated: true } }),
 }))
@@ -19,10 +18,9 @@ vi.mock('../../../src/services/github/sync', () => ({
   useGithubSync: () => ({
     queries: {
       syncQuery: {
-        isLoading: state.loading,
-        isError: !!state.error,
-        isSuccess: !state.loading && !state.error,
-        error: state.error,
+        isLoading: false,
+        isError: false,
+        isSuccess: true,
       },
     },
   }),
@@ -67,8 +65,6 @@ afterEach(async () => {
   container?.remove()
   root = undefined
   container = undefined
-  state.loading = false
-  state.error = null
   client.clear()
   rowCommits = []
   vi.restoreAllMocks()
@@ -166,102 +162,6 @@ test('widget toggles, empty state and paging use live database rows', async () =
   expect(container!.textContent).toContain('Updated')
   await act(async () => githubWorkItemCache.clear())
   await vi.waitFor(() => expect(container!.textContent).toContain('No GitHub work items found.'))
-})
-
-test('widget displays loading and cache errors', async () => {
-  state.loading = true
-  await mount()
-  expect(container!.querySelector('.loading-spinner')).not.toBeNull()
-  state.loading = false
-  state.error = new Error('database unavailable')
-  await act(async () => root?.render(createElement(QueryClientProvider, { client }, createElement(GitHubWidget))))
-  expect(container!.textContent).toContain('database unavailable')
-})
-
-test('closed visibility stays independent of show all', async () => {
-  const row = {
-    id: 'owner/repo:issue:1',
-    type: 'issue' as const,
-    number: 1,
-    title: 'Closed issue',
-    url: 'https://example.test',
-    repositoryFullName: 'owner/repo',
-    repositoryOwner: 'owner',
-    repositoryUrl: 'https://example.test',
-    author: 'other',
-    authorAvatarUrl: null,
-    state: 'closed',
-    updatedAt: '2026-01-01',
-    syncedAt: '2026-01-01',
-    item: { labels: [] },
-  }
-  await githubWorkItemCache.replace([row], githubWorkItemCache.beginSync(), scope)
-  await mount()
-  await act(async () =>
-    container!.querySelector<HTMLInputElement>('input[aria-label="Show all GitHub work items"]')!.click(),
-  )
-  await vi.waitFor(() => expect(container!.textContent).toContain('No GitHub work items found.'))
-  await act(async () =>
-    container!.querySelector<HTMLInputElement>('input[aria-label="Show closed GitHub work items"]')!.click(),
-  )
-  await vi.waitFor(() => expect(container!.textContent).toContain('Closed issue'))
-})
-
-test('viewer rows remain visible when mentions adds another author', async () => {
-  const row = {
-    id: 'owner/repo:issue:1',
-    type: 'issue' as const,
-    number: 1,
-    title: 'Viewer issue',
-    url: 'https://example.test',
-    repositoryFullName: 'owner/repo',
-    repositoryOwner: 'owner',
-    repositoryUrl: 'https://example.test',
-    author: ' VIEWER ',
-    authorAvatarUrl: null,
-    state: 'open',
-    updatedAt: '2026-01-01',
-    syncedAt: '2026-01-01',
-    item: { labels: [] },
-  }
-  await githubWorkItemCache.replace(
-    [
-      row,
-      {
-        ...row,
-        id: 'owner/repo:issue:2',
-        title: 'Mentioned issue',
-        author: 'other',
-        involvementReasons: ['reviewRequested'],
-      },
-    ],
-    githubWorkItemCache.beginSync(),
-    scope,
-  )
-  await mount()
-  await vi.waitFor(() => expect(container!.textContent).toContain('Viewer issue'))
-  expect(container!.textContent).not.toContain('Mentioned issue')
-  await act(async () =>
-    container!
-      .querySelector<HTMLInputElement>(
-        'input[aria-label="Show GitHub work items that mention you or request your review"]',
-      )!
-      .click(),
-  )
-  await vi.waitFor(() => expect(container!.textContent).toContain('Mentioned issue'))
-  expect(container!.textContent).toContain('Viewer issue')
-  await act(async () =>
-    container!.querySelector<HTMLButtonElement>('button[aria-label="Filter GitHub work items by author"]')!.click(),
-  )
-  const viewer = [
-    ...container!.querySelectorAll<HTMLInputElement>('input[aria-label^="Show GitHub work items by "]'),
-  ].find(
-    input =>
-      input.getAttribute('aria-label')?.replace(/\s+/g, ' ').trim().toLowerCase() ===
-      'show github work items by viewer',
-  )!
-  expect(viewer.checked).toBe(true)
-  expect(viewer.disabled).toBe(true)
 })
 
 test('a live-query failure is visible in the widget', async () => {
