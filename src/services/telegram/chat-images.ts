@@ -1,5 +1,6 @@
 import { telegramImageCache } from '../tauri/telegram-image-cache-client'
-import { photoMime, TelegramFileError } from './chat-files'
+import { maxTelegramImageBytes } from './attachment-image'
+import { imageMime, photoMime, TelegramFileError } from './chat-files'
 
 export class TelegramChatImages {
   private token: Promise<string | null> | undefined
@@ -16,7 +17,8 @@ export class TelegramChatImages {
     if (!token) return null
     const bytes = await telegramImageCache.read(token, key).catch(() => null)
     check()
-    const mime = bytes && photoMime(bytes)
+    const full = key.startsWith('notification-image:')
+    const mime = bytes && (full ? imageMime(bytes) : photoMime(bytes))
     return bytes && mime ? new Blob([bytes], { type: mime }) : null
   }
 
@@ -30,10 +32,11 @@ export class TelegramChatImages {
     const token = await this.token
     const blob = await download()
     check()
-    if (token && blob && blob.size > 0 && blob.size <= 512 * 1024) {
+    const full = key.startsWith('notification-image:')
+    if (token && blob && blob.size > 0 && blob.size <= (full ? maxTelegramImageBytes : 512 * 1024)) {
       const bytes = new Uint8Array(await blob.arrayBuffer())
       check()
-      if (photoMime(bytes)) await telegramImageCache.write(token, key, bytes).catch(() => {})
+      if (full ? imageMime(bytes) : photoMime(bytes)) await telegramImageCache.write(token, key, bytes).catch(() => {})
       check()
     }
     return blob

@@ -217,13 +217,7 @@ async function downloadImageBlob(
     signal,
   )
   checkSignal(signal)
-  const prefix = chunks[0]
-  let mime = photoMime(prefix)
-  if (fullImage && !mime) {
-    const ascii = (start: number, end: number) => String.fromCharCode(...prefix.subarray(start, end))
-    if (['GIF87a', 'GIF89a'].includes(ascii(0, 6))) mime = 'image/gif'
-    else if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') mime = 'image/webp'
-  }
+  const mime = fullImage ? imageMime(chunks[0]) : photoMime(chunks[0])
   if (fullImage && !mime) throw new TelegramFileError('unavailable')
   return new Blob(chunks, { type: mime ?? 'application/octet-stream' })
 }
@@ -273,6 +267,15 @@ export function photoMime(bytes: Uint8Array) {
   const ascii = (start: number, end: number) => String.fromCharCode(...bytes.subarray(start, end))
   if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP' && (ascii(12, 16) !== 'VP8X' || !(bytes[20] & 2)))
     return 'image/webp'
+  return null
+}
+
+export function imageMime(bytes: Uint8Array) {
+  const photo = photoMime(bytes)
+  if (photo) return photo
+  const ascii = (start: number, end: number) => String.fromCharCode(...bytes.subarray(start, end))
+  if (['GIF87a', 'GIF89a'].includes(ascii(0, 6))) return 'image/gif'
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp'
   return null
 }
 

@@ -47,6 +47,33 @@ test('disk failures and invalid cached bytes fall back to normal image downloads
   expect(download).toHaveBeenCalledTimes(3)
 })
 
+test.each(['image/jpeg', 'image/gif', 'image/webp'])(
+  'full %s images survive a runtime restart above the thumbnail size limit',
+  async mime => {
+    const bytes = new Uint8Array(512 * 1024 + 1)
+    bytes.set(
+      mime === 'image/jpeg' ? image : new TextEncoder().encode(mime === 'image/gif' ? 'GIF89a' : 'RIFF0000WEBPVP8X'),
+    )
+    if (mime === 'image/webp') bytes[20] = 2
+    const original = new Blob([bytes], { type: mime })
+    const disk = new Map<string, Uint8Array<ArrayBuffer>>()
+    vi.mocked(telegramImageCache.read).mockImplementation(async (_token, key) => disk.get(key) ?? new Uint8Array())
+    vi.mocked(telegramImageCache.write).mockImplementation(async (_token, key, data) => {
+      disk.set(key, new Uint8Array(data))
+    })
+    const download = vi.fn(async () => original)
+    const key = 'notification-image:photo:1'
+    await new TelegramChatImages(group).load(key, download, signal())
+    const cached = await new TelegramChatImages(group).load(key, download, signal())
+    expect(cached?.size).toBe(bytes.length)
+    expect(cached?.type).toBe(mime)
+    expect(download).toHaveBeenCalledTimes(1)
+    expect(new Uint8Array(await cached!.arrayBuffer())).toEqual(bytes)
+    await new TelegramChatImages(group).load('notification-preview:photo:1', download, signal())
+    expect(disk.has('notification-preview:photo:1')).toBe(false)
+  },
+)
+
 test('a scope cancelled during a disk read cannot return or download an image', async () => {
   const reading = deferred()
   const wait = deferred<Uint8Array<ArrayBuffer>>()
