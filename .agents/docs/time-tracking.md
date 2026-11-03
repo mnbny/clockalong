@@ -44,7 +44,7 @@ The current Linear client-side order modes are:
 - `updated`: updated date descending.
 - `alphabetical`: ticket title.
 
-Linear sync ordering is separate from dashboard ordering. The sync can choose Linear's `orderBy` field, but Linear's assigned-issues query does not expose a sort direction. Dashboard ordering is applied after the configured sync limit has been synced into the local collection.
+Linear sync ordering is separate from dashboard ordering. The sync can choose Linear's `orderBy` field, but Linear's assigned-issues query does not expose a sort direction. Dashboard ordering applies to the verified viewer's retained tickets. The sync limit controls the fetch size, not the display size.
 
 `src/services/linear/tickets-sorting.ts` owns the client-side sorting rules. `src/components/LinearWidget.tsx` owns the dashboard Linear table wiring and renders nothing when Linear is unauthenticated. Keep the dashboard route focused on widget composition.
 
@@ -67,7 +67,7 @@ Use Day.js relative time for last-tracked values, `humanize-duration` for total 
 
 The dashboard Linear section is a data table, not a kanban or full Linear browser. Keep row density high enough for scanning.
 
-Assigned Linear tickets should come from the local synced ticket collection in `src/services/linear/sync.ts`, not from component-level Linear pagination. The background sync stores the current viewer's compact assigned-ticket rows according to the `linearTicketSyncLimit`, `linearTicketSyncOrderBy`, and `linearTicketSyncInterval` settings, and `LinearWidget` subscribes with TanStack DB live queries for ticket-list data.
+The Linear widget uses paged live queries on the shared ticket database. Sync stores compact tickets for the verified viewer. The sync settings control the fetch. Older retained tickets remain visible as last-known data.
 
 Current columns:
 

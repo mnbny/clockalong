@@ -1,5 +1,4 @@
 // @vitest-environment happy-dom
-import type * as TanstackDb from '@tanstack/react-db'
 import type { Root } from 'react-dom/client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -37,10 +36,7 @@ vi.mock('../../../src/services/github/client', () => ({
 vi.mock('../../../src/services/clockify/client', () => ({
   clockify: { getLoggedUser: async () => ({}), getWorkspacesOfUser: async () => [] },
 }))
-vi.mock('@tanstack/react-db', async original => ({
-  ...(await original<typeof TanstackDb>()),
-  useLiveQuery: () => ({ data: state.emptyRows }),
-}))
+
 vi.mock('../../../src/services/storage/useStorage', () => ({
   useStorage: (key: string) => {
     const defaults: Record<string, unknown> = {
