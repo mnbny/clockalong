@@ -38,9 +38,17 @@ export function createGithubWorkItemCache(database: DB) {
     return database.transaction('rw', workItems, index, authors, meta, async () => {
       if (generation !== syncGeneration) throw new Error('GitHub sync superseded')
       let deleted = 0
-      const scopes = await workItems.orderBy('[repositoryFullName+type]').uniqueKeys()
+      const scopes: [string, SyncedGithubWorkItem['type']][] = []
+      let previousScope: string | undefined
+      // WebKit can fail to open unique index cursors. Group ordinary sorted keys instead.
+      await workItems.orderBy('[repositoryFullName+type]').eachKey(key => {
+        const scopeKey = JSON.stringify(key)
+        if (scopeKey === previousScope) return
+        previousScope = scopeKey
+        scopes.push(key as [string, SyncedGithubWorkItem['type']])
+      })
       for (const key of scopes) {
-        const [repositoryFullName, type] = key as unknown as [string, SyncedGithubWorkItem['type']]
+        const [repositoryFullName, type] = key
         if (isGithubItemInScope({ repositoryFullName, type }, scope)) continue
         while (true) {
           const ids = await workItems.where('[repositoryFullName+type]').equals(key).limit(250).primaryKeys()

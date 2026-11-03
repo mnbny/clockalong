@@ -44,6 +44,43 @@ afterEach(async () => {
   for (const cache of activeCaches) await cache.database.delete()
 })
 
+test('sync works without unique index cursors and removes excluded scopes with their projections', async () => {
+  const openKeyCursor = IDBIndex.prototype.openKeyCursor
+  vi.spyOn(IDBIndex.prototype, 'openKeyCursor').mockImplementation(function (this: IDBIndex, range, direction) {
+    if (direction === 'nextunique' || direction === 'prevunique')
+      throw new DOMException('Unable to open cursor', 'UnknownError')
+    return openKeyCursor.call(this, range, direction)
+  })
+  const cache = makeCache()
+  await cache.replace(
+    [
+      item('owner/repo:kept'),
+      {
+        ...item('owner/repo:pr'),
+        type: 'pullRequest' as const,
+        baseBranch: 'main',
+        headBranch: 'feature',
+        item: { labels: [] },
+      },
+      item('owner/removed:1'),
+      item('owner/removed:2'),
+    ].map(row => ({ ...row, author: 'alice' })),
+    cache.beginSync(),
+    all,
+  )
+  const result = await cache.replace([], cache.beginSync(), {
+    repositories: ['owner/repo'],
+    visibleWorkItemTypes: { issues: true, pullRequests: false },
+  })
+  expect(result).toEqual({ deleted: 3, stored: 0 })
+  expect(await cache.database.githubWorkItems.toCollection().primaryKeys()).toEqual(['owner/repo:kept'])
+  expect(await cache.database.githubAuthors.toCollection().primaryKeys()).toEqual(['owner/repo:kept'])
+  expect((await cache.database.githubWorkItemIndex.toArray()).map(row => row.rowId)).toEqual([
+    'owner/repo:kept',
+    'owner/repo:kept',
+  ])
+})
+
 test('an older sync cannot overwrite a newer completed sync', async () => {
   const cache = makeCache()
   const older = cache.beginSync()
