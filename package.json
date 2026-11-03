@@ -82,6 +82,7 @@
     "sonner": "catalog:",
     "tailwind-merge": "catalog:",
     "tailwind-variants": "catalog:",
+    "yet-another-react-lightbox": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -72,5 +72,6 @@ catalog:
   typescript-eslint: 8.62.0
   vite: 8.1.0
   vitest: 5.0.4
+  yet-another-react-lightbox: 3.33.0
   zod: 3.25.76
   zx: 8.8.5
