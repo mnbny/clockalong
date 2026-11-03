@@ -193,7 +193,7 @@ function GitHubWidgetContent() {
   const [showAllGithubWorkItems, setShowAllGithubWorkItems] = useState(false)
   const [showMentionedGithubWorkItems, setShowMentionedGithubWorkItems] = useState(false)
   const {
-    queries: { cacheQuery, syncQuery },
+    queries: { syncQuery },
   } = useGithubSync()
   const githubViewerQuery = useQuery({
     queryKey: queryKeys.github.viewer,
@@ -551,7 +551,7 @@ function GitHubWidgetContent() {
           </table>
         </div>
 
-        {(cacheQuery.isLoading || syncQuery.isLoading || (!page.data && !page.error)) && (
+        {(syncQuery.isLoading || (!page.data && !page.error)) && (
           <div className="grid min-h-48 place-items-center">
             <span className="loading loading-spinner loading-md" />
           </div>
@@ -566,18 +566,16 @@ function GitHubWidgetContent() {
           </div>
         )}
 
-        {!!(cacheQuery.isError || syncQuery.isError || page.error || authors.error) && (
+        {!!(syncQuery.isError || page.error || authors.error) && (
           <div className="text-error grid min-h-48 place-items-center px-4 text-center text-sm">
             <span>
-              Could not load GitHub work items.{' '}
-              {getErrorMessage(cacheQuery.error ?? syncQuery.error ?? page.error ?? authors.error)}
+              Could not load GitHub work items. {getErrorMessage(syncQuery.error ?? page.error ?? authors.error)}
             </span>
-            {!!(cacheQuery.isError || page.error || authors.error) && (
+            {!!(page.error || authors.error) && (
               <button
                 className="btn btn-sm"
                 type="button"
                 onClick={() => {
-                  if (cacheQuery.isError) void cacheQuery.refetch()
                   page.retry()
                   authors.retry()
                 }}>
@@ -587,16 +585,11 @@ function GitHubWidgetContent() {
           </div>
         )}
 
-        {cacheQuery.isSuccess &&
-          !!page.data &&
-          !authors.error &&
-          !syncQuery.isLoading &&
-          !syncQuery.isError &&
-          workItems.length === 0 && (
-            <div className="text-base-content/60 grid min-h-48 place-items-center px-4 text-center text-sm">
-              No GitHub work items found.
-            </div>
-          )}
+        {!!page.data && !authors.error && !syncQuery.isLoading && !syncQuery.isError && workItems.length === 0 && (
+          <div className="text-base-content/60 grid min-h-48 place-items-center px-4 text-center text-sm">
+            No GitHub work items found.
+          </div>
+        )}
         {!!page.data && (cursors.length > 0 || page.data.hasMore) && (
           <div className="flex justify-end gap-2 p-3">
             <button

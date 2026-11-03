@@ -5,7 +5,6 @@ import Dexie, { liveQuery } from 'dexie'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { DB } from '../../../src/services/db'
-import { githubWorkItemCacheQueryOptions } from '../../../src/services/github/sync'
 import { createGithubWorkItemCache, type GithubCacheScope } from '../../../src/services/github/work-item-cache'
 import { queryGithubAuthors, queryGithubWorkItems } from '../../../src/services/github/work-item-queries'
 
@@ -62,17 +61,13 @@ test('an offline live subscriber reads persisted rows without starting a remote 
   const remoteFetch = vi.fn(async () => [])
   onlineManager.setOnline(false)
   const remote = new QueryObserver(client, { queryKey: ['remote'], queryFn: remoteFetch })
-  const hydration = new QueryObserver(client, githubWorkItemCacheQueryOptions(reopened))
   const stopRemote = remote.subscribe(() => {})
-  const stopHydration = hydration.subscribe(() => {})
   try {
     await vi.waitFor(() => expect(received).toContainEqual(['owner/repo:1']))
-    await vi.waitFor(() => expect(hydration.getCurrentResult().isSuccess).toBe(true))
     expect(remote.getCurrentResult().fetchStatus).toBe('paused')
     expect(remoteFetch).not.toHaveBeenCalled()
   } finally {
     stopRemote()
-    stopHydration()
     subscription.unsubscribe()
     client.clear()
   }
@@ -91,37 +86,18 @@ test(
     await first.replace(rows, first.beginSync(), all)
     first.database.close()
     const reopened = makeCache(name)
-    await reopened.ready()
     expect(await reopened.database.githubWorkItems.count()).toBe(6000)
     const kept = { ...rows[0], title: 'updated' }
     const scope = { ...all, repositories: ['owner/kept'] }
     expect(await reopened.replace([kept], reopened.beginSync(), scope)).toEqual({ deleted: 3000, stored: 1 })
     reopened.database.close()
     const final = makeCache(name)
-    await final.ready()
     expect(await final.database.githubWorkItems.count()).toBe(3000)
     expect((await final.database.githubWorkItems.get(kept.id))?.title).toBe('updated')
     expect(await final.database.githubWorkItems.get(rows[2].id)).toBeDefined()
     expect(await final.database.githubWorkItems.get(rows[1].id)).toBeUndefined()
   },
 )
-
-test('offline database readiness reports open failures and can retry', async () => {
-  const cache = makeCache()
-  const open = vi.spyOn(cache.database, 'open').mockRejectedValueOnce(new Error('read failed'))
-  const client = new QueryClient()
-  onlineManager.setOnline(false)
-  const observer = new QueryObserver(client, githubWorkItemCacheQueryOptions(cache))
-  const unsubscribe = observer.subscribe(() => {})
-  try {
-    await vi.waitFor(() => expect(observer.getCurrentResult().error?.message).toBe('read failed'))
-    open.mockRestore()
-    expect((await observer.refetch()).isSuccess).toBe(true)
-  } finally {
-    unsubscribe()
-    client.clear()
-  }
-})
 
 test('an older sync cannot overwrite a newer completed sync', async () => {
   const cache = makeCache()
@@ -130,6 +106,27 @@ test('an older sync cannot overwrite a newer completed sync', async () => {
   await cache.replace([item('owner/repo:1', 'newer')], newer, all)
   await expect(cache.replace([item('owner/repo:1', 'older')], older, all)).rejects.toThrow('superseded')
   expect((await cache.database.githubWorkItems.get('owner/repo:1'))?.title).toBe('newer')
+})
+
+test('clear during a write rolls back that sync before clearing all GitHub projections', async () => {
+  const cache = makeCache()
+  await cache.replace([item('owner/repo:saved')], cache.beginSync(), all)
+  const original = cache.database.githubWorkItems.bulkPut.bind(cache.database.githubWorkItems)
+  let cleared: Promise<number> | undefined
+  vi.spyOn(cache.database.githubWorkItems, 'bulkPut').mockImplementationOnce(rows =>
+    original(rows).then(key => {
+      cleared = Dexie.ignoreTransaction(() => cache.clear())
+      return key
+    }),
+  )
+  try {
+    await expect(cache.replace([item('owner/repo:late')], cache.beginSync(), all)).rejects.toThrow('superseded')
+  } finally {
+    await cleared
+  }
+  expect(await cache.database.githubWorkItems.count()).toBe(0)
+  expect(await cache.database.githubWorkItemIndex.count()).toBe(0)
+  expect(await cache.database.githubAuthors.count()).toBe(0)
 })
 
 test('failed writes roll back all tables and clear invalidates old syncs without deleting the database', async () => {

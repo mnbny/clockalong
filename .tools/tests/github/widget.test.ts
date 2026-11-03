@@ -18,13 +18,12 @@ vi.mock('../../../src/hooks/useClockifyTimerProject', () => ({ useClockifyTimerP
 vi.mock('../../../src/services/github/sync', () => ({
   useGithubSync: () => ({
     queries: {
-      cacheQuery: {
+      syncQuery: {
         isLoading: state.loading,
         isError: !!state.error,
         isSuccess: !state.loading && !state.error,
         error: state.error,
       },
-      syncQuery: { isLoading: false, isError: false },
     },
   }),
 }))

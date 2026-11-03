@@ -27,75 +27,60 @@ export function createGithubWorkItemCache(database: DB) {
     githubAuthors: authors,
     githubCacheMeta: meta,
   } = database
-  let pendingWrite: Promise<unknown> = Promise.resolve()
   let generation = 0
-
-  async function ready() {
-    await database.open()
-  }
-
-  function enqueue<T>(operation: () => Promise<T>) {
-    const result = pendingWrite.then(operation, operation)
-    pendingWrite = result.catch(() => {})
-    return result
-  }
 
   function beginSync() {
     return ++generation
   }
 
-  function replace(items: SyncedGithubWorkItem[], syncGeneration: number, scope: GithubCacheScope) {
-    return enqueue(async () => {
-      await ready()
+  async function replace(items: SyncedGithubWorkItem[], syncGeneration: number, scope: GithubCacheScope) {
+    await database.open()
+    return database.transaction('rw', workItems, index, authors, meta, async () => {
       if (generation !== syncGeneration) throw new Error('GitHub sync superseded')
       let deleted = 0
-      await database.transaction('rw', workItems, index, authors, meta, async () => {
-        const scopes = await workItems.orderBy('[repositoryFullName+type]').uniqueKeys()
-        for (const key of scopes) {
-          const [repositoryFullName, type] = key as unknown as [string, SyncedGithubWorkItem['type']]
-          if (isGithubItemInScope({ repositoryFullName, type }, scope)) continue
-          while (true) {
-            const ids = await workItems.where('[repositoryFullName+type]').equals(key).limit(250).primaryKeys()
-            if (!ids.length) break
-            await index.where('rowId').anyOf(ids).delete()
-            await authors.bulkDelete(ids)
-            await workItems.bulkDelete(ids)
-            deleted += ids.length
-          }
-        }
-        const ids = items.map(item => item.id)
-        if (ids.length) {
+      const scopes = await workItems.orderBy('[repositoryFullName+type]').uniqueKeys()
+      for (const key of scopes) {
+        const [repositoryFullName, type] = key as unknown as [string, SyncedGithubWorkItem['type']]
+        if (isGithubItemInScope({ repositoryFullName, type }, scope)) continue
+        while (true) {
+          const ids = await workItems.where('[repositoryFullName+type]').equals(key).limit(250).primaryKeys()
+          if (!ids.length) break
           await index.where('rowId').anyOf(ids).delete()
           await authors.bulkDelete(ids)
-          await workItems.bulkPut(items.map(withGithubRefKey))
-          await index.bulkPut(items.flatMap(getGithubIndexEntries))
-          await authors.bulkPut(items.flatMap(item => getGithubAuthorEntry(item) ?? []))
+          await workItems.bulkDelete(ids)
+          deleted += ids.length
         }
-        const previous = await meta.get('revision')
-        await meta.put({ key: 'revision', revision: (previous?.revision ?? 0) + 1 })
-      })
+      }
+      const ids = items.map(item => item.id)
+      if (ids.length) {
+        await index.where('rowId').anyOf(ids).delete()
+        await authors.bulkDelete(ids)
+        await workItems.bulkPut(items.map(withGithubRefKey))
+        await index.bulkPut(items.flatMap(getGithubIndexEntries))
+        await authors.bulkPut(items.flatMap(item => getGithubAuthorEntry(item) ?? []))
+      }
+      const previous = await meta.get('revision')
+      await meta.put({ key: 'revision', revision: (previous?.revision ?? 0) + 1 })
+      if (generation !== syncGeneration) throw new Error('GitHub sync superseded')
       return { deleted, stored: items.length }
     })
   }
 
-  function clear() {
+  async function clear() {
     ++generation
-    return enqueue(async () => {
-      await ready()
-      let count = 0
-      await database.transaction('rw', workItems, index, authors, meta, async () => {
-        count = await workItems.count()
-        await workItems.clear()
-        await index.clear()
-        await authors.clear()
-        const previous = await meta.get('revision')
-        await meta.put({ key: 'revision', revision: (previous?.revision ?? 0) + 1 })
-      })
+    await database.open()
+    return database.transaction('rw', workItems, index, authors, meta, async () => {
+      const count = await workItems.count()
+      await workItems.clear()
+      await index.clear()
+      await authors.clear()
+      const previous = await meta.get('revision')
+      await meta.put({ key: 'revision', revision: (previous?.revision ?? 0) + 1 })
       return count
     })
   }
 
-  return { beginSync, clear, database, ready, replace }
+  return { beginSync, clear, database, replace }
 }
 
 export const githubWorkItemCache = createGithubWorkItemCache(db)

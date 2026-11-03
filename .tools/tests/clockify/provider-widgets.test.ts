@@ -16,7 +16,7 @@ vi.mock('../../../src/hooks/useAppAuth', () => ({
 }))
 vi.mock('../../../src/hooks/useClockifyTimerProject', () => ({ useClockifyTimerProject: () => null }))
 vi.mock('../../../src/services/github/sync', () => ({
-  useGithubSync: () => ({ queries: { cacheQuery: { isSuccess: true }, syncQuery: { isSuccess: true } } }),
+  useGithubSync: () => ({ queries: { syncQuery: { isSuccess: true } } }),
 }))
 vi.mock('../../../src/services/linear/sync', () => ({
   useLinearSync: () => ({ viewerId: 'viewer', queries: { syncQuery: { isSuccess: true } } }),

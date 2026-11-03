@@ -6,7 +6,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { useDexieQuery } from '../../../src/hooks/useDexieQuery'
-import { DB } from '../../../src/services/db'
+import { DB, db as appDb } from '../../../src/services/db'
 
 let root: Root | undefined
 let container: HTMLDivElement | undefined
@@ -96,4 +96,34 @@ test('scope changes hide previous rows immediately and ignore an abandoned query
   expect(container.textContent).toBe('loading')
   await act(async () => accountGate.resolve())
   await vi.waitFor(() => expect(container!.textContent).toBe('other/new'))
+})
+
+test('retry reopens after a failed upgrade, reports another failure and preserves saved rows', async () => {
+  database = appDb
+  await appDb.githubCacheMeta.put({ key: 'saved', revision: 7 })
+  appDb.close({ disableAutoOpen: false })
+  let upgrades = 0
+  appDb
+    .version(5)
+    .stores({ githubCacheMeta: 'key,revision' })
+    .upgrade(() => {
+      if (++upgrades < 3) throw new Error('Temporary upgrade failure')
+    })
+  function Harness() {
+    const query = useCallback(async () => (await appDb.githubCacheMeta.get('saved'))?.revision, [])
+    const result = useDexieQuery(query)
+    return createElement('button', { onClick: result.retry }, result.error ? 'Failed' : (result.data ?? 'Loading'))
+  }
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+  container = document.createElement('div')
+  root = createRoot(container)
+  await act(async () => root?.render(createElement(Harness)))
+  await vi.waitFor(() => expect(container!.textContent).toBe('Failed'))
+  expect(upgrades).toBe(1)
+  await act(async () => container!.querySelector('button')!.click())
+  await vi.waitFor(() => expect(upgrades).toBe(2))
+  await vi.waitFor(() => expect(container!.textContent).toBe('Failed'))
+  await act(async () => container!.querySelector('button')!.click())
+  await vi.waitFor(() => expect(container!.textContent).toBe('7'))
+  expect(upgrades).toBe(3)
 })

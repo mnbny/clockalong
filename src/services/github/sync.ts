@@ -2,7 +2,7 @@ import type { RestEndpointMethodTypes } from '@octokit/rest'
 import type { PropsWithChildren } from 'react'
 
 import { queryOptions, useQuery } from '@tanstack/react-query'
-import { createContext, createElement, useCallback, useContext, useEffect, useMemo } from 'react'
+import { createContext, createElement, useContext, useMemo } from 'react'
 
 import { useAppAuth } from '../../hooks/useAppAuth'
 import { queryKeys } from '../../lib/query-client'
@@ -89,11 +89,8 @@ type GithubWorkItemSyncResult = {
   repositoriesSynced: number
 }
 
-export const prepareGithubWorkItems = githubWorkItemCache.ready
-
 function useGithubSyncData() {
   const authState = useAppAuth()
-  const cacheQuery = useQuery(githubWorkItemCacheQueryOptions())
   const [githubSelectedRepositories] = useStorage('githubSelectedRepositories')
   const [githubVisibleWorkItemTypes] = useStorage('githubVisibleWorkItemTypes')
   const [githubWorkItemSyncLimit] = useStorage('githubWorkItemSyncLimit')
@@ -118,36 +115,14 @@ function useGithubSyncData() {
       visibleWorkItemTypes: githubVisibleWorkItemTypes,
     }),
   )
-  useEffect(() => {
-    if (syncQuery.isSuccess && cacheQuery.isError) void cacheQuery.refetch()
-  }, [cacheQuery.isError, cacheQuery.refetch, syncQuery.isSuccess])
-  const syncNow = useCallback(() => {
-    if (cacheQuery.isError) void cacheQuery.refetch()
-    return syncQuery.refetch()
-  }, [cacheQuery, syncQuery])
-
   return {
     lastSyncResult: syncQuery.data ?? null,
-    syncNow,
+    syncNow: syncQuery.refetch,
     queries: {
-      cacheQuery,
       syncQuery,
     },
     syncing: syncQuery.isFetching,
   }
-}
-
-export function githubWorkItemCacheQueryOptions(cache = githubWorkItemCache) {
-  return queryOptions({
-    queryKey: queryKeys.github.workItemCache(cache.database.name),
-    queryFn: async () => {
-      await cache.ready()
-      return true
-    },
-    networkMode: 'always',
-    retry: false,
-    staleTime: Infinity,
-  })
 }
 
 export function githubWorkItemSyncQueryOptions({
@@ -215,7 +190,6 @@ async function syncGithubWorkItems({ repositories, syncLimit, visibleWorkItemTyp
     visibleWorkItemTypes,
   })
   try {
-    await prepareGithubWorkItems()
     if (!repositories.length || (!visibleWorkItemTypes.issues && !visibleWorkItemTypes.pullRequests)) {
       const persistenceResult = await githubWorkItemCache.replace([], syncGeneration, scope)
       const emptyResult = {

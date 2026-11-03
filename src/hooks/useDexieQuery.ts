@@ -1,6 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useReducer } from 'react'
 
+import { db } from '../services/db'
+
 export function useDexieQuery<T>(query: (signal: AbortSignal) => Promise<T>, scopeKey?: string) {
   const [attempt, retry] = useReducer(value => value + 1, 0)
   const request = useMemo(
@@ -14,6 +16,8 @@ export function useDexieQuery<T>(query: (signal: AbortSignal) => Promise<T>, sco
     const controller = new AbortController()
     request.controller = controller
     try {
+      if (attempt) await db.open()
+      controller.signal.throwIfAborted()
       return { request, data: await query(controller.signal), error: undefined }
     } catch (error) {
       return { request, data: undefined, error }

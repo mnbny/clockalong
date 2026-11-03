@@ -75,6 +75,8 @@ A provider sync collects all successful pages in memory before it changes the lo
 
 The shared database uses Dexie's native schema versions. Future versions can declare schema changes with `version().stores()` and data upgrades with `upgrade()`. If an upgrade fails, IndexedDB rolls back the upgrade transaction and the database open fails.
 
+Local reads open the database automatically. After an open failure, the widget retry action explicitly reopens the database before it repeats the read. A failed retry keeps the error visible. GitHub cache writes also reopen the database so background sync can recover without a widget retry.
+
 ## Local Clockify entry cache
 
 Clockify entries use the shared IndexedDB database. Dexie owns storage and live reads. Indexes scope entries by user, workspace, start time, and work reference. The app stores compact entry fields and reference projections. Settings and credentials stay outside this cache.
