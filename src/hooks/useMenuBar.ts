@@ -9,6 +9,7 @@ import { Image } from '@tauri-apps/api/image'
 import { Menu } from '@tauri-apps/api/menu'
 import { TrayIcon } from '@tauri-apps/api/tray'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import menuBarIconUrl from '../../src-tauri/icons/menu_icon_64x64.png?url'
@@ -30,10 +31,10 @@ import { getErrorMessage } from '../utils/errors'
 import { useAppAuth } from './useAppAuth'
 import { useAppInit } from './useAppInit'
 import { useClockifyTimerProject } from './useClockifyTimerProject'
-import { useDexieQuery } from './useDexieQuery'
 
 const menuBarTrayId = 'clockalong-menu-bar'
 const recentEntryLimit = 5
+const emptyRecentEntries: SyncedClockifyTimeEntry[] = []
 const menuBarTitleSeparator = ' · '
 
 type MenuBarDestination = '/dashboard' | '/settings'
@@ -97,14 +98,20 @@ export function useMenuBar() {
     const entries = runningEntryQuery.data ?? []
     return entries.find(entry => entry.userId === userId) ?? entries[0] ?? null
   }, [runningEntryQuery.data, userId])
-  const readRecentEntries = useCallback(
-    () =>
-      userId && workspaceId
-        ? recentClockifyEntries(db, { userId, workspaceId }, runningEntry?.id, recentEntryLimit)
-        : Promise.resolve([]),
-    [userId, workspaceId, runningEntry?.id],
-  )
-  const recentEntries = useDexieQuery(readRecentEntries).data ?? []
+  const recentScope = JSON.stringify([clockifyEnabled, userId, workspaceId])
+  const recent = useLiveQuery(async () => {
+    try {
+      const rows =
+        clockifyEnabled && userId && workspaceId
+          ? await recentClockifyEntries(db, { userId, workspaceId }, runningEntry?.id, recentEntryLimit)
+          : emptyRecentEntries
+      return { scope: recentScope, rows }
+    } catch (error) {
+      console.warn('[menu bar] could not read recent entries', error)
+      return { scope: recentScope, rows: emptyRecentEntries }
+    }
+  }, [recentScope, runningEntry?.id])
+  const recentEntries = recent?.scope === recentScope ? recent.rows : emptyRecentEntries
 
   const openDestination = useCallback(
     async (destination: MenuBarDestination) => {

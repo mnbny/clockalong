@@ -12,6 +12,7 @@ import type { QueryKey } from '@tanstack/react-query'
 import { hashKey, useQueryClient } from '@tanstack/react-query'
 import { isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 
 import { queryKeys } from '../lib/query-client'
@@ -28,7 +29,6 @@ import { getErrorMessage } from '../utils/errors'
 import { useAppAuth } from './useAppAuth'
 import { useAppInit } from './useAppInit'
 import { useClockifyTimerProject } from './useClockifyTimerProject'
-import { useDexieQuery } from './useDexieQuery'
 
 type IncomingMcpCommand = {
   deadlineAt: unknown
@@ -53,11 +53,20 @@ export function useMcpServerBridge() {
   const [quickTimersEnabled] = useStorage('quickTimersEnabled')
   const [commandListenerReady, setCommandListenerReady] = useState(false)
   const clockifyTimerProject = useClockifyTimerProject()
-  const githubRevisionQuery = useCallback(
-    () => (mcpServerEnabled ? db.githubCacheMeta.get('revision') : Promise.resolve(undefined)),
-    [mcpServerEnabled],
-  )
-  const githubRevision = useDexieQuery(githubRevisionQuery)
+  const revisions = useLiveQuery(async () => {
+    if (!mcpServerEnabled) return
+    try {
+      const [github, linear, clockify] = await Promise.all([
+        db.githubCacheMeta.get('revision'),
+        db.linearCacheMeta.get('state'),
+        db.clockifyCacheMeta.get('revision'),
+      ])
+      return { github: github?.revision, linear: linear?.revision, clockify: clockify?.revision }
+    } catch {
+      mcpBridgeLog('could not read database revisions')
+      return undefined
+    }
+  }, [mcpServerEnabled])
   const user = useCachedQueryData<UserDtoV1>(queryKeys.clockify.loggedUser, mcpServerEnabled)
   const workspaces = useCachedQueryData<WorkspaceDtoV1[]>(queryKeys.clockify.workspaces, mcpServerEnabled)
   const selectedWorkspace = useMemo(() => {
@@ -105,16 +114,6 @@ export function useMcpServerBridge() {
     const entries = runningEntries ?? []
     return entries.find(entry => entry.userId === userId) ?? entries[0] ?? null
   }, [runningEntries, userId])
-  const linearRevisionQuery = useCallback(
-    () => (mcpServerEnabled ? db.linearCacheMeta.get('state') : Promise.resolve(undefined)),
-    [mcpServerEnabled],
-  )
-  const linearRevision = useDexieQuery(linearRevisionQuery)
-  const clockifyRevisionQuery = useCallback(
-    () => (mcpServerEnabled ? db.clockifyCacheMeta.get('revision') : Promise.resolve(undefined)),
-    [mcpServerEnabled],
-  )
-  const clockifyRevision = useDexieQuery(clockifyRevisionQuery)
   const appReady = !appInitializationState.value.appInitializing && !authState.loading
   const clockifyConnected = appReady && authState.value.clockifyAuthenticated
   const githubConnected = clockifyConnected && authState.value.githubAuthenticated
@@ -144,16 +143,16 @@ export function useMcpServerBridge() {
       }) satisfies BuildMcpSnapshotInput,
     [
       clockifyConnected,
-      clockifyRevision.data?.revision,
+      revisions?.clockify,
       clockifyProjects,
       clockifyTimerProject,
       githubConnected,
-      githubRevision.data?.revision,
+      revisions?.github,
       githubSelectedRepositories,
       githubVisibleWorkItemTypes,
       linearSync.viewerId,
       linearConnected,
-      linearRevision.data?.revision,
+      revisions?.linear,
       monthReport,
       quickTimers,
       quickTimersActiveEntry,
