@@ -11,6 +11,7 @@ import {
   getClockifyEntrySyncDaysLabel,
   getClockifyEntrySyncIntervalLabel,
 } from '../services/clockify/sync-settings'
+import { selectClockifyWorkspace } from '../services/clockify/workspaces'
 import { useStorage } from '../services/storage/useStorage'
 import { SettingsRow, SettingsSection } from './settings/SettingsSection'
 
@@ -42,11 +43,7 @@ export function ClockifySettings() {
       return null
     }
 
-    return (
-      workspaces.find(candidate => candidate.id === user?.activeWorkspace) ??
-      workspaces.find(candidate => candidate.id === user?.defaultWorkspace) ??
-      workspaces[0]
-    )
+    return selectClockifyWorkspace(user, workspaces)
   }, [clockifyUserQuery.data, clockifyWorkspacesQuery.data])
   const clockifyProjectsQuery = useQuery({
     queryKey: queryKeys.clockify.projects({

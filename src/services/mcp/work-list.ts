@@ -1,8 +1,9 @@
 import type { BuildMcpSnapshotInput, McpTrackableWorkRow } from './snapshot'
 
 import { queryClient, queryKeys } from '../../lib/query-client'
-import { formatInternalRef, normalizeInternalRef, parseInternalRefs } from '../../utils/templates'
+import { getInternalRefKeys } from '../../utils/templates'
 import { queryClockifySummaries } from '../clockify/entry-queries'
+import { resolveClockifyEntryOwners } from '../clockify/work-item-summaries'
 import { selectClockifyWorkspace } from '../clockify/workspaces'
 import { db } from '../db'
 import { isGithubItemInScope } from '../github/work-item-cache'
@@ -135,22 +136,14 @@ export async function listMcpWork(
                 signal,
                 async entries => {
                   if (signal?.aborted || Date.now() >= deadlineAt) throw new Error('MCP request timed out or cancelled')
-                  const refsByEntry = entries.map(entry => ({
-                    id: entry.id,
-                    refs: parseInternalRefs(entry.description)
-                      .filter(ref => ref.provider === 'github')
-                      .map(ref => normalizeInternalRef(formatInternalRef(ref))),
-                  }))
-                  const refs = [...new Set(refsByEntry.flatMap(entry => entry.refs))]
+                  const refs = [...new Set(entries.flatMap(entry => getInternalRefKeys(entry.description, 'github')))]
                   const items = refs.length ? await db.githubWorkItems.where('refKey').anyOf(refs).toArray() : []
-                  const byRef = new Map(
-                    items.filter(item => isGithubItemInScope(item, githubScope)).map(item => [item.refKey, item.id]),
-                  )
-                  return new Map(
-                    refsByEntry.flatMap(entry => {
-                      const owner = entry.refs.map(ref => byRef.get(ref)).find(Boolean)
-                      return entry.id && owner ? [[entry.id, owner] as const] : []
-                    }),
+                  return resolveClockifyEntryOwners(
+                    entries,
+                    'github',
+                    new Map(
+                      items.filter(item => isGithubItemInScope(item, githubScope)).map(item => [item.refKey, item.id]),
+                    ),
                   )
                 },
               )

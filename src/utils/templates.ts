@@ -112,6 +112,16 @@ export function normalizeInternalRef(value: string) {
   return value.trim().toLocaleLowerCase()
 }
 
+export function getInternalRefKeys(description: string | null | undefined, provider?: InternalRef['provider']) {
+  return [
+    ...new Set(
+      parseInternalRefs(description)
+        .filter(ref => !provider || ref.provider === provider)
+        .map(ref => normalizeInternalRef(formatInternalRef(ref))),
+    ),
+  ]
+}
+
 function parseInternalRef(provider: string, body: string): InternalRef[] {
   const parts = body.split(':')
 

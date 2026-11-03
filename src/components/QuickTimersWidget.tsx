@@ -21,6 +21,7 @@ import { useClockifyTimerProject } from '../hooks/useClockifyTimerProject'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
 import { MissingClockifyProjectError } from '../services/clockify/time-entries'
+import { selectClockifyWorkspace } from '../services/clockify/workspaces'
 import {
   createQuickTimerTimeEntry,
   persistQuickTimerActiveEntry,
@@ -99,11 +100,7 @@ export function QuickTimersWidget() {
       return null
     }
 
-    return (
-      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
-      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
-      workspaces[0]
-    )
+    return selectClockifyWorkspace(user, workspaces)
   }, [clockifyUserQuery.data, clockifyWorkspacesQuery.data])
   const runningEntryQuery = useQuery({
     enabled: Boolean(quickTimersEnabled && clockifyUserQuery.data?.id && selectedClockifyWorkspace?.id),

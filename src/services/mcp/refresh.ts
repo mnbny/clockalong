@@ -10,7 +10,7 @@ import type { McpRefreshResult } from '../tauri/mcp-client'
 import type { BuildMcpSnapshotInput, McpTrackableWorkRow } from './snapshot'
 
 import { queryClient, queryKeys } from '../../lib/query-client'
-import { formatInternalRef, normalizeInternalRef, parseInternalRefs } from '../../utils/templates'
+import { getInternalRefKeys } from '../../utils/templates'
 import { clockifyEntriesInRange } from '../clockify/entry-queries'
 import { getClockifyEntryTableRange } from '../clockify/ranges'
 import { selectClockifyWorkspace } from '../clockify/workspaces'
@@ -96,10 +96,9 @@ async function captureAndPublish(input: BuildMcpSnapshotInput, deadlineAt: numbe
       const linearRevision = (await db.linearCacheMeta.get('state'))?.revision ?? 0
       const refs = [
         ...new Set(
-          [runningEntry, ...recent.map(row => row.entry)]
-            .flatMap(entry => parseInternalRefs(entry?.description))
-            .filter(ref => ref.provider === 'linear')
-            .map(ref => normalizeInternalRef(formatInternalRef(ref))),
+          [runningEntry, ...recent.map(row => row.entry)].flatMap(entry =>
+            getInternalRefKeys(entry?.description, 'linear'),
+          ),
         ),
       ]
       const linearTickets =
@@ -112,10 +111,9 @@ async function captureAndPublish(input: BuildMcpSnapshotInput, deadlineAt: numbe
       return { revision, recent, linearTickets, linearRevision }
     },
   )
-  const refs = [runningEntry, ...recent.map(row => row.entry)]
-    .flatMap(entry => parseInternalRefs(entry?.description))
-    .filter(ref => ref.provider === 'github')
-    .map(ref => normalizeInternalRef(formatInternalRef(ref)))
+  const refs = [runningEntry, ...recent.map(row => row.entry)].flatMap(entry =>
+    getInternalRefKeys(entry?.description, 'github'),
+  )
   const [githubItems, repositories, visibleWorkItemTypes] = input.githubConnected
     ? await Promise.all([
         refs.length

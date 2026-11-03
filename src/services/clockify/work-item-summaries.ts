@@ -1,4 +1,4 @@
-import { formatInternalRef, normalizeInternalRef, parseInternalRefs } from '../../utils/templates'
+import { getInternalRefKeys, type InternalRef, normalizeInternalRef } from '../../utils/templates'
 import { type TimeEntryWithRatesDtoV1 } from './generated/clockify'
 
 export type ClockifyWorkItemTimeSummary = {
@@ -54,6 +54,21 @@ export function createClockifyEntryMatcher<TWorkItem>(
   return (entry: TimeEntryWithRatesDtoV1) => getClockifyEntryWorkItemByInternalRef({ entry, workItemByInternalRef })
 }
 
+export function resolveClockifyEntryOwners(
+  entries: TimeEntryWithRatesDtoV1[],
+  provider: InternalRef['provider'],
+  byRef: Map<string, string>,
+) {
+  return new Map(
+    entries.flatMap(entry => {
+      const owner = getInternalRefKeys(entry.description, provider)
+        .map(ref => byRef.get(ref))
+        .find(Boolean)
+      return entry.id && owner ? [[entry.id, owner] as const] : []
+    }),
+  )
+}
+
 function getWorkItemByInternalRef<TWorkItem>({
   getWorkItemInternalRef,
   workItems,
@@ -71,10 +86,8 @@ function getClockifyEntryWorkItemByInternalRef<TWorkItem>({
   entry: TimeEntryWithRatesDtoV1
   workItemByInternalRef: Map<string, TWorkItem>
 }) {
-  const internalRefs = parseInternalRefs(entry.description)
-
-  for (const internalRef of internalRefs) {
-    const workItem = workItemByInternalRef.get(normalizeInternalRef(formatInternalRef(internalRef)))
+  for (const refKey of getInternalRefKeys(entry.description)) {
+    const workItem = workItemByInternalRef.get(refKey)
 
     if (workItem) {
       return workItem

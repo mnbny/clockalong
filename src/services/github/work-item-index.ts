@@ -1,12 +1,20 @@
 import type { SyncedGithubWorkItem } from './sync'
 
+import { formatInternalRef, normalizeInternalRef } from '../../utils/templates'
+
 export type StoredGithubWorkItem = SyncedGithubWorkItem & { refKey: string }
 
 export function withGithubRefKey(item: SyncedGithubWorkItem) {
   return {
     ...item,
-    refKey:
-      `ref:github:${item.repositoryFullName}:${item.type === 'issue' ? 'issue' : 'pr'}:${item.number}`.toLocaleLowerCase(),
+    refKey: normalizeInternalRef(
+      formatInternalRef({
+        provider: 'github',
+        repository: item.repositoryFullName,
+        itemType: item.type === 'issue' ? 'issue' : 'pr',
+        number: item.number,
+      }),
+    ),
   }
 }
 

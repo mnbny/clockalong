@@ -16,6 +16,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 
 import { queryKeys } from '../lib/query-client'
+import { selectClockifyWorkspace } from '../services/clockify/workspaces'
 import { db } from '../services/db'
 import { useLinearSync } from '../services/linear/sync'
 import { executeMcpCommand, type ExecuteMcpCommandContext } from '../services/mcp/commands'
@@ -74,11 +75,7 @@ export function useMcpServerBridge() {
       return null
     }
 
-    return (
-      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
-      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
-      workspaces[0]
-    )
+    return selectClockifyWorkspace(user, workspaces)
   }, [user, workspaces])
   const userId = user?.id
   const workspaceId = selectedWorkspace?.id

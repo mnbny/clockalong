@@ -3,6 +3,7 @@ import { useEffect, useMemo } from 'react'
 
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
+import { selectClockifyWorkspace } from '../services/clockify/workspaces'
 import { useStorage } from '../services/storage/useStorage'
 import { useAppAuth } from './useAppAuth'
 import { useAppInit } from './useAppInit'
@@ -36,11 +37,7 @@ export function useClockifyDefaults() {
       return null
     }
 
-    return (
-      workspaces.find(candidate => candidate.id === user?.activeWorkspace) ??
-      workspaces.find(candidate => candidate.id === user?.defaultWorkspace) ??
-      workspaces[0]
-    )
+    return selectClockifyWorkspace(user, workspaces)
   }, [userQuery.data, workspacesQuery.data])
   const projectsQuery = useQuery({
     enabled: enabled && Boolean(selectedWorkspace?.id),
