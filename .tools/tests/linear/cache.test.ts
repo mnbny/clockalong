@@ -157,7 +157,9 @@ test('page cursors reset after a live revision and scans stop on cancellation', 
   }
   const page = await queryLinearPage(c.database, opts)
   await c.replace('viewer', [issue('c')], c.beginSync(), 'later')
-  expect((await queryLinearPage(c.database, { ...opts, cursor: page.cursor })).reset).toBe(true)
+  const resetPage = await queryLinearPage(c.database, { ...opts, cursor: page.cursor })
+  expect(resetPage.reset).toBe(true)
+  expect(resetPage.rows).toEqual((await queryLinearPage(c.database, opts)).rows)
   const controller = new AbortController()
   controller.abort()
   await expect(queryLinearPage(c.database, { ...opts, signal: controller.signal })).rejects.toThrow('cancelled')

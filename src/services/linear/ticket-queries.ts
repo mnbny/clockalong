@@ -97,8 +97,7 @@ function withSummary(ticket: LinearTicket, summaries: ClockifyWorkItemTimeSummar
 }
 
 export async function queryLinearPage(database: DB, options: PageOptions): Promise<LinearPage> {
-  const { viewerId, clockifyScope, runningEntries, sortOrder, showAll, now, limit, cursor, deadlineAt, signal } =
-    options
+  const { viewerId, clockifyScope, runningEntries, sortOrder, showAll, now, limit, deadlineAt, signal } = options
   return database.transaction(
     'r',
     database.linearTickets,
@@ -109,9 +108,10 @@ export async function queryLinearPage(database: DB, options: PageOptions): Promi
     async () => {
       const linearRevision = (await database.linearCacheMeta.get('state'))?.revision ?? 0
       const clockifyRevision = (await database.clockifyCacheMeta.get('revision'))?.revision ?? 0
-      if (cursor && (cursor.linearRevision !== linearRevision || cursor.clockifyRevision !== clockifyRevision)) {
-        return { rows: [], hasMore: false, reset: true, linearRevision, clockifyRevision }
-      }
+      const reset =
+        !!options.cursor &&
+        (options.cursor.linearRevision !== linearRevision || options.cursor.clockifyRevision !== clockifyRevision)
+      const cursor = reset ? undefined : options.cursor
       const active = runningEntries[0]?.id
         ? (await Dexie.waitFor(resolveLinearEntryOwners(database, viewerId, [runningEntries[0]]))).get(
             runningEntries[0].id,
@@ -218,7 +218,7 @@ export async function queryLinearPage(database: DB, options: PageOptions): Promi
       return {
         rows,
         hasMore: selected.length > limit,
-        reset: false,
+        reset,
         linearRevision,
         clockifyRevision,
         activeId: active,

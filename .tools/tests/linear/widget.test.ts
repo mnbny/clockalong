@@ -4,7 +4,7 @@ import type { AssignedIssueNode } from '../../../src/services/linear/tickets'
 import type { Root } from 'react-dom/client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, createElement, useState } from 'react'
+import { act, createElement, Profiler, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, expect, test, vi } from 'vitest'
 
@@ -49,6 +49,7 @@ vi.mock('../../../src/services/storage/useStorage', () => ({
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 let root: Root | undefined
 let container: HTMLDivElement | undefined
+let rowCommits: number[] = []
 function ticket(id: string, title: string, type: string, day: number): AssignedIssueNode {
   const date = `2026-01-0${day}T00:00:00Z`
   return {
@@ -68,6 +69,7 @@ afterEach(async () => {
   root = undefined
   container = undefined
   client.clear()
+  rowCommits = []
   vi.restoreAllMocks()
   widgetState.status = 'success'
   await clearSyncedLinearTickets()
@@ -110,9 +112,22 @@ test('widget displays retained rows beyond the fetch limit and sorts them and Sh
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  await act(async () => root?.render(createElement(QueryClientProvider, { client }, createElement(LinearWidget))))
+  await act(async () =>
+    root?.render(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(
+          Profiler,
+          { id: 'linear', onRender: () => rowCommits.push(container!.querySelectorAll('tbody tr').length) },
+          createElement(LinearWidget),
+        ),
+      ),
+    ),
+  )
   const tableText = () => container!.querySelector('tbody')!.textContent
   await vi.waitFor(() => expect(tableText()).toContain('Zulu'))
+  rowCommits = []
   expect(tableText()).not.toContain('Alpha')
   expect(tableText()).toContain('Bravo')
   expect(tableText()).not.toContain('Foreign')
@@ -135,6 +150,8 @@ test('widget displays retained rows beyond the fetch limit and sorts them and Sh
     ]),
   )
   expect(tableText()).toContain('Bravo')
+  expect(rowCommits.length).toBeGreaterThan(0)
+  expect(rowCommits.every(count => count > 0)).toBe(true)
 })
 
 test('paging resets when filters change and when a live ticket edit changes ordering', async () => {
@@ -151,7 +168,19 @@ test('paging resets when filters change and when a live ticket edit changes orde
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  await act(async () => root?.render(createElement(QueryClientProvider, { client }, createElement(LinearWidget))))
+  await act(async () =>
+    root?.render(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(
+          Profiler,
+          { id: 'linear', onRender: () => rowCommits.push(container!.querySelectorAll('tbody tr').length) },
+          createElement(LinearWidget),
+        ),
+      ),
+    ),
+  )
   const button = (name: string) =>
     [...container!.querySelectorAll('button')].find(item => item.textContent?.trim() === name)!
   const showAll = () =>
@@ -159,6 +188,7 @@ test('paging resets when filters change and when a live ticket edit changes orde
       'input[aria-label="Show all Linear tickets, including terminal states"]',
     )!
   await vi.waitFor(() => expect(button('Next')?.disabled).toBe(false))
+  rowCommits = []
   await act(async () => button('Next').click())
   await vi.waitFor(() => expect(button('Previous').disabled).toBe(false))
   await act(async () => showAll().click())
@@ -178,4 +208,5 @@ test('paging resets when filters change and when a live ticket edit changes orde
   )
   await vi.waitFor(() => expect(button('Previous').disabled).toBe(true))
   expect(container!.textContent).toContain('Updated live')
+  expect(rowCommits.every(count => count > 0)).toBe(true)
 })

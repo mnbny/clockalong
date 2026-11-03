@@ -2,7 +2,7 @@
 import type { Root } from 'react-dom/client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, createElement, useState } from 'react'
+import { act, createElement, Profiler, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, expect, test, vi } from 'vitest'
 
@@ -60,6 +60,7 @@ vi.mock('../../../src/services/storage/useStorage', () => ({
 
 let root: Root | undefined
 let container: HTMLDivElement | undefined
+let rowCommits: number[] = []
 const scope = { repositories: ['owner/repo'], visibleWorkItemTypes: { issues: true, pullRequests: true } }
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 afterEach(async () => {
@@ -70,6 +71,7 @@ afterEach(async () => {
   state.loading = false
   state.error = null
   client.clear()
+  rowCommits = []
   vi.restoreAllMocks()
   await githubWorkItemCache.clear()
 })
@@ -78,7 +80,19 @@ async function mount() {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  await act(async () => root?.render(createElement(QueryClientProvider, { client }, createElement(GitHubWidget))))
+  await act(async () =>
+    root?.render(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(
+          Profiler,
+          { id: 'github', onRender: () => rowCommits.push(container!.querySelectorAll('tbody tr').length) },
+          createElement(GitHubWidget),
+        ),
+      ),
+    ),
+  )
 }
 function button(text: string) {
   return [...container!.querySelectorAll('button')].find(candidate => candidate.textContent?.trim() === text)!
@@ -108,6 +122,7 @@ test('widget toggles, empty state and paging use live database rows', async () =
   const showAll = container!.querySelector<HTMLInputElement>('input[aria-label="Show all GitHub work items"]')!
   await act(async () => showAll.click())
   await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(50))
+  rowCommits = []
   await act(async () => button('Next').click())
   await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(5))
   const closed = container!.querySelector<HTMLInputElement>('input[aria-label="Show closed GitHub work items"]')!
@@ -116,6 +131,7 @@ test('widget toggles, empty state and paging use live database rows', async () =
   await act(async () => closed.click())
   await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(50))
   expect(button('Previous').disabled).toBe(true)
+  await vi.waitFor(() => expect(button('Next').disabled).toBe(false))
   await act(async () => button('Next').click())
   await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(5))
   await act(async () =>
@@ -141,6 +157,7 @@ test('widget toggles, empty state and paging use live database rows', async () =
   await vi.waitFor(() => expect(container!.textContent).toContain('New issue'))
   await act(async () => button('Next').click())
   await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(6))
+  expect(rowCommits.every(count => count > 0)).toBe(true)
   await act(async () => showAll.click())
   const mentions = container!.querySelector<HTMLInputElement>(
     'input[aria-label="Show GitHub work items that mention you or request your review"]',

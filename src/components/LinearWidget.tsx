@@ -243,10 +243,13 @@ function LinearWidgetContent() {
       cursor,
     ],
   )
-  const page = useDexieQuery(readPage)
+  const page = useDexieQuery(
+    readPage,
+    JSON.stringify([linearViewerId, clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id]),
+  )
   useEffect(() => {
     if (pagination.key !== filterKey) setPagination({ key: filterKey, cursors: [], now: initialNow })
-    else if (page.data?.linearRevision !== undefined && page.data.clockifyRevision !== undefined) {
+    else if (!page.isPending && page.data?.linearRevision !== undefined && page.data.clockifyRevision !== undefined) {
       const { linearRevision, clockifyRevision } = page.data
       const changed =
         pagination.linearRevision !== undefined &&
@@ -256,7 +259,15 @@ function LinearWidgetContent() {
       else if (pagination.linearRevision === undefined)
         setPagination(current => ({ ...current, linearRevision, clockifyRevision }))
     }
-  }, [pagination.key, pagination.linearRevision, pagination.clockifyRevision, filterKey, initialNow, page.data])
+  }, [
+    pagination.key,
+    pagination.linearRevision,
+    pagination.clockifyRevision,
+    filterKey,
+    initialNow,
+    page.data,
+    page.isPending,
+  ])
   const tickets = page.data?.rows ?? emptyLinearTickets
   const runningEntryId = runningEntry?.id ?? null
   const activeLinearIssueId = page.data?.activeId
@@ -503,7 +514,7 @@ function LinearWidgetContent() {
             <button
               className="btn btn-sm"
               type="button"
-              disabled={!cursors.length}
+              disabled={page.isPending || !cursors.length}
               onClick={() =>
                 setPagination(current => ({ ...current, key: filterKey, cursors: cursors.slice(0, -1), now: pageNow }))
               }>
@@ -512,7 +523,7 @@ function LinearWidgetContent() {
             <button
               className="btn btn-sm"
               type="button"
-              disabled={!page.data.hasMore}
+              disabled={page.isPending || !page.data.hasMore}
               onClick={() => {
                 if (page.data?.cursor)
                   setPagination(current => ({

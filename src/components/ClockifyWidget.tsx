@@ -640,7 +640,7 @@ function useSyncedClockifyEntriesForRange(
         : Promise.resolve([]),
     [userId, workspaceId, rangeStart, rangeEnd],
   )
-  return useDexieQuery(read)
+  return useDexieQuery(read, JSON.stringify([userId, workspaceId]))
 }
 
 function summarizeSyncedEntryLog(entries: SyncedClockifyTimeEntry[]) {

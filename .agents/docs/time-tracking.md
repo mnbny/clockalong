@@ -69,6 +69,8 @@ The dashboard Linear section is a data table, not a kanban or full Linear browse
 
 The Linear widget uses paged live queries on the shared ticket database. Sync stores compact tickets for the verified viewer. The sync settings control the fetch. Older retained tickets remain visible as last-known data.
 
+Local lists retain their last result while display filters, sorting, or pages change. The new result replaces the visible rows when the read completes. Account, workspace, and repository-scope changes clear the previous result. Paging controls wait for the new result, and local read errors provide a retry action.
+
 Current columns:
 
 - action: no visible heading. Shows a start button for inactive rows and a stop button for the row linked to the current running Clockify timer.

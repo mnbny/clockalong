@@ -2,7 +2,7 @@
 import type { Root } from 'react-dom/client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, createElement, useState } from 'react'
+import { act, createElement, Profiler, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, expect, test, vi } from 'vitest'
 
@@ -34,12 +34,25 @@ vi.mock('../../../src/services/storage/useStorage', () => ({
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 let root: Root | undefined
 let container: HTMLDivElement | undefined
+let entryCommits: boolean[] = []
 async function mount() {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  await act(async () => root?.render(createElement(QueryClientProvider, { client }, createElement(ClockifyWidget))))
+  await act(async () =>
+    root?.render(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(
+          Profiler,
+          { id: 'clockify', onRender: () => entryCommits.push(container!.textContent!.includes('Today entry')) },
+          createElement(ClockifyWidget),
+        ),
+      ),
+    ),
+  )
 }
 afterEach(async () => {
   if (root) await act(async () => root?.unmount())
@@ -47,6 +60,7 @@ afterEach(async () => {
   root = undefined
   container = undefined
   client.clear()
+  entryCommits = []
   vi.restoreAllMocks()
   await clockifyEntryCache.clear()
 })
@@ -83,9 +97,12 @@ test('widget reads current date ranges live and recovers from a local read failu
   )
   await vi.waitFor(() => expect(container!.textContent).toContain('Today entry'))
   expect(container!.textContent).not.toContain('Yesterday entry')
+  entryCommits = []
   const threeDays = [...container!.querySelectorAll('button')].find(button => button.textContent?.trim() === '3 days')!
   await act(async () => threeDays.click())
   await vi.waitFor(() => expect(container!.textContent).toContain('Yesterday entry'))
+  expect(entryCommits.length).toBeGreaterThan(0)
+  expect(entryCommits.every(Boolean)).toBe(true)
   const localFailure = vi.spyOn(db.clockifyEntries, 'where').mockImplementation(() => {
     throw new Error('Local read failed')
   })

@@ -241,23 +241,24 @@ function GitHubWidgetContent() {
     [filterKey],
   )
   const pageQuery = useCallback(
-    () => queryGithubWorkItems(db, { ...queryOptions, cursor, limit: 50 }),
+    (signal: AbortSignal) => queryGithubWorkItems(db, { ...queryOptions, cursor, limit: 50, signal }),
     [queryOptions, cursor],
   )
   const authorsQuery = useCallback(() => queryGithubAuthors(db, queryOptions.scope), [queryOptions])
-  const page = useDexieQuery(pageQuery)
-  const authors = useDexieQuery(authorsQuery)
+  const scopeKey = JSON.stringify([githubViewerAuthor?.username, queryOptions.scope])
+  const page = useDexieQuery(pageQuery, scopeKey)
+  const authors = useDexieQuery(authorsQuery, scopeKey)
   useEffect(() => {
     if (pagination.key !== filterKey) {
       setPagination({ key: filterKey, cursors: [] })
-    } else if (page.data && pagination.revision !== page.data.revision) {
+    } else if (!page.isPending && page.data && pagination.revision !== page.data.revision) {
       const revision = page.data.revision
       setPagination(current => {
         if (current.key !== filterKey || current.revision === revision) return current
         return { key: filterKey, cursors: current.revision === undefined ? current.cursors : [], revision }
       })
     }
-  }, [page.data, pagination.key, pagination.revision, filterKey])
+  }, [page.data, page.isPending, pagination.key, pagination.revision, filterKey])
   const githubAvailableAuthors = useMemo(
     () => mergeGithubAuthors(authors.data ?? [], githubSelectedAuthors, githubViewerAuthor ? [githubViewerAuthor] : []),
     [authors.data, githubSelectedAuthors, githubViewerAuthor],
@@ -319,7 +320,10 @@ function GitHubWidgetContent() {
         )
       : Promise.resolve({})
   }, [clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id, workItems, runningEntryQuery.data])
-  const trackingQuery = useDexieQuery(readTracking)
+  const trackingQuery = useDexieQuery(
+    readTracking,
+    JSON.stringify([scopeKey, clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id]),
+  )
   const workItemTimeSummaries = trackingQuery.data ?? emptyClockifySummaries
   const workItemsWithTracking = useMemo(
     () => mergeGithubWorkItemTimeSummaries(workItems, workItemTimeSummaries),
@@ -598,7 +602,7 @@ function GitHubWidgetContent() {
             <button
               className="btn btn-sm"
               type="button"
-              disabled={!cursors.length}
+              disabled={page.isPending || !cursors.length}
               onClick={() =>
                 setPagination({ key: filterKey, cursors: cursors.slice(0, -1), revision: page.data?.revision })
               }>
@@ -607,7 +611,7 @@ function GitHubWidgetContent() {
             <button
               className="btn btn-sm"
               type="button"
-              disabled={!page.data.hasMore}
+              disabled={page.isPending || !page.data.hasMore}
               onClick={() => {
                 if (page.data?.cursor)
                   setPagination({
