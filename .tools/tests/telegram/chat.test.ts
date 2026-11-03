@@ -1,4 +1,10 @@
-import type { HistoryCursor, HistoryPage, TopicCursor, TopicPage } from '../../../src/services/telegram/chat-data'
+import type {
+  HistoryCursor,
+  HistoryPage,
+  TelegramMessageEvent,
+  TopicCursor,
+  TopicPage,
+} from '../../../src/services/telegram/chat-data'
 import type { SavedTelegramGroup } from '../../../src/services/telegram/group'
 
 import {
@@ -11,10 +17,12 @@ import {
   tl,
 } from '@mtcute/web'
 import { type InfiniteData, InfiniteQueryObserver, QueryClient, QueryObserver } from '@tanstack/react-query'
-import { expect, onTestFinished, test } from 'vitest'
+import { expect, onTestFinished, test, vi } from 'vitest'
 
+import { telegramImageCache } from '../../../src/services/tauri/telegram-image-cache-client'
 import { TelegramChat } from '../../../src/services/telegram/chat'
 import { projectMessage, topicFor } from '../../../src/services/telegram/chat-data'
+import * as chatFiles from '../../../src/services/telegram/chat-files'
 import { subscribeChatUpdates } from '../../../src/services/telegram/chat-updates'
 import { deferred } from './fixtures'
 
@@ -45,6 +53,15 @@ const peers = () =>
     chats: [chatRaw, { ...chatRaw, id: 999, title: 'UNRELATED' }],
   })
 const record = (id: number, extra: Partial<tl.RawMessage> = {}) => projectMessage(basic, message(id, extra), peers())!
+const avatarRecord = () =>
+  projectMessage(
+    basic,
+    message(7),
+    PeersIndex.from({
+      users: [{ ...user, photo: { _: 'userProfilePhoto', photoId: Long.fromNumber(9), dcId: 2 } }],
+      chats: [chatRaw],
+    }),
+  )!
 const page = (...ids: number[]) => ({
   items: ids.map(id => record(id)),
   nextBefore: { id: ids[ids.length - 1], date: 100 },
@@ -105,6 +122,50 @@ function fixture(
   })
   return { query, client, sdk, calls, chat }
 }
+
+test('notification avatars load without mounted history and reuse native cached bytes after restart', async () => {
+  onTestFinished(() => {
+    vi.restoreAllMocks()
+  })
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3])
+  const blob = new Blob([bytes], { type: 'image/jpeg' })
+  vi.spyOn(telegramImageCache, 'scope').mockResolvedValue('token')
+  const read = vi.spyOn(telegramImageCache, 'read').mockResolvedValue(new Uint8Array())
+  const write = vi.spyOn(telegramImageCache, 'write').mockResolvedValue()
+  const download = vi.spyOn(chatFiles, 'downloadAvatar').mockResolvedValue(blob)
+  const row = avatarRecord()
+  const { chat } = fixture()
+  const fetch = vi.spyOn(chat, 'fetchNotificationMessages').mockResolvedValue([row])
+  expect(chat.cache.findMessage(7)).toBeUndefined()
+  expect(await chat.avatar(row.view)).toBe(blob)
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(write).toHaveBeenCalledWith('token', 'avatar:user:1:9:small', bytes)
+
+  read.mockResolvedValue(bytes)
+  const restarted = fixture().chat
+  const fetchAfterRestart = vi.spyOn(restarted, 'fetchNotificationMessages')
+  expect(new Uint8Array(await (await restarted.avatar(row.view))!.arrayBuffer())).toEqual(bytes)
+  expect(fetchAfterRestart).not.toHaveBeenCalled()
+  expect(download).toHaveBeenCalledTimes(1)
+})
+
+test.each(['sender', 'photo'] as const)('avatar refresh rejects a different %s identity', async changed => {
+  onTestFinished(() => {
+    vi.restoreAllMocks()
+  })
+  vi.spyOn(telegramImageCache, 'scope').mockResolvedValue('token')
+  vi.spyOn(telegramImageCache, 'read').mockResolvedValue(new Uint8Array())
+  const download = vi.spyOn(chatFiles, 'downloadAvatar')
+  const row = avatarRecord()
+  const fresh = {
+    ...row,
+    avatar: { ...row.avatar!, ...(changed === 'sender' ? { senderId: 'user:99' } : { photoId: '10' }) },
+  }
+  const { chat } = fixture()
+  vi.spyOn(chat, 'fetchNotificationMessages').mockResolvedValue([fresh])
+  expect(await chat.avatar(row.view)).toBeNull()
+  expect(download).not.toHaveBeenCalled()
+})
 
 test('projection rejects another peer and retains no SDK peers or unrelated entries', () => {
   const projected = record(3)
@@ -176,6 +237,63 @@ test('group-level protection prevents attachment and thumbnail downloads', () =>
   expect(result?.view.protected).toBe(true)
   expect(result?.view.attachment?.downloadable).toBe(false)
   expect(result?.preview).toBe(undefined)
+  expect(result?.image).toBe(undefined)
+})
+test('image projection selects a full photo separately from its thumbnail and excludes ephemeral media', () => {
+  const media: tl.RawMessageMediaPhoto = {
+    _: 'messageMediaPhoto',
+    photo: {
+      _: 'photo',
+      id: Long.ONE,
+      accessHash: Long.ONE,
+      dcId: 2,
+      date: 0,
+      fileReference: new Uint8Array([1]),
+      sizes: [
+        { _: 'photoSize', type: 's', w: 80, h: 80, size: 100 },
+        { _: 'photoSizeProgressive', type: 'y', w: 1280, h: 960, sizes: [100, 900_000] },
+      ],
+    },
+  }
+  const result = record(7, { media })
+  expect(result.preview).toMatchObject({ size: 100, location: { thumbSize: 's' } })
+  expect(result.image).toMatchObject({ size: 900_000, location: { thumbSize: 'y' } })
+  const ephemeral = record(7, { media: { ...media, ttlSeconds: 30 } })
+  expect(ephemeral.preview).toBeUndefined()
+  expect(ephemeral.image).toBeUndefined()
+})
+
+test('notification image reads refresh an expired reference and reject replaced attachments', async () => {
+  onTestFinished(() => {
+    vi.restoreAllMocks()
+  })
+  const { chat } = fixture()
+  const photo = record(7)
+  photo.view.attachment = { kind: 'photo', id: '1', size: 100, mime: 'image/jpeg', downloadable: true, spoiler: false }
+  photo.image = {
+    mediaId: '1',
+    size: 100,
+    dcId: 2,
+    location: {
+      _: 'inputPhotoFileLocation',
+      id: Long.ONE,
+      accessHash: Long.ONE,
+      fileReference: new Uint8Array([1]),
+      thumbSize: 'y',
+    },
+  }
+  const read = vi.spyOn(chat, 'fetchNotificationMessages').mockResolvedValue([photo])
+  const blob = new Blob(['image'])
+  const download = vi
+    .spyOn(chatFiles, 'downloadImage')
+    .mockRejectedValueOnce(new chatFiles.TelegramFileError('unavailable'))
+    .mockResolvedValue(blob)
+  expect(await chat.notificationImage(photo.view, true)).toBe(blob)
+  expect(read).toHaveBeenCalledTimes(2)
+  expect(download).toHaveBeenCalledTimes(2)
+  read.mockResolvedValue([{ ...photo, view: { ...photo.view, attachment: { ...photo.view.attachment, id: '2' } } }])
+  expect(await chat.notificationImage(photo.view, true)).toBeNull()
+  expect(download).toHaveBeenCalledTimes(2)
 })
 test('history cursor uses last raw ID exclusive, including short pages, without read side effects', async () => {
   const f = fixture(basic, async () => ({
@@ -680,4 +798,75 @@ test('explicit startup revoked rejection invokes lifecycle callback without rely
   expect(revoked).toBe(1)
   await chat.dispose()
   await f.chat.dispose()
+})
+
+test('notification history reads the whole selected forum and retains topic identities', async () => {
+  const { chat, calls } = fixture(forum, async request => {
+    if (request._ === 'messages.getHistory')
+      return {
+        _: 'messages.messages',
+        chats: [
+          {
+            _: 'channel',
+            id: 123,
+            title: 'Group',
+            forum: true,
+            megagroup: true,
+            photo: { _: 'chatPhotoEmpty' },
+            date: 1,
+          },
+        ],
+        users: [user],
+        messages: [
+          message(20, { peerId: { _: 'peerChannel', channelId: 123 }, out: true }),
+          message(19, {
+            peerId: { _: 'peerChannel', channelId: 123 },
+            replyTo: { _: 'messageReplyHeader', forumTopic: true, replyToTopId: 8, replyToMsgId: 8 },
+          }),
+          message(18, { peerId: { _: 'peerChannel', channelId: 123 } }),
+          message(17, { peerId: { _: 'peerChannel', channelId: 999 } }),
+        ],
+      }
+    throw new Error(`Unexpected ${request._}`)
+  })
+  const result = await chat.fetchNotificationHistory(null)
+  expect(result.items.map(row => [row.view.id, row.view.topicId])).toEqual([
+    [20, 1],
+    [19, 8],
+    [18, 1],
+  ])
+  expect(result.newestId).toBe(20)
+  expect(result.nextBefore).toEqual({ id: 17, date: 100 })
+  expect(calls[0]).toMatchObject({ _: 'messages.getHistory', peer: { _: 'inputPeerChannel', channelId: 123 } })
+})
+
+test('notification events receive selected-group messages without any history query mounted', async () => {
+  const { chat, client } = fixture()
+  const events: TelegramMessageEvent[] = []
+  const stop = chat.subscribeMessages(event => events.push(event))
+  await chat.start()
+  client.onRawUpdate.emit({
+    update: { _: 'updateNewMessage', message: message(7), pts: 1, ptsCount: 1 },
+    peers: peers(),
+  })
+  client.onRawUpdate.emit({
+    update: { _: 'updateEditMessage', message: message(7, { editDate: 500 }), pts: 2, ptsCount: 1 },
+    peers: peers(),
+  })
+  client.onRawUpdate.emit({
+    update: {
+      _: 'updateNewMessage',
+      message: message(8, { peerId: { _: 'peerChat', chatId: 999 } }),
+      pts: 3,
+      ptsCount: 1,
+    },
+    peers: peers(),
+  })
+  client.onRawUpdate.emit({ update: { _: 'updateDeleteMessages', messages: [7], pts: 4, ptsCount: 1 }, peers: peers() })
+  expect(events).toMatchObject([
+    { type: 'message', edited: false, record: { view: { id: 7 } } },
+    { type: 'message', edited: true },
+    { type: 'deleted', ids: [7] },
+  ])
+  stop()
 })

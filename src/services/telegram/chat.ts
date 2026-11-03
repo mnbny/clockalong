@@ -3,22 +3,28 @@ import type { QueryClient } from '@tanstack/react-query'
 import { type BaseTelegramClient, Long, PeersIndex, tl } from '@mtcute/web'
 import { closeChat, getMessages, openChat, sendMedia, sendText } from '@mtcute/web/methods.js'
 
+import { isImageAttachment } from './attachment-image'
 import { TelegramChatCache } from './chat-cache'
 import {
+  type AvatarReference,
+  type ChatMessage,
   type Conversation,
   type HistoryCursor,
   type HistoryPage,
   inputPeer,
   matchesPeer,
   type MessageRecord,
+  type NotificationHistoryPage,
   projectMessage,
   projectTopic,
+  type TelegramMessageEvent,
   type TopicCursor,
   type TopicPage,
 } from './chat-data'
 import {
   type AttachmentInput,
   downloadAvatar,
+  downloadImage,
   downloadPreview,
   prepareAttachment,
   TelegramFileError,
@@ -66,6 +72,23 @@ export class TelegramChat {
   private operations = new Map<string, number | undefined>()
   private startup: Promise<void> = Promise.resolve()
   private readonly images: TelegramChatImages
+  private messageListeners = new Set<(event: TelegramMessageEvent) => void>()
+
+  get notificationScope() {
+    return `${this.group.accountId}:${this.group.kind}:${this.group.id}`
+  }
+  get accountId() {
+    return this.group.accountId
+  }
+  subscribeMessages(listener: (event: TelegramMessageEvent) => void) {
+    this.messageListeners.add(listener)
+    return () => {
+      this.messageListeners.delete(listener)
+    }
+  }
+  private emitMessage(event: TelegramMessageEvent) {
+    for (const listener of this.messageListeners) listener(event)
+  }
 
   constructor(
     private readonly client: BaseTelegramClient,
@@ -125,6 +148,7 @@ export class TelegramChat {
         this.connection = state
         this.onChange()
       },
+      event => this.emitMessage(event),
     )
     this.startup = (async () => {
       await this.client.startUpdatesLoop()
@@ -142,7 +166,48 @@ export class TelegramChat {
     return this.startup
   }
   channelGap(id: number) {
-    if (this.group.kind === 'supergroup' && Number(this.group.id) === id) void this.cache.recover()
+    if (this.group.kind === 'supergroup' && Number(this.group.id) === id) {
+      void this.cache.recover()
+      this.emitMessage({ type: 'recover' })
+    }
+  }
+  // Unlike a topic conversation, this scan covers the entire selected group.
+  fetchNotificationHistory(before: HistoryCursor | null, signal?: AbortSignal): Promise<NotificationHistoryPage> {
+    return this.run(signal, async signal => {
+      const response = await this.client.call(
+        {
+          _: 'messages.getHistory',
+          peer: inputPeer(this.group),
+          offsetId: before?.id ?? 0,
+          offsetDate: before?.date ?? 0,
+          addOffset: 0,
+          limit: 50,
+          maxId: 0,
+          minId: 0,
+          hash: Long.ZERO,
+        },
+        { abortSignal: signal },
+      )
+      if (response._ === 'messages.messagesNotModified') throw new TelegramChatError('network')
+      const peers = PeersIndex.from(response)
+      const last = response.messages[response.messages.length - 1]
+      return {
+        items: response.messages
+          .map(raw => projectMessage(this.group, raw, peers))
+          .filter((record): record is MessageRecord => !!record),
+        newestId: Math.max(0, ...response.messages.map(raw => raw.id)),
+        nextBefore: last ? { id: last.id, date: last._ === 'messageEmpty' ? 0 : last.date } : undefined,
+      }
+    })
+  }
+  fetchNotificationMessages(ids: number[], signal?: AbortSignal) {
+    return this.run(signal, async signal => {
+      const messages = await getMessages(this.client, inputPeer(this.group), ids)
+      this.check(signal)
+      return messages
+        .map(message => (message ? projectMessage(this.group, message.raw, message._peers) : null))
+        .filter((record): record is MessageRecord => !!record)
+    })
   }
   private async refreshAccess() {
     try {
@@ -397,6 +462,38 @@ export class TelegramChat {
     this.check(signal)
     return message ? projectMessage(this.group, message.raw, message._peers) : null
   }
+  notificationImage(
+    message: Pick<ChatMessage, 'id' | 'attachment' | 'protected'>,
+    full: boolean,
+    signal?: AbortSignal,
+  ) {
+    return this.run(signal, async signal => {
+      if (message.protected || !isImageAttachment(message.attachment)) return null
+      const mediaId = message.attachment!.id!
+      const download = async () => {
+        const read = async () => {
+          const [record] = await this.fetchNotificationMessages([message.id], signal)
+          if (!record || record.view.protected || !isImageAttachment(record.view.attachment)) return null
+          if (record.view.attachment?.id !== mediaId || record.view.attachment.kind !== message.attachment?.kind)
+            return null
+          return (full ? record.image : record.preview) ?? null
+        }
+        const ref = await read()
+        if (!ref) return null
+        const fetch = full ? downloadImage : downloadPreview
+        try {
+          return await fetch(this.client, ref, signal)
+        } catch (error) {
+          if (!(error instanceof TelegramFileError) || error.category !== 'unavailable') throw error
+          const fresh = await read()
+          return fresh ? fetch(this.client, fresh, signal) : null
+        }
+      }
+      return full
+        ? download()
+        : this.images.load(`notification-preview:${message.attachment!.kind}:${mediaId}`, download, signal)
+    })
+  }
   preview(messageId: number, signal?: AbortSignal) {
     return this.run(signal, async signal => {
       const ref = this.cache.findMessage(messageId)?.preview
@@ -418,19 +515,26 @@ export class TelegramChat {
       )
     })
   }
-  avatar(messageId: number, signal?: AbortSignal) {
+  avatar(message: Pick<ChatMessage, 'id' | 'sender'>, signal?: AbortSignal) {
     return this.run(signal, async signal => {
-      const ref = this.cache.findMessage(messageId)?.avatar
-      if (!ref) return null
+      const sender = message.sender
+      if (!sender?.avatarId) return null
+      const senderId = `${sender.kind}:${sender.id}`
+      const matches = (ref: AvatarReference | undefined): ref is AvatarReference =>
+        !!ref && ref.senderId === senderId && ref.photoId === sender.avatarId
+      const refresh = async () => (await this.fetchNotificationMessages([message.id], signal))[0]?.avatar
       return this.images.load(
-        `avatar:${ref.senderId}:${ref.photoId}:small`,
+        `avatar:${senderId}:${sender.avatarId}:small`,
         async () => {
+          let ref = this.cache.findMessage(message.id)?.avatar
+          if (!matches(ref)) ref = await refresh()
+          if (!matches(ref)) return null
           try {
             return await downloadAvatar(this.client, ref, signal)
           } catch (error) {
             if (!(error instanceof TelegramFileError) || error.category !== 'unavailable') throw error
-            const fresh = (await this.refreshMessage(messageId, signal))?.avatar
-            if (!fresh || fresh.senderId !== ref.senderId || fresh.photoId !== ref.photoId) return null
+            const fresh = await refresh()
+            if (!matches(fresh)) return null
             return downloadAvatar(this.client, fresh, signal)
           }
         },
@@ -443,6 +547,7 @@ export class TelegramChat {
     this.ready = false
     this.unsubscribe()
     this.operations.clear()
+    this.messageListeners.clear()
     this.cache.dispose()
     return this.startup.then(async () => {
       if (this.group.kind === 'supergroup') await closeChat(this.client, inputPeer(this.group)).catch(() => {})

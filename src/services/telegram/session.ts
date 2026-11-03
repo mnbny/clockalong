@@ -39,6 +39,12 @@ export class TelegramSession {
   private revoking = false
   private operationSettled: (() => void) | null = null
 
+  get notificationIdentity() {
+    const group = this.savedGroup
+    if (this.accountId && group?.accountId !== this.accountId) return null
+    return group ? { scope: `${group.accountId}:${group.kind}:${group.id}`, accountId: group.accountId } : null
+  }
+
   constructor(
     private readonly onOperation: (operation: TelegramOperation) => void,
     private readonly onUnavailable: (reason: string) => void,

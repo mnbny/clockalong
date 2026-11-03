@@ -2,12 +2,19 @@ import type { TelegramChat } from './chat'
 import type { PropsWithChildren } from 'react'
 
 import { useQueryClient } from '@tanstack/react-query'
-import { createContext, createElement, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, createElement, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
 import { appToast } from '../../components/AppToaster'
 import { useAppInit } from '../../hooks/useAppInit'
+import { Consts } from '../../lib/consts'
+import { db } from '../db'
 import { type TelegramGroupState } from './group'
+import { TelegramNotificationCollector } from './notification-collector'
+import { TelegramNotificationStore } from './notification-store'
 import { type TelegramOperation, TelegramSession } from './session'
+
+// This run token never changes production clearing. Reloading only replays in opted-in development builds.
+const devReplayRun = Consts.dev && Consts.flags.telegramFeedReplay ? crypto.randomUUID() : undefined
 
 function useTelegramData() {
   const initialization = useAppInit()
@@ -19,6 +26,31 @@ function useTelegramData() {
   const [session] = useState(
     () => new TelegramSession(setOperation, setUnavailableReason, setGroup, query, chat => setChatState({ chat })),
   )
+  const identity = session.notificationIdentity
+  const notificationStore = useMemo(
+    () => (identity ? new TelegramNotificationStore(db, identity.scope, identity.accountId) : null),
+    [identity?.scope, identity?.accountId],
+  )
+  const [notificationError, setNotificationError] = useState(false)
+  const collector = useRef<TelegramNotificationCollector | null>(null)
+  const chatReady = chatState.chat?.isReady
+
+  useEffect(() => {
+    setNotificationError(false)
+    if (!chatState.chat || !chatReady || !notificationStore) return
+    const next = new TelegramNotificationCollector(
+      chatState.chat,
+      notificationStore,
+      setNotificationError,
+      devReplayRun,
+    )
+    collector.current = next
+    next.start()
+    return () => {
+      next.stop()
+      if (collector.current === next) collector.current = null
+    }
+  }, [chatState.chat, chatReady, notificationStore])
 
   useEffect(() => {
     if (initialization.value.appInitializing) return
@@ -61,6 +93,12 @@ function useTelegramData() {
 
   return {
     chat: chatState.chat,
+    notifications: {
+      store: notificationStore,
+      error: notificationError,
+      devReplayRun,
+      retry: () => collector.current?.collect().catch(() => {}),
+    },
     operation,
     group,
     unavailableReason,

@@ -109,7 +109,7 @@ test('retry reopens after a failed upgrade, reports another failure and preserve
   appDb.close({ disableAutoOpen: false })
   let upgrades = 0
   appDb
-    .version(5)
+    .version(appDb.verno + 1)
     .stores({ githubCacheMeta: 'key,revision' })
     .upgrade(() => {
       if (++upgrades < 3) throw new Error('Temporary upgrade failure')

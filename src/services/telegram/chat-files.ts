@@ -1,6 +1,7 @@
 import { type InputMediaLike, type ITelegramClient, MtUnsupportedError, tl } from '@mtcute/web'
 import { downloadAsIterable, getMe } from '@mtcute/web/methods.js'
 
+import { maxTelegramImageBytes } from './attachment-image'
 import { invalidTelegramSession } from './errors'
 
 export type FileReference = {
@@ -180,6 +181,27 @@ export async function downloadPreview(client: ITelegramClient, reference: FileRe
     !reference.location.thumbSize
   )
     throw new TelegramFileError('unavailable')
+  return downloadImageBlob(client, reference, signal, false)
+}
+
+export async function downloadImage(client: ITelegramClient, reference: FileReference, signal: AbortSignal) {
+  checkSignal(signal)
+  if (
+    !Number.isSafeInteger(reference.size) ||
+    reference.size <= 0 ||
+    reference.size > maxTelegramImageBytes ||
+    !['inputPhotoFileLocation', 'inputDocumentFileLocation'].includes(reference.location._)
+  )
+    throw new TelegramFileError('unavailable')
+  return downloadImageBlob(client, reference, signal, true)
+}
+
+async function downloadImageBlob(
+  client: ITelegramClient,
+  reference: FileReference,
+  signal: AbortSignal,
+  fullImage: boolean,
+) {
   const chunks: Uint8Array<ArrayBuffer>[] = []
   await downloadFile(
     client,
@@ -195,7 +217,15 @@ export async function downloadPreview(client: ITelegramClient, reference: FileRe
     signal,
   )
   checkSignal(signal)
-  return new Blob(chunks, { type: photoMime(chunks[0]) ?? 'application/octet-stream' })
+  const prefix = chunks[0]
+  let mime = photoMime(prefix)
+  if (fullImage && !mime) {
+    const ascii = (start: number, end: number) => String.fromCharCode(...prefix.subarray(start, end))
+    if (['GIF87a', 'GIF89a'].includes(ascii(0, 6))) mime = 'image/gif'
+    else if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') mime = 'image/webp'
+  }
+  if (fullImage && !mime) throw new TelegramFileError('unavailable')
+  return new Blob(chunks, { type: mime ?? 'application/octet-stream' })
 }
 
 export async function downloadAvatar(

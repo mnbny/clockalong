@@ -2,6 +2,7 @@ import type { ClockifyEntryRef, StoredClockifyEntry } from './clockify/entry-cac
 import type { SyncedGithubWorkItem } from './github/sync'
 import type { GithubAuthorIndex, GithubWorkItemIndex, StoredGithubWorkItem } from './github/work-item-index'
 import type { StoredLinearTicket } from './linear/ticket-cache'
+import type { TelegramNotification, TelegramNotificationCheckpoint } from './telegram/notification-store'
 
 import Dexie, { type Table } from 'dexie'
 
@@ -17,6 +18,8 @@ export class DB extends Dexie {
   declare clockifyCacheMeta: Table<{ key: string; revision: number }, string>
   declare linearTickets: Table<StoredLinearTicket, [string, string]>
   declare linearCacheMeta: Table<{ key: string; revision: number; sequence: number }, string>
+  declare telegramNotifications: Table<TelegramNotification, [string, number]>
+  declare telegramNotificationCheckpoints: Table<TelegramNotificationCheckpoint, string>
 
   constructor(name = 'clockalong') {
     super(name)
@@ -52,6 +55,10 @@ export class DB extends Dexie {
       linearTickets:
         '[viewerId+id],[viewerId+refKey],[viewerId+sequence+id],[viewerId+createdAtMs+id],[viewerId+updatedAtMs+id]',
       linearCacheMeta: 'key',
+    })
+    this.version(5).stores({
+      telegramNotifications: '[scope+id],scope,[scope+clearedAt+id],[scope+devReplayRun]',
+      telegramNotificationCheckpoints: 'scope',
     })
   }
 }

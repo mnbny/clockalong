@@ -96,6 +96,13 @@ fn prune(directory: &Path, bytes: u64, count: usize) -> Result<(), String> {
 
 impl ImageCache {
     fn select(&mut self, root: &Path, group: &str) -> Result<(), String> {
+        if self
+            .active
+            .as_ref()
+            .is_some_and(|scope| scope.group == group)
+        {
+            return Ok(());
+        }
         self.active = None;
         private_directory(root)?;
         let directory = root.join(hash(group));
@@ -300,6 +307,18 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn selecting_the_saved_group_again_preserves_active_image_handles() {
+        let root = Directory::new();
+        let mut cache = ImageCache::default();
+        cache.select(&root.0, "1:basic:123").unwrap();
+        let token = cache.token("1:basic:123").unwrap();
+        cache.write(&token, "avatar", b"image").unwrap();
+        cache.select(&root.0, "1:basic:123").unwrap();
+        assert_eq!(cache.token("1:basic:123").unwrap(), token);
+        assert_eq!(cache.read(&token, "avatar").unwrap(), b"image");
     }
 
     #[test]

@@ -3,7 +3,7 @@ import type { SavedTelegramGroup } from './group'
 
 import { type BaseTelegramClient, type RawUpdateInfo, type tl } from '@mtcute/web'
 
-import { matchesPeer, projectMessage } from './chat-data'
+import { matchesPeer, projectMessage, type TelegramMessageEvent } from './chat-data'
 
 export function subscribeChatUpdates(
   client: BaseTelegramClient,
@@ -13,6 +13,7 @@ export function subscribeChatUpdates(
   active: () => boolean,
   refreshAccess: () => Promise<void>,
   onConnection: (state: 'offline' | 'connecting' | 'updating' | 'connected') => void = () => {},
+  onMessage: (event: TelegramMessageEvent) => void = () => {},
 ) {
   let interrupted = false
   const raw = ({ update, peers }: RawUpdateInfo) => {
@@ -31,16 +32,27 @@ export function subscribeChatUpdates(
       const message = update.message
       if (message._ === 'messageEmpty' || !matchesPeer(group, message.peerId)) return
       const projected = projectMessage(group, message, peers)
-      if (projected) void cache.upsert(projected)
+      if (projected) {
+        void cache.upsert(projected)
+        onMessage({
+          type: 'message',
+          record: projected,
+          edited: update._ === 'updateEditMessage' || update._ === 'updateEditChannelMessage',
+        })
+      }
       if (message._ === 'messageService') void refreshAccess()
       return
     }
     if (update._ === 'updateDeleteChannelMessages') {
-      if (group.kind === 'supergroup' && update.channelId === Number(group.id)) void cache.remove(update.messages)
+      if (group.kind === 'supergroup' && update.channelId === Number(group.id)) {
+        void cache.remove(update.messages)
+        onMessage({ type: 'deleted', ids: update.messages })
+      }
       return
     }
     if (update._ === 'updateDeleteMessages') {
       if (group.kind === 'basic') {
+        onMessage({ type: 'deleted', ids: update.messages })
         const known = update.messages.filter(id => !!cache.findMessage(id) || [...pendingSends.values()].includes(id))
         if (known.length) void cache.remove(known)
         if (known.length !== update.messages.length) void cache.recover()
@@ -80,6 +92,7 @@ export function subscribeChatUpdates(
     else if (interrupted) {
       interrupted = false
       void cache.recover()
+      onMessage({ type: 'recover' })
     }
   }
   client.onRawUpdate.add(raw)

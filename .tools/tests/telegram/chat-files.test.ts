@@ -7,6 +7,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import {
   type AttachmentInput,
   downloadAvatar,
+  downloadImage,
   downloadPreview,
   prepareAttachment,
   probeVideo,
@@ -50,6 +51,33 @@ const avatarReference: AvatarReference = {
   senderId: 'chat:9',
   photoId: '1',
 }
+
+test('full image reads validate bytes and reject oversized requests before download', async () => {
+  const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10])
+  const client = clientFor(async () => ({ _: 'upload.file', bytes }))
+  const result = await downloadImage(client, { ...ref(), size: bytes.length }, signal())
+  expect(result.type).toBe('image/png')
+  expect(new Uint8Array(await result.arrayBuffer())).toEqual(bytes)
+  await expect(
+    downloadImage(
+      clientFor(async () => {
+        throw new Error('must not download')
+      }),
+      {
+        ...ref(),
+        size: 21 * 1024 * 1024,
+      },
+      signal(),
+    ),
+  ).rejects.toSatisfy(category('unavailable'))
+  await expect(
+    downloadImage(
+      clientFor(async () => ({ _: 'upload.file', bytes: new Uint8Array([1, 2, 3, 4]) })),
+      ref(),
+      signal(),
+    ),
+  ).rejects.toSatisfy(category('unavailable'))
+})
 
 test('avatar bytes preserve order when SDK workers finish out of order', async () => {
   const part = 64 * 1024

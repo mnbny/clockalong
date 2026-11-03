@@ -57,8 +57,13 @@ impl TelegramGroup {
 
 #[tauri::command]
 pub fn telegram_group_read<R: Runtime>(app: AppHandle<R>) -> Result<Option<TelegramGroup>, String> {
-    stronghold::read_json(&app, KEY)
-        .map_err(|_| "Could not read the saved Telegram group.".to_string())
+    let group: Option<TelegramGroup> = stronghold::read_json(&app, KEY)
+        .map_err(|_| "Could not read the saved Telegram group.".to_string())?;
+    if let Some(group) = group.as_ref().filter(|group| group.valid()) {
+        // Saved images are available before Telegram's network session restore completes.
+        let _ = crate::telegram_image_cache::select(&app, group.image_cache_key());
+    }
+    Ok(group)
 }
 
 #[tauri::command]
