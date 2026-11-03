@@ -94,7 +94,7 @@ function button(text: string) {
 }
 
 test('widget toggles, empty state and paging use live database rows', async () => {
-  const rows = Array.from({ length: 55 }, (_, index) => ({
+  const rows = Array.from({ length: 20 }, (_, index) => ({
     id: `owner/repo:issue:${index}`,
     type: 'issue' as const,
     number: index,
@@ -116,15 +116,15 @@ test('widget toggles, empty state and paging use live database rows', async () =
   await vi.waitFor(() => expect(container!.textContent).toContain('No GitHub work items found.'))
   const showAll = container!.querySelector<HTMLInputElement>('input[aria-label="Show all GitHub work items"]')!
   await act(async () => showAll.click())
-  await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(50))
+  await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(15))
   rowCommits = []
   await act(async () => button('Next').click())
   await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(5))
   const closed = container!.querySelector<HTMLInputElement>('input[aria-label="Show closed GitHub work items"]')!
   await act(async () => closed.click())
-  await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(50))
+  await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(15))
   await act(async () => closed.click())
-  await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(50))
+  await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(15))
   expect(button('Previous').disabled).toBe(true)
   await vi.waitFor(() => expect(button('Next').disabled).toBe(false))
   await act(async () => button('Next').click())
@@ -132,7 +132,7 @@ test('widget toggles, empty state and paging use live database rows', async () =
   await act(async () =>
     githubWorkItemCache.replace([{ ...rows[0], title: 'Updated' }], githubWorkItemCache.beginSync(), scope),
   )
-  await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(50))
+  await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(15))
   await act(async () =>
     githubWorkItemCache.replace(
       [
@@ -148,7 +148,7 @@ test('widget toggles, empty state and paging use live database rows', async () =
       scope,
     ),
   )
-  await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(50))
+  await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(15))
   await vi.waitFor(() => expect(container!.textContent).toContain('New issue'))
   await act(async () => button('Next').click())
   await vi.waitFor(() => expect(container!.querySelectorAll('tbody tr')).toHaveLength(6))

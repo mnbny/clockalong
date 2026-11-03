@@ -158,7 +158,7 @@ The sync also fetches direct `@mention` results and open pull requests with a di
 
 Closed pull requests are synced so recently completed review and build work can still show tracked totals. They stay hidden in the dashboard unless `githubShowClosedWorkItems` is enabled.
 
-The GitHub dashboard gates on authentication and subscribes to bounded pages of local work items. It merges Clockify tracked summaries into the table and starts or stops Clockify timers. The app header owns manual sync. The label picker can load configured-repository label catalogs separately.
+The GitHub dashboard gates on authentication and shows up to 15 matching local work items per page. Previous and Next controls move between pages. It merges Clockify tracked summaries into the table and starts or stops Clockify timers. The app header owns manual sync. The label picker can load configured-repository label catalogs separately.
 
 The dashboard author filter only affects display. The header shows selected authors as avatars, and the user-plus button opens a searchable dialog. The dialog includes authors from the current work-item cache and persisted selections. The authenticated GitHub viewer is always selected and cannot be removed. Store additional authors in `githubSelectedAuthors` with their username and avatar metadata so a selection remains available even when that user is absent from the current cache.
 

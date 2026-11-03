@@ -241,7 +241,7 @@ function GitHubWidgetContent() {
     [filterKey],
   )
   const pageQuery = useCallback(
-    (signal: AbortSignal) => queryGithubWorkItems(db, { ...queryOptions, cursor, limit: 50, signal }),
+    (signal: AbortSignal) => queryGithubWorkItems(db, { ...queryOptions, cursor, limit: 15, signal }),
     [queryOptions, cursor],
   )
   const authorsQuery = useCallback(() => queryGithubAuthors(db, queryOptions.scope), [queryOptions])
