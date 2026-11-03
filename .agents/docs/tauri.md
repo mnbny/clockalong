@@ -30,6 +30,8 @@ Attachment reads accept nonempty regular files up to 20 MiB and run off the main
 
 ## Update experience
 
-The root checks for updates after launch and every six hours. App settings also provides a manual check.
+The root checks for updates after launch and every 30 minutes. App settings also provides a manual check.
+
+Update-available and restart notifications remain visible until manually dismissed. This applies to automatic and manual update checks.
 
 Available updates produce an install action. Installation and restart require user actions; active time tracking does not trigger an automatic restart. Distribution owns release artifacts and updater signing.

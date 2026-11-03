@@ -438,7 +438,7 @@ function AppUpdatesControl() {
       setAvailableUpdate(update)
 
       if (update) {
-        appToast.info(`Clockalong ${update.version} is available`)
+        appToast.info(`Clockalong ${update.version} is available`, { duration: Infinity })
       } else {
         appToast.success('Clockalong is up to date')
       }
@@ -464,6 +464,7 @@ function AppUpdatesControl() {
       setInstalled(true)
       appToast.success('Update installed', {
         description: 'Restart Clockalong to finish.',
+        duration: Infinity,
       })
     } catch (error) {
       appToast.error('Could not install update', {
