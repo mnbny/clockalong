@@ -82,13 +82,14 @@ Current dashboard widget boundaries:
 
 Dashboard widget shells use `card card-border bg-base-200/10 dark:bg-base-200/40`. Use a `card-body` with `p-0` when the widget manages its own header, tables, or row dividers.
 
-Settings routes should follow the same composition pattern. `src/routes/_app.settings.tsx` owns the settings page header and renders scoped settings sections:
+The settings route owns the page header and composes sections in this order:
 
-- `src/components/QuickTimersSettings.tsx`
-- `src/components/LinearSettings.tsx`
-- `src/components/GitHubSettings.tsx`
-- `src/components/ClockifySettings.tsx`
-- `src/components/AppSettings.tsx`
+1. Quick Timers
+2. Clockify
+3. Linear
+4. GitHub
+5. Telegram
+6. App
 
 Shared settings row/section layout lives in `src/components/settings/SettingsSection.tsx`. Keep section-specific hooks and service calls inside the scoped settings component that renders that section.
 

@@ -27,10 +27,10 @@ function SettingsScreen() {
 
       <div className="flex w-full flex-col gap-10">
         <QuickTimersSettings />
+        <ClockifySettings />
         <LinearSettings />
         <GitHubSettings />
         <TelegramSettings />
-        <ClockifySettings />
         <AppSettings />
       </div>
     </section>
