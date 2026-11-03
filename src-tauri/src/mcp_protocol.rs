@@ -126,7 +126,7 @@ async fn call_tool<R: Runtime>(
     let output = match name {
         "list_trackable_work" => {
             let arguments = validate_list_trackable_work(&arguments)?;
-            if matches!(arguments.source.as_deref(), Some("linear" | "quick_timer")) {
+            if arguments.source.as_deref() == Some("quick_timer") {
                 list_work_with_refresh(state, arguments, || refresh_tool(app, state)).await
             } else {
                 query_list_with_refresh(
@@ -134,45 +134,19 @@ async fn call_tool<R: Runtime>(
                     arguments,
                     || refresh_tool(app, state),
                     |snapshot, arguments| async move {
-                        if snapshot
-                            .value
-                            .get("trackingStatus")
-                            .and_then(|status| status.get("githubConnected"))
-                            .and_then(Value::as_bool)
-                            != Some(true)
-                        {
+                        if !requires_work_query(&snapshot, arguments.source.as_deref()) {
                             return list_trackable_work(&snapshot, arguments);
                         }
-                        let rows = snapshot
-                            .value
-                            .get("trackableWork")
-                            .and_then(Value::as_array)
-                            .ok_or_else(|| {
-                                "MCP snapshot does not contain trackable work".to_string()
-                            })?;
-                        let github_tracking = snapshot
-                            .value
-                            .get("githubTracking")
-                            .and_then(Value::as_array)
-                            .ok_or_else(|| {
-                                "MCP snapshot is missing GitHub tracking data; refresh and retry"
-                                    .to_string()
-                            })?;
                         state
                             .dispatch_command(
                                 app,
                                 "list_trackable_work".to_string(),
                                 json!({
                                     "capturedAt": snapshot.captured_at,
-                                    "nonGithubRows": rows,
                                     "source": arguments.source,
                                     "query": arguments.query,
                                     "includeClosed": arguments.include_closed,
                                     "limit": arguments.limit,
-                                    "githubConnected": snapshot.value.get("trackingStatus")
-                                        .and_then(|status| status.get("githubConnected"))
-                                        .and_then(Value::as_bool).unwrap_or(false),
-                                    "githubTracking": github_tracking,
                                 }),
                             )
                             .await
@@ -310,10 +284,7 @@ async fn write_tool<R: Runtime>(
             .get("id")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        if (source == "github"
-            && status.get("githubConnected").and_then(Value::as_bool) != Some(true))
-            || (source != "github" && !snapshot_has_target(&snapshot, source, id))
-        {
+        if !work_target_allowed(&snapshot, source, id) {
             return Err(TARGET_ERROR.to_string());
         }
     } else if status.get("running").is_none_or(Value::is_null) {
@@ -324,6 +295,38 @@ async fn write_tool<R: Runtime>(
         .dispatch_command(app, name.to_string(), arguments)
         .await
         .map_err(bridge_error_message)
+}
+
+fn work_target_allowed(snapshot: &CachedMcpSnapshot, source: &str, id: &str) -> bool {
+    let status = snapshot.value.get("trackingStatus");
+    match source {
+        "github" => {
+            status
+                .and_then(|s| s.get("githubConnected"))
+                .and_then(Value::as_bool)
+                == Some(true)
+        }
+        "linear" => {
+            status
+                .and_then(|s| s.get("linearConnected"))
+                .and_then(Value::as_bool)
+                == Some(true)
+        }
+        "quick_timer" => snapshot_has_target(snapshot, source, id),
+        _ => false,
+    }
+}
+
+fn requires_work_query(snapshot: &CachedMcpSnapshot, source: Option<&str>) -> bool {
+    let status = snapshot.value.get("trackingStatus");
+    let connected =
+        |name: &str| status.and_then(|s| s.get(name)).and_then(Value::as_bool) == Some(true);
+    match source {
+        Some("linear") => connected("linearConnected"),
+        Some("github") => connected("githubConnected"),
+        Some("quick_timer") => false,
+        _ => connected("linearConnected") || connected("githubConnected"),
+    }
 }
 
 fn list_trackable_work(
@@ -1015,6 +1018,36 @@ fn tool_catalog() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn linear_and_mixed_lists_use_the_webview_even_without_github() {
+        let snapshot = CachedMcpSnapshot {
+            captured_at: "now".into(),
+            value: json!({"trackingStatus": {"linearConnected": true, "githubConnected": false}}),
+        };
+        assert!(requires_work_query(&snapshot, Some("linear")));
+        assert!(requires_work_query(&snapshot, None));
+        assert!(!requires_work_query(&snapshot, Some("github")));
+        assert!(!requires_work_query(&snapshot, Some("quick_timer")));
+    }
+
+    #[test]
+    fn provider_targets_require_connection_and_quick_timers_require_membership() {
+        let snapshot = CachedMcpSnapshot {
+            captured_at: "now".into(),
+            value: json!({"trackingStatus": {"linearConnected": true, "githubConnected": false},
+                "trackableWork": [{"source": "quick_timer", "id": "saved"}]}),
+        };
+        assert!(work_target_allowed(
+            &snapshot,
+            "linear",
+            "checked-in-webview"
+        ));
+        assert!(!work_target_allowed(&snapshot, "github", "missing"));
+        assert!(work_target_allowed(&snapshot, "quick_timer", "saved"));
+        assert!(!work_target_allowed(&snapshot, "quick_timer", "unknown"));
+        assert!(!work_target_allowed(&snapshot, "other", "saved"));
+    }
 
     #[test]
     fn telegram_contract_rejects_unscoped_or_malformed_arguments() {

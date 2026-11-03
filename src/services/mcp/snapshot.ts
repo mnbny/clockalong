@@ -3,7 +3,7 @@ import type { TimeEntrySummaryReportDto } from '../clockify/generated/reports'
 import type { SyncedClockifyTimeEntry } from '../clockify/sync'
 import type { ClockifyWorkItemTimeSummaries } from '../clockify/work-item-summaries'
 import type { SyncedGithubWorkItem } from '../github/sync'
-import type { SyncedLinearTicket } from '../linear/sync'
+import type { StoredLinearTicket } from '../linear/ticket-cache'
 import type { LinearTicket } from '../linear/tickets'
 import type {
   ClockifyProject,
@@ -16,6 +16,7 @@ import { parseTemplateTokens } from '../../utils/templates'
 import { getClockifyEntryTableRange } from '../clockify/ranges'
 import { getClockifyEntryLinearTicket, getLinearTicketInternalRef } from '../clockify/ticket-summaries'
 import { getClockifyEntryGithubWorkItem, getGithubWorkItemInternalRef } from '../github/work-item-summaries'
+import { toLinearTicket } from '../linear/tickets'
 import { isLinearTicketTerminal } from '../linear/tickets-sorting'
 
 export type McpWorkSource = 'github' | 'linear' | 'quick_timer'
@@ -121,9 +122,8 @@ export type BuildMcpSnapshotInput = {
   githubConnected?: boolean
   githubWorkItems?: SyncedGithubWorkItem[]
   linearConnected?: boolean
-  linearTickets?: SyncedLinearTicket[]
+  linearTickets?: StoredLinearTicket[]
   linearViewerId?: string | null
-  linearTimeSummaries?: ClockifyWorkItemTimeSummaries
   now?: Date
   quickTimers?: QuickTimerPreset[]
   quickTimersActiveEntry?: QuickTimersActiveEntry
@@ -153,7 +153,6 @@ export function buildMcpSnapshot({
   linearConnected = false,
   linearTickets = [],
   linearViewerId = null,
-  linearTimeSummaries = {},
   now = new Date(),
   quickTimers = [],
   quickTimersActiveEntry = null,
@@ -189,27 +188,6 @@ export function buildMcpSnapshot({
     ...(clockifyTimerProject ? ([[clockifyTimerProject.projectId, clockifyTimerProject.projectName]] as const) : []),
   ])
   const trackableWork = [
-    ...scopedLinearTickets.map(ticket => {
-      const summary = linearTimeSummaries[ticket.id] ?? emptyTimeSummary
-
-      return {
-        id: ticket.id,
-        identifier: ticket.identifier,
-        internalRef: getLinearTicketInternalRef(ticket),
-        isClosed: isLinearTicketTerminal(ticket),
-        isRunning: runningSource.source === 'linear' && runningSource.sourceId === ticket.id,
-        lastTrackedAt: summary.lastTrackedAt,
-        repository: null,
-        source: 'linear',
-        status: ticket.status.name,
-        title: ticket.title,
-        totalTrackedAmount: summary.totalTrackedAmount,
-        totalTrackedAmountCurrency: summary.totalTrackedAmountCurrency,
-        totalTrackedSeconds: summary.totalTrackedSeconds,
-        updatedAt: ticket.updatedAt,
-        url: ticket.url,
-      } satisfies McpTrackableWorkRow & { isClosed: boolean }
-    }),
     ...scopedQuickTimers.map(
       preset =>
         ({
@@ -323,37 +301,47 @@ export function buildGithubWorkRows(
   })
 }
 
+export function buildLinearWorkRows(
+  tickets: LinearTicket[],
+  summaries: ClockifyWorkItemTimeSummaries,
+  runningId: string | null,
+) {
+  return tickets.map(ticket => {
+    const summary = summaries[ticket.id] ?? emptyTimeSummary
+    return {
+      id: ticket.id,
+      identifier: ticket.identifier,
+      internalRef: getLinearTicketInternalRef(ticket),
+      isClosed: isLinearTicketTerminal(ticket),
+      isRunning: runningId === ticket.id,
+      lastTrackedAt: summary.lastTrackedAt,
+      repository: null,
+      source: 'linear',
+      status: ticket.status.name,
+      title: ticket.title,
+      totalTrackedAmount: summary.totalTrackedAmount,
+      totalTrackedAmountCurrency: summary.totalTrackedAmountCurrency,
+      totalTrackedSeconds: summary.totalTrackedSeconds,
+      updatedAt: ticket.updatedAt,
+      url: ticket.url,
+    } satisfies McpTrackableWorkRow & { isClosed: boolean }
+  })
+}
+
 export function getScopedLinearTickets({
   connected,
   syncedTickets,
   viewerId,
 }: {
   connected: boolean
-  syncedTickets: SyncedLinearTicket[]
+  syncedTickets: StoredLinearTicket[]
   viewerId: string | null
 }) {
   if (!connected || !viewerId) {
     return []
   }
 
-  return syncedTickets.filter(ticket => ticket.viewerId === viewerId).map(ticket => toLinearTicket(ticket))
-}
-
-function toLinearTicket(syncedTicket: SyncedLinearTicket): LinearTicket {
-  return {
-    assignee: syncedTicket.ticket.assignee,
-    createdAt: syncedTicket.ticket.createdAt,
-    id: syncedTicket.ticket.id,
-    identifier: syncedTicket.ticket.identifier,
-    lastTrackedAt: null,
-    status: syncedTicket.ticket.state,
-    title: syncedTicket.ticket.title,
-    totalTrackedAmount: null,
-    totalTrackedAmountCurrency: null,
-    totalTrackedSeconds: null,
-    updatedAt: syncedTicket.ticket.updatedAt,
-    url: syncedTicket.ticket.url,
-  }
+  return syncedTickets.filter(ticket => ticket.viewerId === viewerId).map(ticket => toLinearTicket(ticket.ticket))
 }
 
 function getScopedClockifyEntries({

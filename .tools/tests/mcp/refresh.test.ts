@@ -7,7 +7,8 @@ import { queryClient, queryKeys } from '../../../src/lib/query-client'
 import { clockify } from '../../../src/services/clockify/client'
 import { cacheClockifyEntryResult, clearSyncedClockifyTimeEntries } from '../../../src/services/clockify/sync'
 import { githubWorkItemCache } from '../../../src/services/github/work-item-cache'
-import { linearTicketsCollection } from '../../../src/services/linear/sync'
+import { clearSyncedLinearTickets } from '../../../src/services/linear/sync'
+import { linearTicketCache } from '../../../src/services/linear/ticket-cache'
 import { publishMcpSnapshot, refreshMcpSnapshot } from '../../../src/services/mcp/refresh'
 import { listMcpWork } from '../../../src/services/mcp/work-list'
 import { storage } from '../../../src/services/storage/config'
@@ -16,12 +17,11 @@ import { mcp } from '../../../src/services/tauri/mcp-client'
 afterEach(async () => {
   queryClient.clear()
   await clearSyncedClockifyTimeEntries()
+  await clearSyncedLinearTickets()
 })
 
 test('refresh publishes current provider caches and Clockify reads before completing', async () => {
   const timestamp = new Date().toISOString()
-  let linearRows: typeof linearTicketsCollection.toArray = []
-  vi.spyOn(linearTicketsCollection, 'toArray', 'get').mockImplementation(() => linearRows)
   queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user', activeWorkspace: 'workspace' })
   queryClient.setQueryData(queryKeys.clockify.workspaces, [{ id: 'workspace', name: 'Workspace' }])
   queryClient.setQueryData(queryKeys.clockify.projects({ params: { workspaceId: 'workspace' } }), [
@@ -56,17 +56,10 @@ test('refresh publishes current provider caches and Clockify reads before comple
         githubWorkItemCache.beginSync(),
         { repositories: ['owner/repo'], visibleWorkItemTypes: { issues: true, pullRequests: true } },
       )
-      linearRows = [
-        {
-          id: 'ticket',
-          $key: 'ticket',
-          $collectionId: 'linear',
-          $origin: 'remote',
-          $synced: true,
-          viewerId: 'viewer',
-          syncedAt: timestamp,
-          updatedAt: timestamp,
-          ticket: {
+      await linearTicketCache.replace(
+        'viewer',
+        [
+          {
             id: 'ticket',
             identifier: 'APP-1',
             title: 'New ticket',
@@ -76,8 +69,10 @@ test('refresh publishes current provider caches and Clockify reads before comple
             assignee: null,
             state: { id: 'todo', name: 'Todo', type: 'unstarted', position: 0, color: '#ffffff' },
           },
-        },
-      ]
+        ],
+        linearTicketCache.beginSync(),
+        timestamp,
+      )
       const params = { userId: 'user', workspaceId: 'workspace' }
       queryClient.setQueryData(queryKeys.clockify.runningEntry({ params }), [
         { id: 'running', userId: 'user', timeInterval: { start: timestamp } },
@@ -114,7 +109,7 @@ test('refresh publishes current provider caches and Clockify reads before comple
   })
   await vi.waitFor(() => expect(publish).toHaveBeenCalledTimes(1))
   expect(completed).toBe(false)
-  expect(published.trackableWork.map(row => row.title)).toStrictEqual(['New ticket'])
+  expect(published.trackableWork).toStrictEqual([])
   expect(published.trackingStatus.running?.entryId).toBe('running')
   expect(published.trackingStatus.today.trackedSeconds).toBe(600)
   expect(published.clockifyProjects.projects[0].projectName).toBe('Project')
@@ -126,7 +121,6 @@ test('refresh publishes current provider caches and Clockify reads before comple
 })
 
 test('a publication failure fails refresh instead of reporting a fresh snapshot', async () => {
-  vi.spyOn(linearTicketsCollection, 'toArray', 'get').mockImplementation(() => [])
   vi.spyOn(mcp, 'publishSnapshot').mockImplementation(async () => {
     throw new Error('Bridge unavailable')
   })
@@ -425,17 +419,10 @@ test('a rebuilt mixed capture combines fresh Linear and GitHub totals', async ()
     queryFn: async () => ({ viewerId: 'viewer' }),
   })
   onTestFinished(observer.subscribe(() => {}))
-  vi.spyOn(linearTicketsCollection, 'toArray', 'get').mockReturnValue([
-    {
-      id: 'linear',
-      viewerId: 'viewer',
-      syncedAt: '',
-      updatedAt: '',
-      $key: 'linear',
-      $collectionId: 'linear',
-      $origin: 'remote',
-      $synced: true,
-      ticket: {
+  await linearTicketCache.replace(
+    'viewer',
+    [
+      {
         id: 'linear',
         identifier: 'TASK-1',
         title: 'Ticket',
@@ -445,8 +432,10 @@ test('a rebuilt mixed capture combines fresh Linear and GitHub totals', async ()
         assignee: null,
         state: { id: 'open', name: 'open', type: 'unstarted', position: 0, color: '#fff' },
       },
-    },
-  ])
+    ],
+    linearTicketCache.beginSync(),
+    '',
+  )
   const scope = { repositories: ['owner/repo'], visibleWorkItemTypes: { issues: true, pullRequests: true } }
   const put = async (id: string, description: string, minutes: number) =>
     cacheClockifyEntryResult({
@@ -496,4 +485,36 @@ test('cancellation during native publication rejects and releases its capture', 
   release()
   await rejection
   expect(getMcpCapture(capturedAt)).toBeUndefined()
+})
+
+test('an account change while a capture is queued cannot expose the previous Linear viewer', async () => {
+  const { getMcpCapture } = await import('../../../src/services/mcp/refresh')
+  const ticket = {
+    id: 'old',
+    identifier: 'TASK-1',
+    title: 'Old',
+    url: 'https://linear.app/team/issue/TASK-1',
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01',
+    assignee: null,
+    state: { id: 'open', name: 'Open', type: 'started', position: 0, color: '#fff' },
+  }
+  await linearTicketCache.replace('old', [ticket], linearTicketCache.beginSync(), 'now')
+  let release!: () => void
+  const gate = new Promise<void>(resolve => {
+    release = resolve
+  })
+  const publish = vi
+    .spyOn(mcp, 'publishSnapshot')
+    .mockImplementationOnce(async () => gate)
+    .mockResolvedValue()
+  const first = publishMcpSnapshot({ linearConnected: true })
+  await vi.waitFor(() => expect(publish).toHaveBeenCalledOnce())
+  const queued = publishMcpSnapshot({ linearConnected: true })
+  linearTicketCache.invalidate()
+  await linearTicketCache.replace('new', [{ ...ticket, id: 'new' }], linearTicketCache.beginSync(), 'later')
+  release()
+  await first
+  const fresh = await queued
+  expect(getMcpCapture(fresh.capturedAt)?.linearViewerId).toBe('new')
 })

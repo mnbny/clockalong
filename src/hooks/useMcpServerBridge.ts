@@ -9,7 +9,6 @@ import type { BuildMcpSnapshotInput } from '../services/mcp/snapshot'
 import type { McpCommandPayload, McpCommandResult, McpTelegramCommand } from '../services/tauri/mcp-client'
 import type { QueryKey } from '@tanstack/react-query'
 
-import { useLiveQuery } from '@tanstack/react-db'
 import { hashKey, useQueryClient } from '@tanstack/react-query'
 import { isTauri } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -17,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 
 import { queryKeys } from '../lib/query-client'
 import { db } from '../services/db'
-import { linearTicketsCollection, useLinearSync } from '../services/linear/sync'
+import { useLinearSync } from '../services/linear/sync'
 import { executeMcpCommand, type ExecuteMcpCommandContext } from '../services/mcp/commands'
 import { publishMcpSnapshot, refreshMcpSnapshot } from '../services/mcp/refresh'
 import { executeMcpTelegramCommand, type McpTelegramContext } from '../services/mcp/telegram'
@@ -106,16 +105,11 @@ export function useMcpServerBridge() {
     const entries = runningEntries ?? []
     return entries.find(entry => entry.userId === userId) ?? entries[0] ?? null
   }, [runningEntries, userId])
-  const linearTicketsQuery = useLiveQuery(
-    query => {
-      if (!mcpServerEnabled) {
-        return null
-      }
-
-      return query.from({ syncedTicket: linearTicketsCollection })
-    },
+  const linearRevisionQuery = useCallback(
+    () => (mcpServerEnabled ? db.linearCacheMeta.get('state') : Promise.resolve(undefined)),
     [mcpServerEnabled],
   )
+  const linearRevision = useDexieQuery(linearRevisionQuery)
   const clockifyRevisionQuery = useCallback(
     () => (mcpServerEnabled ? db.clockifyCacheMeta.get('revision') : Promise.resolve(undefined)),
     [mcpServerEnabled],
@@ -141,8 +135,7 @@ export function useMcpServerBridge() {
         clockifyWorkspaceName: selectedWorkspace?.name ?? null,
         githubConnected,
         linearConnected,
-        linearTickets: linearTicketsQuery.data ?? [],
-        linearViewerId: linearSync.lastSyncResult?.viewerId ?? null,
+        linearViewerId: linearSync.viewerId,
         quickTimers,
         quickTimersActiveEntry,
         quickTimersCache,
@@ -158,9 +151,9 @@ export function useMcpServerBridge() {
       githubRevision.data?.revision,
       githubSelectedRepositories,
       githubVisibleWorkItemTypes,
-      linearSync.lastSyncResult?.viewerId,
+      linearSync.viewerId,
       linearConnected,
-      linearTicketsQuery.data,
+      linearRevision.data?.revision,
       monthReport,
       quickTimers,
       quickTimersActiveEntry,
@@ -178,11 +171,12 @@ export function useMcpServerBridge() {
     () => ({
       clockifyConnected,
       githubConnected,
+      linearConnected,
       clockifyTimerProject,
-      linearViewerId: linearSync.lastSyncResult?.viewerId ?? null,
+      linearViewerId: linearSync.viewerId,
       runningEntry,
     }),
-    [clockifyConnected, githubConnected, clockifyTimerProject, linearSync.lastSyncResult?.viewerId, runningEntry],
+    [clockifyConnected, githubConnected, linearConnected, clockifyTimerProject, linearSync.viewerId, runningEntry],
   ) satisfies ExecuteMcpCommandContext
   const commandContextRef = useRef(commandContext)
   commandContextRef.current = commandContext

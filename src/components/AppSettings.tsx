@@ -740,7 +740,6 @@ const customFrontendLogPrefixes = [
   '[linear auth]',
   '[linear tickets]',
   '[linear widget]',
-  '[LocalStorageCollection]',
   '[menu bar]',
   '[mcp command]',
   '[quick timers]',

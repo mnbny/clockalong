@@ -57,7 +57,6 @@
     "@mtcute/web": "catalog:",
     "@octokit/rest": "catalog:",
     "@tabler/icons-react": "catalog:",
-    "@tanstack/react-db": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "@tanstack/react-table": "catalog:",

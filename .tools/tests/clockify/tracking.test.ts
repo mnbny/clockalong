@@ -21,7 +21,7 @@ import {
   getClockifyEntryGithubWorkItem,
   getGithubWorkItemInternalRef,
 } from '../../../src/services/github/work-item-summaries'
-import { sortLinearTickets } from '../../../src/services/linear/tickets-sorting'
+import { compareLinearTickets } from '../../../src/services/linear/tickets-sorting'
 
 const now = new Date('2026-01-02T12:00:00Z')
 const ticket: LinearTicket = {
@@ -144,9 +144,9 @@ test('Linear relevance keeps the running ticket first and recent tracked work ah
     lastTrackedAt: '2026-01-02T11:00:00Z',
   }
   expect(
-    sortLinearTickets([closed, idle, tracked, ticket], { sortOrder: 'custom', activeLinearIssueId: 'linear' }).map(
-      row => row.id,
-    ),
+    [closed, idle, tracked, ticket]
+      .sort((a, b) => compareLinearTickets(a, b, { sortOrder: 'custom', activeLinearIssueId: 'linear' }, now.getTime()))
+      .map(row => row.id),
   ).toEqual(['linear', 'tracked', 'idle', 'closed'])
 })
 

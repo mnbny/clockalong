@@ -1,6 +1,4 @@
 import type { TimeEntryWithRatesDtoV1 } from '../clockify/generated/clockify'
-import type { SyncedLinearTicket } from '../linear/sync'
-import type { LinearTicket } from '../linear/tickets'
 import type { ClockifyProject } from '../storage/config'
 import type {
   McpAddTimeEntryResult,
@@ -26,7 +24,8 @@ import {
 import { db } from '../db'
 import { createClockifyTimeEntryForGithubWorkItem, formatGithubWorkItemDescription } from '../github/timers'
 import { isGithubItemInScope } from '../github/work-item-cache'
-import { linearTicketsCollection } from '../linear/sync'
+import { linearTicketCache } from '../linear/ticket-cache'
+import { toLinearTicket } from '../linear/tickets'
 import { createClockifyTimeEntryForTicket } from '../linear/timers'
 import {
   createQuickTimerTimeEntry,
@@ -62,6 +61,7 @@ export type McpCommandExecution =
 export type ExecuteMcpCommandContext = {
   clockifyConnected: boolean
   githubConnected: boolean
+  linearConnected: boolean
   clockifyTimerProject: ClockifyProject | null
   linearViewerId: string | null
   runningEntry: TimeEntryWithRatesDtoV1 | null
@@ -125,6 +125,8 @@ async function executeCreateTimeEntry(
 
   switch (arguments_.source) {
     case 'linear': {
+      if (!context.linearConnected) return commandError('unknown_target', unknownTargetMessage)
+      const linearLifecycle = linearTicketCache.getLifecycle()
       const ticket = await getLinearTicket(arguments_.id, context.linearViewerId)
 
       if (!ticket) {
@@ -135,6 +137,13 @@ async function executeCreateTimeEntry(
         storage.get('clockifyDescriptionTemplate'),
         storage.get('clockifyDescriptionTemplateFallback'),
       ])
+      if (
+        linearLifecycle !== linearTicketCache.getLifecycle() ||
+        (isTauri() && !(await getClockalongAuthState()).linearAuthenticated) ||
+        !(await getLinearTicket(arguments_.id, context.linearViewerId)) ||
+        linearLifecycle !== linearTicketCache.getLifecycle()
+      )
+        return commandError('unknown_target', unknownTargetMessage)
       entry = await createClockifyTimeEntryForTicket({
         billable,
         interval,
@@ -256,31 +265,13 @@ async function executeStopTimer(context: ExecuteMcpCommandContext, lifecycle: nu
 }
 
 async function getLinearTicket(id: string, viewerId: string | null) {
-  if (!viewerId) {
+  if (!viewerId || linearTicketCache.getViewer() !== viewerId) {
     return null
   }
 
-  await linearTicketsCollection.preload()
-  const syncedTicket = linearTicketsCollection.toArray.find(ticket => ticket.id === id && ticket.viewerId === viewerId)
+  const syncedTicket = await db.linearTickets.get([viewerId, id])
 
-  return syncedTicket ? toLinearTicket(syncedTicket) : null
-}
-
-function toLinearTicket(syncedTicket: SyncedLinearTicket): LinearTicket {
-  return {
-    assignee: syncedTicket.ticket.assignee,
-    createdAt: syncedTicket.ticket.createdAt,
-    id: syncedTicket.ticket.id,
-    identifier: syncedTicket.ticket.identifier,
-    lastTrackedAt: null,
-    status: syncedTicket.ticket.state,
-    title: syncedTicket.ticket.title,
-    totalTrackedAmount: null,
-    totalTrackedAmountCurrency: null,
-    totalTrackedSeconds: null,
-    updatedAt: syncedTicket.ticket.updatedAt,
-    url: syncedTicket.ticket.url,
-  }
+  return syncedTicket ? toLinearTicket(syncedTicket.ticket) : null
 }
 
 async function getGithubWorkItem(id: string) {

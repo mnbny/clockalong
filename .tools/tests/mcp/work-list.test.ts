@@ -5,7 +5,8 @@ import { afterEach, expect, onTestFinished, test, vi } from 'vitest'
 
 import { queryClient, queryKeys } from '../../../src/lib/query-client'
 import { githubWorkItemCache } from '../../../src/services/github/work-item-cache'
-import { linearTicketsCollection } from '../../../src/services/linear/sync'
+import { clearSyncedLinearTickets } from '../../../src/services/linear/sync'
+import { linearTicketCache } from '../../../src/services/linear/ticket-cache'
 import { publishMcpSnapshot } from '../../../src/services/mcp/refresh'
 import { listMcpWork } from '../../../src/services/mcp/work-list'
 import { storage } from '../../../src/services/storage/config'
@@ -42,6 +43,7 @@ afterEach(async () => {
   vi.restoreAllMocks()
   queryClient.clear()
   await githubWorkItemCache.clear()
+  await clearSyncedLinearTickets()
 })
 
 test('list searches beyond the output limit, respects scope and combines sources in order', async () => {
@@ -60,17 +62,10 @@ test('list searches beyond the output limit, respects scope and combines sources
     queryFn: async () => ({ viewerId: 'viewer' }),
   })
   onTestFinished(observer.subscribe(() => {}))
-  vi.spyOn(linearTicketsCollection, 'toArray', 'get').mockReturnValue([
-    {
-      id: 'linear',
-      viewerId: 'viewer',
-      syncedAt: '',
-      updatedAt: '',
-      $key: 'linear',
-      $collectionId: 'linear',
-      $origin: 'remote',
-      $synced: true,
-      ticket: {
+  await linearTicketCache.replace(
+    'viewer',
+    [
+      {
         id: 'linear',
         identifier: 'LIN-1',
         title: 'linear',
@@ -80,8 +75,10 @@ test('list searches beyond the output limit, respects scope and combines sources
         assignee: null,
         state: { id: 'open', name: 'open', type: 'unstarted', position: 0, color: '#fff' },
       },
-    },
-  ])
+    ],
+    linearTicketCache.beginSync(),
+    '',
+  )
   vi.spyOn(mcp, 'publishSnapshot').mockResolvedValue()
   const input = {
     githubConnected: true,
@@ -169,6 +166,50 @@ test('GitHub time attribution is stable across search, closed filtering and outp
     )
     expect(filtered.rows).toHaveLength(1)
     expect(filtered.rows[0]).toMatchObject({ id: item(2).id, totalTrackedSeconds: 600 })
+  } finally {
+    await clearSyncedClockifyTimeEntries()
+  }
+})
+
+test('Linear-only cached list works without GitHub and attributes time before list filtering', async () => {
+  const { cacheClockifyEntryResult, clearSyncedClockifyTimeEntries } =
+    await import('../../../src/services/clockify/sync')
+  const ticket = (id: string) => ({
+    id,
+    identifier: `LIN-${id}`,
+    title: `Ticket ${id}`,
+    url: `https://linear.app/team/issue/LIN-${id}`,
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01',
+    assignee: null,
+    state: { id: 'open', name: 'Open', type: 'unstarted', position: 0, color: '#fff' },
+  })
+  await linearTicketCache.replace('viewer', [ticket('1'), ticket('2')], linearTicketCache.beginSync(), 'now')
+  queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user', activeWorkspace: 'workspace' })
+  queryClient.setQueryData(queryKeys.clockify.workspaces, [{ id: 'workspace' }])
+  await cacheClockifyEntryResult({
+    id: 'entry',
+    userId: 'user',
+    workspaceId: 'workspace',
+    description: 'ref:linear:team:LIN-1 ref:linear:team:LIN-2',
+    timeInterval: { start: '2026-01-01T10:00:00Z', end: '2026-01-01T11:00:00Z' },
+  })
+  vi.spyOn(mcp, 'publishSnapshot').mockResolvedValue()
+  const input = { linearConnected: true, githubConnected: false, clockifyConnected: true }
+  try {
+    const snapshot = await publishMcpSnapshot(input)
+    const args = {
+      capturedAt: snapshot.capturedAt,
+      source: 'linear' as const,
+      includeClosed: false,
+      query: null,
+      limit: 10,
+    }
+    const all = await listMcpWork(args, input, Date.now() + 5000)
+    expect(all.rows.find(row => row.id === '1')?.totalTrackedSeconds).toBe(3600)
+    const filtered = await listMcpWork({ ...args, query: 'Ticket 2', limit: 1 }, input, Date.now() + 5000)
+    expect(filtered.rows).toHaveLength(1)
+    expect(filtered.rows[0].totalTrackedSeconds ?? 0).toBe(0)
   } finally {
     await clearSyncedClockifyTimeEntries()
   }

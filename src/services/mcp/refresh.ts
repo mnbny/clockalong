@@ -6,27 +6,29 @@ import type {
   WorkspaceDtoV1,
 } from '../clockify/generated/clockify'
 import type { TimeEntrySummaryReportDto } from '../clockify/generated/reports'
-import type { useLinearSync } from '../linear/sync'
 import type { McpRefreshResult } from '../tauri/mcp-client'
 import type { BuildMcpSnapshotInput, McpTrackableWorkRow } from './snapshot'
 
 import { queryClient, queryKeys } from '../../lib/query-client'
 import { formatInternalRef, normalizeInternalRef, parseInternalRefs } from '../../utils/templates'
-import { clockifyEntriesInRange, queryClockifySummaries } from '../clockify/entry-queries'
+import { clockifyEntriesInRange } from '../clockify/entry-queries'
 import { getClockifyEntryTableRange } from '../clockify/ranges'
-import { getLinearTicketInternalRef } from '../clockify/ticket-summaries'
 import { selectClockifyWorkspace } from '../clockify/workspaces'
 import { db } from '../db'
 import { isGithubItemInScope } from '../github/work-item-cache'
-import { linearTicketsCollection } from '../linear/sync'
+import { linearTicketCache } from '../linear/ticket-cache'
 import { storage } from '../storage/config'
 import { syncProviders } from '../sync'
 import { mcp } from '../tauri/mcp-client'
-import { buildMcpSnapshot, getScopedLinearTickets } from './snapshot'
+import { buildMcpSnapshot } from './snapshot'
 
 type McpCapture = {
   rows: Array<McpTrackableWorkRow & { isClosed: boolean }>
   githubConnected: boolean
+  linearConnected: boolean
+  linearViewerId: string | null
+  linearRevision: number
+  linearLifecycle: number
   clockifyConnected: boolean
   runningSource: { source: string | null; sourceId: string | null } | null
   scope: ClockifyScope | null
@@ -74,45 +76,40 @@ async function captureAndPublish(input: BuildMcpSnapshotInput, deadlineAt: numbe
   const runningEntry = scope
     ? (runningEntries?.find(entry => entry.userId === user?.id) ?? runningEntries?.[0] ?? null)
     : null
-  const linearSync = queryClient
-    .getQueryCache()
-    .find<
-      ReturnType<typeof useLinearSync>['lastSyncResult']
-    >({ queryKey: queryKeys.linear.ticketSync(), type: 'active', exact: false })
-  const linearViewerId = linearSync?.state.data?.viewerId ?? null
-  const linearTickets = linearTicketsCollection.toArray
-  const scopedLinearTickets = getScopedLinearTickets({
-    connected: Boolean(input.linearConnected),
-    syncedTickets: linearTickets,
-    viewerId: linearViewerId,
-  })
+  const linearViewerId = input.linearConnected ? linearTicketCache.getViewer() : null
+  const linearLifecycle = linearTicketCache.getLifecycle()
   const now = new Date(Math.max(Date.now(), lastCaptureTime + 1))
   lastCaptureTime = now.getTime()
   const range = getClockifyEntryTableRange(7, now)
-  const { revision, recent, linearTimeSummaries } = await db.transaction(
+  const { revision, recent, linearTickets, linearRevision } = await db.transaction(
     'r',
     db.clockifyEntries,
     db.clockifyEntryRefs,
     db.clockifyCacheMeta,
+    db.linearTickets,
+    db.linearCacheMeta,
     async () => {
       const revision = (await db.clockifyCacheMeta.get('revision'))?.revision ?? 0
       const recent = scope
         ? await clockifyEntriesInRange(db, scope, range.start.toISOString(), range.end.toISOString())
         : []
-      const linearTimeSummaries = scope
-        ? await queryClockifySummaries(
-            db,
-            scope,
-            scopedLinearTickets,
-            ticket => ticket.id,
-            getLinearTicketInternalRef,
-            runningEntry ? [runningEntry] : [],
-            now,
-            deadlineAt,
-            signal,
-          )
-        : {}
-      return { revision, recent, linearTimeSummaries }
+      const linearRevision = (await db.linearCacheMeta.get('state'))?.revision ?? 0
+      const refs = [
+        ...new Set(
+          [runningEntry, ...recent.map(row => row.entry)]
+            .flatMap(entry => parseInternalRefs(entry?.description))
+            .filter(ref => ref.provider === 'linear')
+            .map(ref => normalizeInternalRef(formatInternalRef(ref))),
+        ),
+      ]
+      const linearTickets =
+        linearViewerId && refs.length
+          ? await db.linearTickets
+              .where('[viewerId+refKey]')
+              .anyOf(refs.map(ref => [linearViewerId, ref]))
+              .toArray()
+          : []
+      return { revision, recent, linearTickets, linearRevision }
     },
   )
   const refs = [runningEntry, ...recent.map(row => row.entry)]
@@ -155,14 +152,23 @@ async function captureAndPublish(input: BuildMcpSnapshotInput, deadlineAt: numbe
     githubWorkItems: githubItems.filter(item => isGithubItemInScope(item, githubScope)),
     linearTickets,
     linearViewerId,
-    linearTimeSummaries,
     runningEntry,
     syncedClockifyEntries: recent.filter(row => row.id !== runningEntry?.id),
   })
   checkDeadline()
+  if (
+    input.linearConnected &&
+    (linearTicketCache.getLifecycle() !== linearLifecycle || linearTicketCache.getViewer() !== linearViewerId)
+  ) {
+    throw new Error('Linear account changed; retry the request')
+  }
   captures.set(snapshot.capturedAt, {
     rows: snapshot.trackableWork,
     githubConnected: snapshot.trackingStatus.githubConnected,
+    linearConnected: snapshot.trackingStatus.linearConnected,
+    linearViewerId,
+    linearRevision,
+    linearLifecycle,
     clockifyConnected: snapshot.trackingStatus.clockifyConnected,
     runningSource: snapshot.trackingStatus.running
       ? { source: snapshot.trackingStatus.running.source, sourceId: snapshot.trackingStatus.running.sourceId }

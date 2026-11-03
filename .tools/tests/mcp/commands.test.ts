@@ -13,6 +13,7 @@ import { storage } from '../../../src/services/storage/config'
 const context = {
   clockifyConnected: true,
   githubConnected: true,
+  linearConnected: false,
   clockifyTimerProject: {
     projectId: 'project',
     projectName: 'Project',
