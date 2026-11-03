@@ -49,7 +49,7 @@
 
 Telegram uses a private frontend service for MTProto authentication, selected-group operations, and SDK realtime updates. Rust stores the session and group reference and publishes authentication state. One provider owns the client above routes and depends on TanStack Query. The sign-in screen and Settings use the same interactive QR/password dialog.
 
-Telegram conversation records live in memory in TanStack Query. Each account and group connection has a separate cache scope. Provider services exclude unrelated account data from the cache. Query owns scoped history, topics, and group metadata. A bounded native disk cache retains only avatar and preview bytes across restarts. Service methods retain message projection and bounded avatar and preview reads. The notification collector uses group-wide history and scoped realtime events independently of the conversation cache.
+Telegram conversation records live in memory in TanStack Query. Each account and group connection has a separate cache scope. Provider services exclude unrelated account data from the cache. Query owns scoped history, topics, and group metadata. A bounded native disk cache retains avatar, preview, and full image bytes across restarts. Service methods own message projection and bounded image reads. The notification collector uses group-wide history and scoped realtime events independently of the conversation cache.
 
 MCP sends call the scoped Telegram service directly. Request deadlines and account/group teardown control cancellation. The service reconciles confirmed records into existing read caches and retains only in-flight message IDs for deletion safety. It does not retain attachment inputs or failed sends for UI retry.
 

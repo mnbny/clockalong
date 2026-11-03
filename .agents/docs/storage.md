@@ -53,13 +53,13 @@ Telegram stores one opaque session and one group reference bound to the account 
 
 ## Telegram read cache
 
-Telegram history, topics, group metadata, and selected-group sender data live only in TanStack Query memory. The cache retains compact message records and references for avatars and previews. It does not retain whole SDK messages, unrelated account peers, composer drafts, outgoing display records, or failed attachments. MCP send inputs belong to the request. The service releases these inputs when the request settles.
+Telegram conversation history, topics, group metadata, and selected-group sender data use scoped memory caches. TanStack Query retains conversation records; the active service also retains recent notification records for image retrieval. These caches retain compact records and image references. They do not retain whole SDK messages, unrelated account peers, composer drafts, outgoing display records, or failed attachments. MCP send inputs belong to the request. The service releases these inputs when the request settles.
 
-Avatar and preview bytes use a native disk cache that survives restarts. It stores no messages, credentials, or transfer references. Account, group, and image identity determine reuse. Storage is limited to 64 MiB and 1,024 images, with a 512 KiB limit per image. Eviction removes the least recently used images. Native code owns all paths and restricts directory and file access to the current user on Unix.
+Avatars, previews, and full image bytes use a native disk cache that survives restarts. It stores no messages, credentials, or transfer references. Account, group, and image identity determine reuse. Storage is limited to 64 MiB and 1,024 images. Avatars and previews have a 512 KiB limit; full images have a 20 MiB limit. Eviction removes the least recently used images. Native code owns all paths and restricts directory and file access to the current user on Unix.
 
 Unlink, disconnect, and invalid-session cleanup remove cached images and invalidate handles before late downloads can write. Account or group changes discard the previous image cache. Normal teardown retains cached images. Cache failure falls back to a download. Reading the saved group makes its cached images available before network restoration.
 
-Full images for the attachment viewer use a separate memory cache. Hover and keyboard focus can preload them. Unused entries expire after 30 seconds. These images and their transfer references stay outside browser persistence, native disk storage, Settings backups, and MCP snapshots.
+Full images preload when notification cards appear, except for unrevealed spoilers. Preloading and viewing share one request cache and Telegram client. Unused memory entries expire after 30 seconds; disk copies remain within the image-cache budget. Transfer references stay in scoped memory. Images and references stay outside browser persistence, Settings backups, and MCP snapshots.
 
 Each account and group connection has a separate Query cache scope. Unlink, disconnect, invalid-session cleanup, and teardown cancel operations and remove that memory scope. Late responses cannot restore it. Notification collection uses a separate persistent store and does not depend on mounted history queries.
 
