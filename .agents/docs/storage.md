@@ -1,120 +1,51 @@
 # Storage
 
-Frontend settings use `src/services/storage/`.
+Clockalong separates preferences, secrets, provider data, and image bytes by ownership.
 
-The storage service wraps `@tauri-apps/plugin-store` and falls back to defaults outside Tauri so the app can render in browser-based Vite development. Keep stored values small, serializable, and versioned when changing shape.
+- The native Tauri store holds small, versioned settings, including Quick Timer presets and SVG icons.
+- Stronghold holds Clockify and GitHub credentials, Linear tokens, and the Telegram session and private group reference.
+- Dexie manages IndexedDB for Clockify entries, Linear issues, GitHub work items, and Telegram notifications.
+- TanStack Query holds remote request state and scoped memory caches.
+- A bounded native cache holds Telegram image bytes.
 
-## Settings backup
+Browser preview uses settings defaults. Provider caches remain subject to browser-origin quota and eviction. Settings and credentials are not bulk browser caches.
 
-The App settings section can download the raw `settings.json` snapshot and import it later. Import restores only the supported settings in the file. It ignores store metadata, unknown keys, the notification snooze deadline, and `quickTimersActiveEntry`; missing backup keys leave current settings unchanged.
+## Settings transfer
 
-The Reset action first downloads the same raw backup, then clears those supported settings. It does not affect credentials, synced caches, the notification snooze deadline, or `quickTimersActiveEntry`.
+Export downloads the raw settings snapshot. Import applies only supported settings and leaves missing values unchanged. It ignores metadata, unknown keys, the notification snooze deadline, and the active Quick Timer association.
 
-Backups include Quick Timer presets and their last-used template values. They exclude Stronghold credentials, Telegram notifications, and the local Clockify, Linear, and GitHub caches. The active Quick Timer association stays local because it refers to a specific Clockify entry in a specific workspace.
+Reset first exports the same snapshot, then clears supported settings. It preserves credentials, provider caches, notification records, snooze state, and the active Quick Timer association.
 
-## Keys
+Quick Timer presets and saved form values can be restored. The raw export can contain temporary local state, but import does not restore that state. Secrets, notification records, and provider caches are outside settings backups.
 
-- `clockifyBillable`: default billable flag for newly created Clockify time entries.
-- `clockifyDefaultProject`: fallback Clockify project for new timers when no dashboard override is active. Stores the selected workspace/project IDs plus display names.
-- `clockifyOverrideProject`: Clockify project selected in the dashboard. It takes precedence over `clockifyDefaultProject` for new timers and stores the selected workspace/project IDs plus display names.
-- `clockifyOverrideProjectVisibility`: whether the Clockify dashboard shows its project override selector. Defaults to `false`.
-- `clockifyDescriptionTemplate`: Clockify time-entry description format for Linear issue variables.
-- `clockifyDescriptionTemplateFallback`: replacement text for missing values in the Clockify description template.
-- `clockifyEntrySyncDays`: number of recent Clockify entry days to sync into the local Clockify entry cache. Values are `5`, `15`, and `30`. Default is `30`.
-- `clockifyEntrySyncInterval`: how often recent Clockify entries sync in the background. Values are `manual`, `5m`, `15m`, `30m`, and `1h`. Default is `30m`.
-- `githubSelectedRepositories`: GitHub repositories allowed to appear in GitHub dashboard surfaces. Stores compact repository snapshots.
-- `githubVisibleWorkItemTypes`: GitHub item types allowed to appear in GitHub dashboard surfaces. Defaults to issues and pull requests.
-- `githubWorkItemSyncLimit`: maximum number of GitHub issues or pull requests fetched per active repository. Default is `30`, capped at `100`.
-- `githubWorkItemSyncInterval`: how often GitHub work items sync in the background.
-- `githubSelectedAuthors`: persisted additional GitHub dashboard authors. Each entry stores `{ username, avatarUrl }`. The connected GitHub viewer is always included at runtime and is not stored in this array.
-- `githubSelectedLabels`: persisted additive GitHub dashboard label filters. Each entry stores `{ name, color }`. Label names are matched across the selected repositories.
-- `githubShowClosedWorkItems`: whether GitHub dashboard surfaces show closed synced GitHub work items. Defaults to `false`. Sync still stores closed pull requests.
-- `githubIssueDescriptionTemplate`: Clockify time-entry description format for GitHub issue variables.
-- `githubIssueDescriptionTemplateFallback`: replacement text for missing values in the GitHub issue description template.
-- `githubPullRequestDescriptionTemplate`: Clockify time-entry description format for GitHub pull request variables.
-- `githubPullRequestDescriptionTemplateFallback`: replacement text for missing values in the GitHub pull request description template.
-- `linearTicketSyncLimit`: maximum number of assigned Linear tickets to sync for ticket lists. Default is `50`.
-- `linearTicketSyncInterval`: how often assigned Linear tickets sync in the background. Default is `30m`.
-- `linearTicketSyncOrderBy`: Linear pagination ordering field for ticket sync. Values mirror Linear `PaginationOrderBy` support currently exposed by the app: `createdAt`, `updatedAt`.
-- `linearTicketSortOrder`: client-side ticket ordering mode. Values are `custom`, `status`, `created`, `updated`, and `alphabetical`.
-- `mcpServerEnabled`: whether the local MCP server runs. Defaults to `false`. Rust reads this key from the same `settings.json` store during startup. The listener allocates a port from its pool and does not store the port.
-- `quickTimersColumns`: number of Quick Timer columns to show in the dashboard grid. Default is `5`.
-- `quickTimersEnabled`: whether the Quick Timers dashboard feature is enabled. Default is `true`.
-- `quickTimers`: saved ad hoc Quick Timer presets.
-- `quickTimersActiveEntry`: local association between the active Quick Timer preset and its Clockify entry.
-- `quickTimersCache`: last submitted template variable values per Quick Timer preset. Each entry stores `{ id, values }`.
-- `theme`: selected daisyUI theme and its native light or dark appearance. Halloween is the default. The theme storage version resets existing selections to Halloween once on upgrade. Later selections persist. The theme registry determines the appearance, including for imported settings.
+## Provider data
 
-## Native secrets
+Persist compact fields that the app uses, not raw SDK or provider responses. Database indexes support scoped reads and source-reference matching.
 
-Clockify stores the user API key in native Stronghold storage, not in the Tauri JSON store. Linear stores OAuth token data in Stronghold as well. On startup, Rust reads those saved credentials and validates or refreshes them before setting provider auth state.
+A complete provider fetch commits its applicable updates and deletions in one transaction. Partial or failed pagination cannot reconcile the cache. Provider-specific briefs define fetch scope and retained-record behavior.
 
-Telegram stores one opaque session and one group reference bound to the account in Stronghold. The group reference includes private supergroup access data. Neither record enters Settings backups. Its frontend MTProto client uses memory storage, with no IndexedDB or localStorage credentials. QR tokens and two-step passwords remain temporary.
+Dexie owns schema upgrades and live subscriptions. Upgrade failure rolls back the upgrade transaction. Local read errors expose retry; retry reopens the database before repeating the read.
 
-## Telegram read cache
+Clockify rows belong to a user and workspace. Linear rows belong to a verified viewer. GitHub reads apply selected repositories and enabled types. Tracking-provider disconnect clears its data and invalidates in-flight writes.
 
-Telegram conversation history, topics, group metadata, and selected-group sender data use scoped memory caches. TanStack Query retains conversation records; the active service also retains recent notification records for image retrieval. These caches retain compact records and image references. They do not retain whole SDK messages, unrelated account peers, composer drafts, outgoing display records, or failed attachments. MCP send inputs belong to the request. The service releases these inputs when the request settles.
+## Telegram records
 
-Avatars, previews, and full image bytes use a native disk cache that survives restarts. It stores no messages, credentials, or transfer references. Account, group, and image identity determine reuse. Storage is limited to 64 MiB and 1,024 images. Avatars and previews have a 512 KiB limit; full images have a 20 MiB limit. Eviction removes the least recently used images. Native code owns all paths and restricts directory and file access to the current user on Unix.
+Notification records retain message content, sender data, topic labels, timestamps, attachment metadata, and local clear state. Identity includes account, group kind, group ID, and message ID.
 
-Unlink, disconnect, and invalid-session cleanup remove cached images and invalidate handles before late downloads can write. Account or group changes discard the previous image cache. Normal teardown retains cached images. Cache failure falls back to a download. Reading the saved group makes its cached images available before network restoration.
+Cleared identities and the collection checkpoint survive restarts. Unlink and disconnect retain notification records, but only the selected account and group can display them. The checkpoint tracks collection progress independently of clear state.
 
-Full images preload when notification cards appear, except for unrevealed spoilers. Preloading and viewing share one request cache and Telegram client. Unused memory entries expire after 30 seconds; disk copies remain within the image-cache budget. Transfer references stay in scoped memory. Images and references stay outside browser persistence, Settings backups, and MCP snapshots.
+Records exclude credentials, private access hashes, whole SDK messages, and transfer references. They are outside settings backups and MCP snapshots.
 
-Each account and group connection has a separate Query cache scope. Unlink, disconnect, invalid-session cleanup, and teardown cancel operations and remove that memory scope. Late responses cannot restore it. Notification collection uses a separate persistent store and does not depend on mounted history queries.
+The snooze deadline is a local settings timestamp. Expired timestamps are inactive. Import and reset preserve it.
 
-Memory conversation records and private transfer references are excluded from Settings backups, browser persistence, and MCP snapshots. Native startup removes the obsolete app-owned full-media cache. This cleanup leaves credentials, the image cache, and existing user Downloads intact.
+Conversation records and transfer references use connection-scoped memory. The service retains recent notification records for image retrieval. Scope teardown cancels operations and discards memory; late results cannot restore it. Send inputs last only for their request.
 
-## Telegram notifications
+## Telegram image cache
 
-The notification snooze deadline is a timestamp in local settings. It survives reloads and hides the feed until expiry without changing notification records. Expired timestamps are inactive. The raw settings export includes the deadline, but import and reset leave this temporary local state unchanged.
+Avatars, previews, and full images survive restarts for the same account and group. The cache stores bytes without messages, credentials, or transfer references.
 
-The shared Dexie database stores compact notification content, sender data, topic labels, timestamps, attachment metadata, and local clear state. Account, group kind, group ID, and message ID define each record. The database stores no Telegram credentials, private access hashes, SDK messages, avatar references, or preview references.
+The shared budget is 64 MiB and 1,024 images. Avatars and previews are limited to 512 KiB each; full images to 20 MiB. Eviction removes the least recently used images. Rust owns paths and restricts filesystem permissions.
 
-Clear timestamps preserve dismissed identities across restarts. A separate checkpoint records successful collection progress. Clear all changes one scope in a transaction; it never advances the collection checkpoint. Deleted source messages retain their notification identity until manual clearing.
+Saved avatars and previews can render before network restoration. Cache misses and failures permit downloads. Unused full-image memory entries expire after 30 seconds; disk copies remain within the shared budget.
 
-Normal teardown, unlink, and disconnect retain notification records and clear identities. Only the selected account and group can display their records. The feed can use the saved scope during a temporary restore failure. Notifications stay outside Settings backups and MCP snapshots. Browser storage remains subject to quota and eviction.
-
-Development replay uses a separate per-reload marker on records. Production visibility depends only on normal clear state.
-
-## Local cache field budgets
-
-The webview enforces a per-origin localStorage quota of about 5 MB, shared by the caches that use localStorage. The packaged app and the Vite dev server are separate origins. Clockify entries, Linear tickets, and GitHub work items use IndexedDB.
-
-Local caches must persist only fields that the app uses. Clockify, Linear, and GitHub apply explicit field allowlists to provider responses.
-
-Extend the matching list when UI needs another field. Do not persist raw provider responses. A raw Octokit pull request averages about 25 KB, and the generated Clockify schema is `passthrough`, so hydrated responses carry whole project, task, tag, and user objects that never appear in `TimeEntryWithRatesDtoV1`.
-
-A provider sync collects all successful pages in memory before it changes the local cache. It then commits the applicable inserts, updates, and deletions in one transaction. Do not persist individual rows or pages. Do not reconcile a partial or failed pagination run.
-
-The shared database uses Dexie's native schema versions. Future versions can declare schema changes with `version().stores()` and data upgrades with `upgrade()`. If an upgrade fails, IndexedDB rolls back the upgrade transaction and the database open fails.
-
-Local reads open the database automatically. After an open failure, the widget retry action explicitly reopens the database before it repeats the read. A failed retry keeps the error visible. GitHub cache writes also reopen the database so background sync can recover without a widget retry.
-
-## Local Clockify entry cache
-
-Clockify entries use the shared IndexedDB database. Dexie owns storage and live reads. Indexes scope entries by user, workspace, start time, and work reference. The app stores compact entry fields and reference projections. Settings and credentials stay outside this cache.
-
-A complete sync reconciles the selected user and workspace within the fetched time window. Entries outside that window remain as last-known data. The app does not revalidate older entries unless a later fetch includes them. Direct writes protect the affected entries from older syncs. Disconnect invalidates in-flight syncs. It clears only Clockify rows and projections.
-
-The app removes the obsolete Clockify localStorage key without importing its rows. The initial sync runs in manual mode. Local database reads work offline when the app has a known scope. Native startup validation still requires a successful Clockify connection.
-
-## Local Linear ticket cache
-
-Linear tickets use the shared IndexedDB database. Dexie owns storage and live reads. Rows are scoped to the verified viewer. The sync stores compact ticket fields and retains older rows as last-known data. Older rows may no longer be assigned and are not necessarily revalidated by the latest fetch.
-
-A complete valid fetch commits its rows in one transaction. Failed or partial fetches do not change the cache. Disconnect clears only Linear rows and prevents late syncs from restoring them. The app removes the obsolete Linear localStorage key without importing its rows.
-
-A complete valid fetch establishes the viewer for the current session. A known viewer remains available after an ordinary offline fetch failure. On a fresh launch, cached rows stay hidden until a fetch verifies the viewer. Credentials and settings stay outside this cache.
-
-## Local GitHub work-item cache
-
-GitHub issue and pull request rows persist in the shared application IndexedDB database. Dexie owns storage and reactive reads. Compact indexes support scoped filters, stable page ordering, and author choices. Local reads work offline.
-
-A successful sync commits fetched updates and excluded scope deletions together. Rows outside the latest capped fetch remain as last-known data. They are not necessarily revalidated by the latest sync. Disconnect clears GitHub rows and indexes. It also prevents older in-flight syncs from restoring the rows.
-
-The app removes the obsolete GitHub localStorage key. It does not import those rows. The initial sync runs even when periodic sync is manual.
-
-This cache is not a Tauri store key and does not contain provider credentials. It is a local read model for GitHub dashboard surfaces. Sync adds rows from GitHub's API. The selected repositories, enabled work-item types, and fetch limit control each fetch. Author and label selection, the transient `Show all` override, and closed-item visibility affect dashboard display only. They do not change sync filters.
-
-Persisted author and label selections can refer to values absent from the current cache. New work items can make those selections active again. Queries load bounded pages instead of the full archive. Browser storage remains subject to its own quota and eviction rules.
+Account or group changes discard the previous image cache. Unlink, disconnect, and invalid-session cleanup remove images and invalidate access handles. Late downloads cannot restore removed images. Normal teardown retains completed cache entries.

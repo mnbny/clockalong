@@ -28,70 +28,70 @@ Add each document using this format:
 
 #### [project.md](./project.md)
 
-- Description: Clockalong's purpose, boundaries, vocabulary, and direction.
-- Tags: `purpose`, `scope`, `work-sources`, `billing`, `product`
+- Description: Product purpose, vocabulary, and boundaries.
+- Tags: `product`, `work-sources`
 
 #### [time-tracking.md](./time-tracking.md)
 
-- Description: Dashboard workflows, work-item ordering, timer control, and tracked summaries.
-- Tags: `dashboard`, `time-tracking`, `sorting`, `matching`, `overlap`, `review`, `reports`
+- Description: Dashboard timer workflows, completed entries, and overlap review.
+- Tags: `time-tracking`, `dashboard`, `overlap`
 
 #### [quick-timers.md](./quick-timers.md)
 
-- Description: Local timer presets, templates, saved values, and active timer links.
-- Tags: `quick-timers`, `presets`, `templates`, `ad-hoc`, `cache`
+- Description: Local presets, template values, and active timer associations.
+- Tags: `quick-timers`, `presets`
 
 #### [architecture.md](./architecture.md)
 
-- Description: Application structure, ownership boundaries, and development conventions.
-- Tags: `architecture`, `frontend`, `backend`, `routing`, `providers`, `queries`, `worktrees`, `scripts`, `validation`, `testing`, `scripty`
+- Description: Application ownership, shared conventions, and development model.
+- Tags: `architecture`, `development`
 
 #### [tauri.md](./tauri.md)
 
-- Description: Native application state, frontend integration, file boundaries, updates, and window behavior.
-- Tags: `tauri`, `rust`, `native`, `events`, `reactivity`, `files`, `updater`, `menu-bar`, `themes`
+- Description: Native state, window lifetime, file access, and update experience.
+- Tags: `tauri`, `window`, `themes`, `updater`
 
 #### [logging.md](./logging.md)
 
-- Description: Diagnostic ownership, log content, and the settings log viewer.
-- Tags: `logging`, `diagnostics`, `console`, `errors`, `secrets`
+- Description: Diagnostic ownership, content boundaries, and the log viewer.
+- Tags: `logging`
 
 #### [mcp-server.md](./mcp-server.md)
 
-- Description: Local agent tools, command ownership, lifecycle, and trust boundaries.
-- Tags: `mcp`, `agents`, `tools`, `snapshots`, `timers`, `telegram`, `files`, `security`, `loopback`
+- Description: Local agent capabilities, command ownership, and trust boundaries.
+- Tags: `mcp`
 
 #### [storage.md](./storage.md)
 
-- Description: Settings, backup boundaries, credential storage, and provider caches.
-- Tags: `storage`, `settings`, `backups`, `cache`, `sync`, `quota`, `credentials`
+- Description: Persistence ownership, settings transfer, and cache lifecycles.
+- Tags: `storage`, `backups`, `cache`
 
 #### [authentication.md](./authentication.md)
 
-- Description: Provider connections, credential ownership, startup checks, and disconnect behavior.
-- Tags: `authentication`, `clockify`, `linear`, `github`, `telegram`, `oauth`, `pkce`, `stronghold`
+- Description: Provider authorization, credentials, startup validation, and disconnect.
+- Tags: `authentication`, `credentials`
 
 #### [telegram.md](./telegram.md)
 
-- Description: Telegram connections, persistent notifications, agent sends, and data boundaries.
-- Tags: `telegram`, `authentication`, `groups`, `notifications`, `mcp`, `realtime`, `files`, `cache`
+- Description: Selected-group connections, persistent notifications, images, and agent sends.
+- Tags: `telegram`, `notifications`
 
 #### [linear.md](./linear.md)
 
-- Description: Assigned issue tracking, authorization, and Linear integration boundaries.
-- Tags: `linear`, `issues`, `assigned`, `tickets`, `sdk`, `graphql`, `oauth`, `sync`
+- Description: Assigned-issue sync, dashboard filtering, ordering, and time-entry context.
+- Tags: `linear`
 
 #### [github.md](./github.md)
 
-- Description: Repository work items, access tokens, dashboard filters, and source matching.
-- Tags: `github`, `issues`, `pull-requests`, `pat`, `repositories`, `filters`, `mentions`, `sync`
+- Description: Repository sync, dashboard filters, pagination, and time-entry context.
+- Tags: `github`
 
 #### [clockify.md](./clockify.md)
 
-- Description: Time entries, reports, source matching, and Clockify integration boundaries.
-- Tags: `clockify`, `timers`, `entries`, `reports`, `templates`, `sync`, `api`
+- Description: Time-entry ownership, synchronization, reports, and source matching.
+- Tags: `clockify`, `time-tracking`, `matching`
 
 #### [distribution.md](./distribution.md)
 
-- Description: macOS distribution, release ownership, signing, and updates.
-- Tags: `macos`, `distribution`, `release`, `signing`, `notarization`, `updater`
+- Description: Local macOS releases, signing, publishing, and updater artifacts.
+- Tags: `distribution`, `release`, `signing`

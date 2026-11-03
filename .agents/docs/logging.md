@@ -1,64 +1,23 @@
 # Logging
 
-Clockalong follows the Streamlink Tauri logging pattern. Rust logs and forwarded browser console logs land in the same app log file, and the App settings section reads that file for diagnostics.
+Native logs and forwarded frontend console output share the app's diagnostic log. Rust owns the file. Typed native commands provide read and clear access without broad frontend filesystem permissions.
 
-## Ownership
+The log rotates at 5 MB and retains four rotated files. App settings reads only the current file.
 
-- Rust owns the physical app log file.
-- Vite/browser code forwards console output into Tauri's log plugin.
-- The frontend reads and clears logs only through typed Tauri commands.
-- Do not add broad frontend filesystem access for diagnostics.
+## Diagnostic content
 
-## Rust
+Use stable domain prefixes and operational summaries: request outcomes, page counts, sync ranges, cache counts, and lifecycle state. Credentials and authorization headers never belong in logs.
 
-- Use `tauri-plugin-log` as the logging backend.
-- Configure a `LogDir` target named `app`.
-- Keep the log filename centralized through `APP_LOG_FILE_NAME`.
-- Use normal Rust logging macros such as `log::info!`, `log::warn!`, and `log::error!`.
-- Keep sensitive values out of logs. For credentials, log presence, status, and length only when useful.
-- Native MCP diagnostics use the standard app log target. They report listener, snapshot, and command lifecycle state without provider data or credentials.
-- The app log file rotates at 5 MB and keeps four rotated files. The settings drawer reads only the current `app.log`.
+Clockify diagnostics can include entry identifiers, timestamps, user and workspace identifiers, and short descriptions needed for sync and source matching. Bulk responses are summarized rather than logged in full.
 
-The app exposes two narrow commands for diagnostics UI:
+Linear diagnostics exclude issue titles, descriptions, and assignee names. MCP diagnostics exclude arguments, snapshots, template values, and provider content.
 
-- `app_read_log_file`: returns the current app log contents, or an empty string if the file does not exist yet.
-- `app_clear_log_file`: truncates the current app log file, treating a missing file as success.
+Telegram protocol logging is disabled. Telegram logs and errors exclude message text, attachment names, local paths, raw provider errors, and private account or group data. Sessions, QR tokens, passwords, invite links, and access hashes are credentials.
 
-## Frontend
+Frontend console output reaches the native file, so these restrictions apply on both sides of the bridge.
 
-- Initialize console forwarding once from the frontend entrypoint before React renders.
-- Console forwarding lives in `src/lib/logging.ts`.
-- Use `console.info`, `console.warn`, `console.error`, or `console.debug` with a stable bracketed prefix for logs that belong in the settings drawer.
-- Provider bridge helpers should log safe lifecycle messages, not credential values.
-- Clockify API logs use `[clockify api]` and should include endpoint, query params, status, and sanitized request/response summaries. Do not log API keys. Bulk request summaries include only the entry count, not entry contents. Time-entry response summaries may include truncated descriptions, time-entry IDs, timestamps, user/workspace IDs, and internal-ref provider counts because those fields are needed to debug Clockify sync and matching issues.
-- The app log hook should read logs through the typed Tauri app client.
-- Clockify entry sync diagnostics use `[clockify sync]`. Log sync ranges, page counts, fetched/stored/skipped counts, insert/update counts, ref counts, and short entry samples. Do not log credentials.
-- Clockify widget diagnostics describe local entry queries and overlap repair. Cache failures use scoped provider prefixes.
+## Settings viewer
 
-Telegram disables library protocol logging and maps failures to fixed user messages. Logs and error causes must exclude messages, raw updates, attachment names, download paths, raw provider or filesystem errors, and credentials. Credentials include sessions, QR tokens, passwords, group invite links, and access hashes. Frontend console output reaches native logs, so the same restriction applies there. Native image operations and cleanup of the obsolete cache use fixed error messages without filesystem details.
+App settings opens a log drawer and loads contents on demand. Users can refresh, copy, download, or clear the current log.
 
-## Frontend prefixes
-
-- `[linear tickets]`: Linear ticket fetch diagnostics. Log request parameters and page counts. Do not log issue titles, descriptions, assignee names, or credential values.
-- `[clockify api]`: Clockify REST request and response diagnostics. Keep request bodies summarized and scrubbed to operational fields. Time-tracking lifecycle diagnostics use the same prefix with subphrases such as `timer ...`.
-- `[clockify sync]`: Clockify time-entry sync diagnostics for API page counts, database writes, ref counts, and sync failures.
-- `[github sync]`: GitHub work-item sync diagnostics for configured repositories, fetched/stored/deleted counts, and sync failures. Failure logs include the error, repositories, and database name.
-- `[clockify widget]`: Clockify dashboard diagnostics for the local synced-entry live queries and log drawer interactions.
-- `[linear widget]`: Linear dashboard diagnostics.
-- `[github widget]`: GitHub dashboard diagnostics.
-- `[app updates]`: App-wide update hook diagnostics. Log lifecycle/error state only; do not log release manifest raw bodies or signature material.
-- `[clockalong mcp]`: MCP bridge lifecycle, snapshot row counts, and command outcomes. It may log request identifiers and tool names. Do not log snapshots, arguments, titles, descriptions, template values, or credentials.
-- `[mcp command]`: best-effort local cache failures after a timer stops. Do not log command arguments, provider payloads, or credentials.
-
-## Settings UI
-
-`src/components/AppSettings.tsx` owns the user-facing log viewer. Keep the Streamlink drawer pattern:
-
-- open logs in an end-side drawer
-- read logs lazily when the drawer opens
-- support copy, download, refresh, and clear actions
-- show success and error states through toasts
-- filter noisy lines so the drawer shows Rust app logs and known frontend prefixes
-- download the currently displayed filtered `app.log` contents as a text file
-
-When adding a new frontend log prefix that should appear in the drawer, add it to the App settings log filter.
+The displayed view includes native app logs and recognized frontend prefixes. Downloads use that filtered view. Prefix registration and diagnostic messages must stay aligned so relevant messages remain visible.

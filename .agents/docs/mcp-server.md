@@ -1,78 +1,53 @@
 # MCP server
 
-Clockalong exposes a local Model Context Protocol server for tracking context, timer control, manual time entry, and Telegram sends. Clockalong runs the server only while the app runs and the user enables it in App settings.
+Clockalong exposes local agent tools for tracking context, Clockify timer control, completed time entry, and Telegram sends. The server is disabled by default and runs only while enabled in App settings and the app process remains alive.
 
-## Scope
+## Public capabilities
 
-The server exposes ten tools:
+- Work discovery lists Linear issues, GitHub issues and pull requests, and Quick Timer presets with tracked totals.
+- Refresh synchronizes tracking data without listing work.
+- Tracking status, recent completed entries, and project listings provide cached Clockify context.
+- Timer actions start work from a listed item or stop the running timer.
+- Completed-time entry adds time for a listed item without changing the running timer.
+- Telegram discovery lists the selected group and visible topics.
+- Telegram send delivers plain text, one local file, or a file with a caption to a discovered destination.
 
-- `list_trackable_work` syncs connected providers. It returns available Linear tickets, GitHub issues and pull requests, and Quick Timer presets with tracked totals. Set `refresh` to false to use cached data.
-- `refresh` runs the full app sync without listing work. It returns the synced data groups and the snapshot capture time.
-- `get_tracking_status` returns provider connections, the active Clockify project, tracked summaries, and the running timer.
-- `list_recent_entries` returns completed entries from the local Clockify cache for the requested calendar-day bucket.
-- `list_clockify_projects` returns cached projects from the selected Clockify workspace.
-- `start_timer` starts a Clockify timer for a listed work item.
-- `add_time_entry` adds completed Clockify time for a listed work item without changing the running timer.
-- `stop_timer` stops the current Clockify timer.
-- `list_telegram_destinations` fetches the selected Telegram group and all its visible topics.
-- `send_telegram_message` sends plain text, one local file, or a file with a caption to a listed destination.
+Public tool names and arguments are a consumer contract. Protocol schemas, validation, and frontend command handling must agree.
 
-Tool names and argument names form a public contract with registered consumers. Do not rename them casually. Keep the Rust catalog, protocol validation, and webview command types aligned when the contract changes.
+The server does not expose credentials, raw provider APIs, arbitrary-description timers, entry editing or resuming, Telegram history, resources, or prompts.
 
-The server does not expose provider credentials, raw provider APIs, MCP resources, prompts, logging, or completions. It does not support resuming or editing entries, or starting a timer from an arbitrary description. Both entry-creation tools use the existing provider templates so descriptions retain Clockalong internal references and continue to match tracked totals.
+Completed entries use a positive duration, including fractional minutes, and an optional end time with an explicit timezone. Overlaps are allowed. Source templates preserve internal references, selected projects, billable preferences, and Quick Timer values.
 
-Manual time entry requires a listed source and item ID, plus a positive duration in minutes. Fractional minutes are supported. An optional end timestamp, with an explicit timezone, supports backdated work. The end defaults to the current time. The start is calculated from the duration. Overlaps are allowed.
+## Read and refresh ownership
 
-Quick Timer entries accept template variables and use saved values for omitted variables. Manual entry saves the submitted values but preserves the active Quick Timer association. Entries use the selected Clockify project and billable preference. The result includes the created entry ID, description, start, end, duration, project name, and billable flag.
+Rust owns the loopback listener, protocol validation, cached snapshots, and pending commands. The webview publishes normalized tracking context and performs provider operations through existing services.
 
-## Telegram
+Snapshots contain bounded recent entries and tracking state, not entire work-item archives. Linear and GitHub listings read bounded database results in the active webview. A hidden window remains available.
 
-Telegram tools require a connected account and a verified selected group. They do not require Clockify authentication. Unavailable Telegram returns a tool error; requests do not wait for reconnection.
+Work discovery refreshes by default and can explicitly use cached data. Refresh shares the header's synchronization action, including requests already in progress. It publishes updated context before reporting success.
 
-Discovery returns only the selected group's identity and topic identifiers, titles, and closed state. Hidden topics are excluded. A group without topics has one destination with a null topic identifier. Discovery does not read message history or mark messages as read.
+Provider failures, offline pauses, and publication failures return errors rather than presenting cached data as fresh. Manual sync settings still permit explicit refresh.
 
-Sends require the group and topic identifiers returned by discovery. The group must still be selected. Clockalong checks the current topic and permissions before sending. An unavailable topic never falls back to General. Other groups, arbitrary peers, and raw provider data are not exposed through either tool.
+Repository choices, provider fetch limits, and list filters continue to apply. The snapshot capture time records assembly, not the last successful provider fetch. List reads check data revisions and scope to avoid combining incompatible results.
 
-A file path must be absolute and readable on the computer that runs Clockalong. Files must be nonempty regular files of at most 20 MiB. Supported photos and locally playable MP4 videos default to media. Other files use the original document path. The `asFile` option forces a document when the user requests a file. Optional text becomes the attachment caption. Successful sends return only the group, topic, and message identifiers.
+## Telegram and files
 
-Sends call the scoped Telegram service directly and reconcile confirmed records into existing read caches. They do not create a display queue or retain failed attachment inputs. Window hiding, route changes, and Clockify authentication do not cancel MCP sends. Telegram teardown and the request deadline cancel them.
+Telegram tools require a connected account and verified group, independently of Clockify authentication. Unavailable connections fail immediately rather than waiting for reconnection.
 
-There is no persistent outbox or automatic resend. An unconfirmed send may already have reached Telegram. Agents must check Telegram before retrying.
+Discovery excludes hidden topics and never reads history or marks messages read. Sends require a still-valid discovered group and topic. An unavailable topic cannot fall back to another destination.
 
-## Ownership
+Attachments use an absolute local path on the machine running Clockalong. The native reader accepts one nonempty regular file up to 20 MiB. The webview claims its bytes once through the pending request; it does not receive arbitrary filesystem access.
 
-Rust owns the loopback listener and server status. It validates HTTP and MCP requests. It caches snapshots and owns snapshot responses and pending webview commands. The webview normalizes and publishes snapshots. It owns Clockify writes and Telegram discovery and sends through existing provider services.
+Refresh and sends have two-minute native deadlines. Other bridged commands use 30 seconds. Cancellation or timeout can leave Telegram delivery unconfirmed, so callers must check before retrying. There is no automatic resend or persistent outbox.
 
-The webview publishes a normalized tracking snapshot when relevant data or settings change. Rust uses the snapshot for tracking status, recent entries, projects, and Quick Timer work listings. The snapshot contains date-bounded recent entries and does not contain the Linear or GitHub ticket archives.
+## Local trust boundary
 
-Linear and GitHub work listings query bounded database pages and aggregate Clockify entries for those results. Attribution uses the first known reference in the allowed provider scope before list filters apply. The webview binds each list to the captured scope, database revisions, and running entry. If a revision changes, the webview rebuilds the capture or returns a retry error. A cached Linear or GitHub list does not fetch the provider, but it requires an active webview. A hidden app window remains available. Substring search can scan indexed candidates, so its database work can grow with the cache. Telegram discovery stays outside the tracking snapshot.
+The listener binds only to IPv4 loopback and has no token authentication. Enabling it trusts local callers with tracking actions and selected-group Telegram sends, including readable local files.
 
-Refresh uses the same full sync as the app header. It refreshes Clockify entries, the running timer, and summaries, plus connected Linear and GitHub sources. Concurrent callers share the sync and reuse provider requests already in progress. Manual sync settings do not prevent an explicit refresh.
+Non-loopback browser origins are rejected. This check is not caller authentication and does not make network exposure safe.
 
-After connectivity returns, an explicit refresh restarts paused provider requests even when the app window remains hidden.
+Each instance selects the first available port from its configured pool, or uses an explicit environment override. Settings shows the bound port and registration commands for Claude Code and Codex.
 
-The webview reads the updated caches and publishes the snapshot before it completes a refresh request. A provider failure, an offline pause, or a publication failure returns an MCP tool error. A failed refresh does not return a cached work list as fresh data. Agents can request a cached list separately.
+A registered consumer reaches the instance on that port; registration does not follow another instance automatically. Disabling the server or exiting the app stops the listener.
 
-Repository selections, provider sync limits, and list filters still apply after refresh. The snapshot capture time records when the snapshot was assembled. It does not record the last successful fetch for each provider.
-
-GitHub search uses an ordered index cursor for substring matches. The result size is bounded, but a search can scan many indexed records. Request deadlines and cancellation stop abandoned scans.
-
-Provider commands cross the bridge as events with a request identifier, tool name, validated arguments, and deadline. Rust waits up to 30 seconds for time-entry commands and Telegram discovery, or two minutes for refresh and Telegram sends. Telegram sends request cancellation ten seconds before the native deadline. File size alone does not guarantee completion within that time. Webview failures become MCP tool errors. Refresh does not require a selected Clockify project. It does not change time entries or the running timer.
-
-Rust retains each attachment path only while its send request is pending. The webview receives the filename and can claim the file bytes once through that request. Native file reads run off the main thread and enforce the size limit. Expired or completed requests cannot claim attachments.
-
-## Lifecycle and ports
-
-The server is opt-in. Clockalong disables it by default. Rust reads the stored preference during app startup. Clockalong starts or stops the listener when the user changes the setting. The listener ends when the app process exits.
-
-Each running instance binds one loopback port. Clockalong checks the ordered pool from 53700 through 53703. It uses the first free port. The `CLOCKALONG_MCP_PORT` environment value replaces the pool with one port. App settings displays the actual bound port.
-
-After the listener binds, App settings provides separate registration commands for Claude Code and Codex.
-
-When several instances run, each takes the next free port. A consumer registered for port 53700 reaches the instance that acquired the primary port first. It does not automatically follow another instance.
-
-## Security boundary
-
-The listener binds only to `127.0.0.1` and has no token or authentication step. Clockalong trusts every local process that can reach the port. It rejects requests with a non-loopback Origin, but this check does not replace authentication. Do not expose the listener beyond the local machine. Do not place credentials or unnecessary provider fields in snapshots or logs.
-
-Enabling MCP lets trusted local callers send messages and readable local files to the selected Telegram group. Telegram responses contain only explicit public fields. Errors use fixed messages and exclude provider payloads, unrelated groups, credentials, and local paths.
+Snapshots, responses, and logs exclude credentials and unnecessary provider data. Telegram errors also exclude message content, private group data, and local file paths.
