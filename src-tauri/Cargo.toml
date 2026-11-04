@@ -29,5 +29,5 @@ tauri-plugin-process = "2.3.1"
 tauri-plugin-store = "2.4.3"
 tauri-plugin-stronghold = "2.3.1"
 tauri-plugin-updater = "2.10.1"
-tokio = { version = "1.52.3", features = ["sync", "time"] }
+tokio = { version = "1.52.3", features = ["sync", "time", "process", "io-util"] }
 url = "2.5.8"

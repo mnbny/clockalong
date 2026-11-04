@@ -49,6 +49,12 @@ function spreadQueryKeySegments(keys?: QueryKeySegments<unknown>) {
 }
 
 export const queryKeys = {
+  paseo: {
+    status: ['paseo', 'status'] as const,
+    projects: ['paseo', 'projects'] as const,
+    providers: ['paseo', 'providers'] as const,
+    models: (provider: string) => ['paseo', 'models', provider] as const,
+  },
   telegram: {
     all: ['telegram'] as const,
     reply: (keys?: QueryKeySegments<{ messageId: number; outsideGroup: boolean }>) =>

@@ -9,6 +9,7 @@ mod mcp;
 mod mcp_bridge;
 mod mcp_http;
 mod mcp_protocol;
+mod paseo;
 mod storage_config;
 mod stronghold;
 mod stronghold_config;
@@ -102,6 +103,12 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            paseo::paseo_detect,
+            paseo::paseo_projects,
+            paseo::paseo_providers,
+            paseo::paseo_models,
+            paseo::paseo_execute,
+            paseo::paseo_execute_sample,
             app_logs::app_clear_log_file,
             app_logs::app_read_log_file,
             app_initialization::app_get_initialization_state,
