@@ -36,6 +36,26 @@ Snooze hides the feed for 15 minutes while collection continues. A saved deadlin
 
 An optional local development flag replays three recent messages on each reload without changing production clear state. Production builds ignore it.
 
+## Trigger input
+
+Incoming message collection also supplies Paseo triggers. Each trigger belongs to one account and group. An optional marker requires an exact match before regex evaluation. Text and captions supply pattern input; hidden link destinations, quoted replies, and attachment contents do not.
+
+Each trigger has its own enable state. Users author a regex and name the tokens for its automatically detected captures. Marker and token names use lowercase letters, numbers, and single hyphens between words; names start with a letter. Capture token names must be unique and cannot use reserved context names.
+
+Every capture needs a nonblank mapping and captured value, even when the prompt does not use it. Prompts retain their line breaks. Missing referenced values prevent execution. The preview evaluates sample text without executing commands.
+
+Users can also confirm a real run from the sample-message preview. The current form must pass validation and match the sample before confirmation. This runs the current draft without saving or enabling it. Sender and topic tokens use sample values. Manual runs create no Telegram notification or automatic execution record.
+
+Users select a registered Paseo project, an enabled provider, a model, a supported thinking effort, and a permission mode. Available permission modes come from Paseo. Triggers without an explicit mode retain Paseo’s default behavior.
+
+Each match starts an agent in a fresh worktree from main. The user’s prompt controls PR checkout and task instructions. Save validates required fields and available selections. New triggers default to enabled; incomplete saved triggers remain disabled.
+
+Pattern evaluation has a deadline and runs outside the UI thread. Paseo owns the resulting workspaces, agents, permissions, and task progress. Clockalong supplies no review instructions or automatic timer actions.
+
+Only new eligible messages after trigger activation can create executions. Discovery messages, edits, existing records, and development replay do not create executions. Recovery can collect eligible messages received while the app was unavailable.
+
+Collection saves matching execution requests and notification records together before advancing the checkpoint. Clearing cards and snoozing the feed do not affect triggers. Scope changes and disabled or edited triggers cancel requests that have not started.
+
 ## Cards and images
 
 Cards use the theme's primary color and have a separate scroll area with hidden scrollbars. Clear all and Snooze sit below the list. Ordinary application toasts remain separate.

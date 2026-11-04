@@ -14,6 +14,8 @@ Linear diagnostics exclude issue titles, descriptions, and assignee names. MCP d
 
 Telegram protocol logging is disabled. Telegram logs and errors exclude message text, attachment names, local paths, raw provider errors, and private account or group data. Sessions, QR tokens, passwords, invite links, and access hashes are credentials.
 
+Paseo execution activity appears in app logs. Diagnostics include trigger identifiers, sample-run identifiers, launch outcomes, and returned agent identifiers. They exclude prompts, capture values, message content, and private Telegram scope data.
+
 Frontend console output reaches the native file, so these restrictions apply on both sides of the bridge.
 
 ## Settings viewer

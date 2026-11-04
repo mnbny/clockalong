@@ -28,7 +28,7 @@ Source-specific authentication, settings, and synchronization remain with each p
 
 Tailwind and daisyUI supply styling; daisyUI supplies classes rather than React components. Shared widget shells and settings rows keep layout consistent. Navigation uses TanStack links.
 
-Settings sections appear in this order: Quick Timers, Clockify, Linear, GitHub, Telegram, App. Provider-specific description templates belong with their source's settings.
+Settings sections appear in this order: Quick Timers, Clockify, Linear, GitHub, Telegram, Paseo, App. Provider-specific description templates belong with their source's settings.
 
 Ordinary feedback uses Sonner. Persistent Telegram cards have their own surface. The shared image lightbox uses a dark backdrop and controls styled with the active theme.
 

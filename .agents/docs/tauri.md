@@ -10,6 +10,20 @@ Hooks expose typed state, clean up listeners, and provide browser fallbacks. Pay
 
 Authentication initialization and provider connection rules belong to the authentication domain.
 
+## Paseo command boundary
+
+Rust detects the installed Paseo CLI and checks its local daemon. Detection does not install, start, or restart Paseo. Missing or stopped installations appear as an optional integration's unavailable state.
+
+Available Paseo installations need no global enable toggle. Individual triggers control execution. Pending requests wait for availability while their trigger and Telegram scope remain valid.
+
+The native bridge discovers registered Git projects, enabled providers, models, thinking efforts, and permission modes. Provider discovery uses the installed Paseo client and runtime to retain mode identifiers and labels. It checks saved selections before execution and generates one command for a fresh worktree from the remote main branch. The user’s prompt controls subsequent checkout and task actions. The bridge passes the complete prompt as one argument and does not evaluate shell scripts.
+
+The command targets the default local Paseo home, independently of inherited agent, workspace, and host selection. Explicit permission modes are validated against the selected provider and passed to Paseo for each launch. Without an explicit mode, Paseo supplies its default permissions.
+
+For automatic requests, the bridge rechecks trigger enable state and revision after discovery. Confirmed sample runs use the draft independently of saved trigger state. Both paths share selection checks and agent launch behavior. Execution has bounded output and a two-minute deadline.
+
+A command may create a workspace or agent before its result reaches Clockalong. Timeouts and reported command failures therefore leave an unconfirmed result. A successful command does not establish that an agent finished its task.
+
 ## Appearance and window lifetime
 
 The saved theme is applied before React renders. The window remains hidden until the themed shell mounts. Theme changes update the palette and native light or dark appearance together.

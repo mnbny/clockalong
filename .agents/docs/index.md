@@ -48,7 +48,7 @@ Add each document using this format:
 
 #### [tauri.md](./tauri.md)
 
-- Description: Native state, window lifetime, file access, and update experience.
+- Description: Native state, window lifetime, file access, command execution, and updates.
 - Tags: `tauri`, `window`, `themes`, `updater`
 
 #### [logging.md](./logging.md)
@@ -73,8 +73,8 @@ Add each document using this format:
 
 #### [telegram.md](./telegram.md)
 
-- Description: Selected-group connections, persistent notifications, images, and agent sends.
-- Tags: `telegram`, `notifications`
+- Description: Selected-group connections, notifications, Paseo triggers, images, and agent sends.
+- Tags: `telegram`, `notifications`, `triggers`
 
 #### [linear.md](./linear.md)
 

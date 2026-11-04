@@ -2,9 +2,9 @@
 
 Clockalong separates preferences, secrets, provider data, and image bytes by ownership.
 
-- The native Tauri store holds small, versioned settings, including Quick Timer presets and SVG icons.
+- The native Tauri store holds small, versioned settings, including Quick Timer presets, SVG icons, and Paseo trigger definitions.
 - Stronghold holds Clockify and GitHub credentials, Linear tokens, and the Telegram session and private group reference.
-- Dexie manages IndexedDB for Clockify entries, Linear issues, GitHub work items, and Telegram notifications.
+- Dexie manages IndexedDB for Clockify entries, Linear issues, GitHub work items, Telegram notifications, and Paseo execution records.
 - TanStack Query holds remote request state and scoped memory caches.
 - A bounded native cache holds Telegram image bytes.
 
@@ -17,6 +17,16 @@ Export downloads the raw settings snapshot. Import applies only supported settin
 Reset first exports the same snapshot, then clears supported settings. It preserves credentials, provider caches, notification records, snooze state, and the active Quick Timer association.
 
 Quick Timer presets and saved form values can be restored. The raw export can contain temporary local state, but import does not restore that state. Secrets, notification records, and provider caches are outside settings backups.
+
+Paseo triggers import disabled, with fresh revisions and no active message boundary. Reset removes trigger definitions but preserves execution records. Execution records are outside settings backups.
+
+## Paseo execution records
+
+An automatic execution identity combines its trigger, Telegram scope, and message ID. The saved record prevents repeated delivery or collection from creating another automatic attempt within the same database.
+
+Pending records retain the resolved prompt and project and agent selections. The dispatcher claims each record before execution and checks current trigger settings. Terminal records discard launch inputs and retain status, source identity, and any returned agent ID.
+
+When a command result is uncertain, its record remains unconfirmed and does not automatically retry. Separate installations and development origins do not share these records. Confirmed sample runs appear in app logs and do not enter the automatic execution queue.
 
 ## Provider data
 
