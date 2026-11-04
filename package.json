@@ -49,6 +49,7 @@
   },
   "dependencies": {
     "@automattic/format-currency": "catalog:",
+    "@eslint-community/regexpp": "catalog:",
     "@fontsource-variable/intel-one-mono": "catalog:",
     "@fontsource-variable/oxanium": "catalog:",
     "@hookform/resolvers": "catalog:",

@@ -6,6 +6,7 @@ allowBuilds:
 
 catalog:
   '@automattic/format-currency': 2.1.0
+  '@eslint-community/regexpp': 4.12.2
   '@eslint/js': 10.0.1
   '@fontsource-variable/intel-one-mono': 5.2.2
   '@fontsource-variable/oxanium': 5.2.8
