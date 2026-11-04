@@ -7,7 +7,7 @@ import { type AppUpdate, appUpdates } from '../services/tauri/app-updates'
 import { getErrorMessage } from '../utils/errors'
 
 const INITIAL_UPDATE_CHECK_DELAY_MS = 10_000
-const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
+const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000
 
 export function useAppUpdates() {
   useEffect(() => {
@@ -56,6 +56,7 @@ function showUpdateToast(update: AppUpdate) {
       onClick: installUpdate,
     },
     description: <Link to="/settings">Open Settings</Link>,
+    duration: Infinity,
   })
 }
 
@@ -68,6 +69,7 @@ async function installUpdate() {
         onClick: appUpdates.relaunch,
       },
       description: 'Restart Clockalong to finish.',
+      duration: Infinity,
     })
   } catch (error) {
     appToast.error('Could not install update', {

@@ -89,7 +89,10 @@ export type McpRefreshResult = {
   synced: string[]
 }
 
+export type McpListWorkResult = { capturedAt: string; truncated: boolean; rows: unknown[] }
+
 export type McpCommandResult =
+  | McpListWorkResult
   | McpStartTimerResult
   | McpStopTimerResult
   | McpAddTimeEntryResult

@@ -5,5 +5,6 @@ export default defineConfig({
   root: fileURLToPath(new URL('../..', import.meta.url)),
   test: {
     include: ['.tools/tests/**/*.test.ts'],
+    setupFiles: ['fake-indexeddb/auto'],
   },
 })

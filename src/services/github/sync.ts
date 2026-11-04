@@ -1,9 +1,8 @@
 import type { RestEndpointMethodTypes } from '@octokit/rest'
 import type { PropsWithChildren } from 'react'
 
-import { createCollection, createTransaction, localStorageCollectionOptions } from '@tanstack/react-db'
-import { useQuery } from '@tanstack/react-query'
-import { createContext, createElement, useCallback, useContext, useMemo } from 'react'
+import { queryOptions, useQuery } from '@tanstack/react-query'
+import { createContext, createElement, useContext, useMemo } from 'react'
 
 import { useAppAuth } from '../../hooks/useAppAuth'
 import { queryKeys } from '../../lib/query-client'
@@ -17,7 +16,8 @@ import {
 } from '../storage/config'
 import { useStorage } from '../storage/useStorage'
 import { createGithubClient } from './client'
-import { getGithubWorkItemSyncIntervalMilliseconds } from './sync-settings'
+import { getGithubWorkItemSyncIntervalMilliseconds, type GithubWorkItemSyncIntervalOption } from './sync-settings'
+import { githubWorkItemCache } from './work-item-cache'
 
 type GithubIssue = RestEndpointMethodTypes['issues']['listForRepo']['response']['data'][number]
 type GithubMentionedIssue = RestEndpointMethodTypes['issues']['listForAuthenticatedUser']['response']['data'][number]
@@ -25,8 +25,6 @@ type GithubPullRequest = RestEndpointMethodTypes['pulls']['list']['response']['d
 type GithubPullRequestDetails = RestEndpointMethodTypes['pulls']['get']['response']['data']
 type GithubIssueData = GithubIssue | GithubMentionedIssue
 type GithubPullRequestData = GithubPullRequest | GithubPullRequestDetails
-
-const githubWorkItemsStorageKey = 'clockalong.github.workItems.v1'
 
 const storedGithubIssueItemFields = ['labels'] as const satisfies ReadonlyArray<keyof GithubIssueData>
 const storedGithubPullRequestItemFields = ['labels'] as const satisfies ReadonlyArray<keyof GithubPullRequestData>
@@ -91,14 +89,6 @@ type GithubWorkItemSyncResult = {
   repositoriesSynced: number
 }
 
-export const githubWorkItemsCollection = createCollection(
-  localStorageCollectionOptions<SyncedGithubWorkItem, string>({
-    id: 'github-work-items',
-    storageKey: githubWorkItemsStorageKey,
-    getKey: item => item.id,
-  }),
-)
-
 function useGithubSyncData() {
   const authState = useAppAuth()
   const [githubSelectedRepositories] = useStorage('githubSelectedRepositories')
@@ -115,35 +105,57 @@ function useGithubSyncData() {
         .join('|'),
     [githubSelectedRepositories],
   )
-  const syncQuery = useQuery({
-    queryKey: queryKeys.github.workItemSync({
-      params: {
-        issues: githubVisibleWorkItemTypes.issues,
-        limit: normalizedSyncLimit,
-        pullRequests: githubVisibleWorkItemTypes.pullRequests,
-        repositories: repositorySignature,
-      },
+  const syncQuery = useQuery(
+    githubWorkItemSyncQueryOptions({
+      enabled: githubAuthenticated,
+      interval: githubWorkItemSyncInterval,
+      repositories: githubSelectedRepositories,
+      repositorySignature,
+      syncLimit: normalizedSyncLimit,
+      visibleWorkItemTypes: githubVisibleWorkItemTypes,
     }),
-    queryFn: () =>
-      syncGithubWorkItems({
-        repositories: githubSelectedRepositories,
-        syncLimit: normalizedSyncLimit,
-        visibleWorkItemTypes: githubVisibleWorkItemTypes,
-      }),
-    enabled: githubAuthenticated,
-    refetchInterval: getGithubWorkItemSyncIntervalMilliseconds(githubWorkItemSyncInterval),
-    staleTime: 60_000,
-  })
-  const syncNow = useCallback(() => syncQuery.refetch(), [syncQuery])
-
+  )
   return {
     lastSyncResult: syncQuery.data ?? null,
-    syncNow,
+    syncNow: syncQuery.refetch,
     queries: {
       syncQuery,
     },
     syncing: syncQuery.isFetching,
   }
+}
+
+export function githubWorkItemSyncQueryOptions({
+  enabled,
+  interval,
+  repositories,
+  repositorySignature,
+  syncLimit,
+  visibleWorkItemTypes,
+}: GithubWorkItemSyncOptions & {
+  enabled: boolean
+  interval: GithubWorkItemSyncIntervalOption
+  repositorySignature: string
+}) {
+  return queryOptions({
+    queryKey: queryKeys.github.workItemSync({
+      params: {
+        issues: visibleWorkItemTypes.issues,
+        limit: syncLimit,
+        pullRequests: visibleWorkItemTypes.pullRequests,
+        repositories: repositorySignature,
+      },
+    }),
+    queryFn: () =>
+      syncGithubWorkItems({
+        repositories,
+        syncLimit,
+        visibleWorkItemTypes,
+      }),
+    enabled,
+    refetchInterval: getGithubWorkItemSyncIntervalMilliseconds(interval),
+    staleTime: 60_000,
+  })
 }
 
 type GithubSyncContext = ReturnType<typeof useGithubSyncData>
@@ -161,22 +173,12 @@ export function useGithubSync() {
   return context
 }
 
-export async function clearSyncedGithubWorkItems() {
-  await githubWorkItemsCollection.preload()
-  const itemIds = githubWorkItemsCollection.toArray.map(item => item.id)
-
-  if (!itemIds.length) {
-    return 0
-  }
-
-  const transaction = githubWorkItemsCollection.delete(itemIds)
-  await transaction.isPersisted.promise
-  return itemIds.length
-}
+export const clearSyncedGithubWorkItems = githubWorkItemCache.clear
 
 async function syncGithubWorkItems({ repositories, syncLimit, visibleWorkItemTypes }: GithubWorkItemSyncOptions) {
   const syncedAt = new Date().toISOString()
-  const fetchedItemIds = new Set<string>()
+  const syncGeneration = githubWorkItemCache.beginSync()
+  const scope = { repositories: repositories.map(repository => repository.fullName), visibleWorkItemTypes }
   const syncedWorkItemsById = new Map<string, SyncedGithubWorkItem>()
   let issuesFetched = 0
   let itemsStored = 0
@@ -187,16 +189,9 @@ async function syncGithubWorkItems({ repositories, syncLimit, visibleWorkItemTyp
     syncLimit,
     visibleWorkItemTypes,
   })
-  await githubWorkItemsCollection.preload()
-
   try {
     if (!repositories.length || (!visibleWorkItemTypes.issues && !visibleWorkItemTypes.pullRequests)) {
-      const staleItemIds = getStaleSyncedGithubWorkItemIds({
-        fetchedItemIds,
-        repositories,
-        visibleWorkItemTypes,
-      })
-      const persistenceResult = await upsertSyncedGithubWorkItems({ items: [], staleItemIds })
+      const persistenceResult = await githubWorkItemCache.replace([], syncGeneration, scope)
       const emptyResult = {
         issuesFetched,
         itemsDeleted: persistenceResult.deleted,
@@ -273,16 +268,7 @@ async function syncGithubWorkItems({ repositories, syncLimit, visibleWorkItemTyp
 
     const syncedWorkItems = [...syncedWorkItemsById.values()]
 
-    for (const item of syncedWorkItems) {
-      fetchedItemIds.add(item.id)
-    }
-
-    const staleItemIds = getStaleSyncedGithubWorkItemIds({
-      fetchedItemIds,
-      repositories,
-      visibleWorkItemTypes,
-    })
-    const upsertResult = await upsertSyncedGithubWorkItems({ items: syncedWorkItems, staleItemIds })
+    const upsertResult = await githubWorkItemCache.replace(syncedWorkItems, syncGeneration, scope)
     itemsStored += upsertResult.stored
 
     const result = {
@@ -298,10 +284,9 @@ async function syncGithubWorkItems({ repositories, syncLimit, visibleWorkItemTyp
     return result
   } catch (error) {
     githubSyncLog('work item sync failed', {
-      cachedItems: githubWorkItemsCollection.size,
       error: getErrorMessage(error),
       repositories: repositories.map(repository => repository.fullName),
-      storageKey: githubWorkItemsStorageKey,
+      database: githubWorkItemCache.database.name,
     })
     throw error
   }
@@ -332,7 +317,7 @@ async function syncGithubMentionedWorkItems({
   })
 
   for (const issue of response.data) {
-    const repository = getGithubMentionedIssueRepository(issue, repositoriesByFullName)
+    const repository = issue.repository?.full_name ? repositoriesByFullName.get(issue.repository.full_name) : undefined
 
     if (!repository) {
       continue
@@ -429,7 +414,10 @@ async function addGithubRelevantPullRequest({
   const existingItem = syncedWorkItemsById.get(id)
 
   if (existingItem) {
-    syncedWorkItemsById.set(id, addGithubWorkItemInvolvementReason(existingItem, involvementReason))
+    syncedWorkItemsById.set(id, {
+      ...existingItem,
+      involvementReasons: mergeGithubWorkItemInvolvementReasons(existingItem.involvementReasons, [involvementReason]),
+    })
     return
   }
 
@@ -446,15 +434,6 @@ async function addGithubRelevantPullRequest({
   })
 
   addGithubWorkItems(syncedWorkItemsById, pullRequestItem)
-}
-
-function getGithubMentionedIssueRepository(
-  issue: GithubMentionedIssue,
-  repositoriesByFullName: Map<string, GithubSelectedRepository>,
-) {
-  const repositoryFullName = issue.repository?.full_name
-
-  return repositoryFullName ? repositoriesByFullName.get(repositoryFullName) : undefined
 }
 
 function addGithubWorkItems(syncedWorkItemsById: Map<string, SyncedGithubWorkItem>, items: SyncedGithubWorkItem[]) {
@@ -476,24 +455,10 @@ function addGithubWorkItems(syncedWorkItemsById: Map<string, SyncedGithubWorkIte
   }
 }
 
-function addGithubWorkItemInvolvementReason(
-  item: SyncedGithubWorkItem,
-  involvementReason: GithubWorkItemInvolvementReason,
-) {
-  return {
-    ...item,
-    involvementReasons: mergeGithubWorkItemInvolvementReasons(item.involvementReasons, [involvementReason]),
-  }
-}
-
 function mergeGithubWorkItemInvolvementReasons(...reasonGroups: Array<GithubWorkItemInvolvementReason[] | undefined>) {
   const reasons = new Set(reasonGroups.flatMap(reasonGroup => reasonGroup ?? []))
 
   return (['reviewRequested', 'mentioned'] as const).filter(reason => reasons.has(reason))
-}
-
-export function getGithubWorkItemInvolvementReasons(workItem: SyncedGithubWorkItem) {
-  return workItem.involvementReasons ?? []
 }
 
 function toSyncedGithubIssue({
@@ -564,76 +529,6 @@ function toSyncedGithubPullRequest({
       url: pullRequest.html_url,
     },
   ]
-}
-
-async function upsertSyncedGithubWorkItems({
-  items,
-  staleItemIds,
-}: {
-  items: SyncedGithubWorkItem[]
-  staleItemIds: string[]
-}) {
-  const itemsToInsert = items.filter(item => !githubWorkItemsCollection.has(item.id))
-  const itemsToUpdate = items.filter(item => githubWorkItemsCollection.has(item.id))
-
-  if (itemsToInsert.length || itemsToUpdate.length || staleItemIds.length) {
-    const transaction = createTransaction({
-      mutationFn: async ({ transaction: mutations }) => {
-        githubWorkItemsCollection.utils.acceptMutations(mutations)
-      },
-    })
-
-    transaction.mutate(() => {
-      if (itemsToInsert.length) {
-        githubWorkItemsCollection.insert(itemsToInsert)
-      }
-
-      if (itemsToUpdate.length) {
-        githubWorkItemsCollection.update(
-          itemsToUpdate.map(item => item.id),
-          drafts => {
-            drafts.forEach((draft, index) => Object.assign(draft, itemsToUpdate[index]))
-          },
-        )
-      }
-
-      if (staleItemIds.length) {
-        githubWorkItemsCollection.delete(staleItemIds)
-      }
-    })
-    await transaction.isPersisted.promise
-  }
-
-  return {
-    deleted: staleItemIds.length,
-    inserted: itemsToInsert.length,
-    stored: items.length,
-    updated: itemsToUpdate.length,
-  }
-}
-
-function getStaleSyncedGithubWorkItemIds({
-  fetchedItemIds,
-  repositories,
-  visibleWorkItemTypes,
-}: {
-  fetchedItemIds: Set<string>
-  repositories: GithubSelectedRepository[]
-  visibleWorkItemTypes: GithubVisibleWorkItemTypes
-}) {
-  const repositoryFullNames = new Set(repositories.map(repository => repository.fullName))
-  const visibleTypes = new Set<GithubWorkItemType>([
-    ...(visibleWorkItemTypes.issues ? (['issue'] as const) : []),
-    ...(visibleWorkItemTypes.pullRequests ? (['pullRequest'] as const) : []),
-  ])
-  return githubWorkItemsCollection.toArray
-    .filter(
-      item =>
-        !repositoryFullNames.has(item.repositoryFullName) ||
-        !visibleTypes.has(item.type) ||
-        !fetchedItemIds.has(item.id),
-    )
-    .map(item => item.id)
 }
 
 function getGithubWorkItemId(repositoryFullName: string, type: GithubWorkItemType, number: number) {

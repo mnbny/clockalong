@@ -21,6 +21,7 @@ import { useClockifyTimerProject } from '../hooks/useClockifyTimerProject'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
 import { MissingClockifyProjectError } from '../services/clockify/time-entries'
+import { selectClockifyWorkspace } from '../services/clockify/workspaces'
 import {
   createQuickTimerTimeEntry,
   persistQuickTimerActiveEntry,
@@ -99,11 +100,7 @@ export function QuickTimersWidget() {
       return null
     }
 
-    return (
-      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
-      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
-      workspaces[0]
-    )
+    return selectClockifyWorkspace(user, workspaces)
   }, [clockifyUserQuery.data, clockifyWorkspacesQuery.data])
   const runningEntryQuery = useQuery({
     enabled: Boolean(quickTimersEnabled && clockifyUserQuery.data?.id && selectedClockifyWorkspace?.id),
@@ -193,7 +190,7 @@ export function QuickTimersWidget() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              {quickTimers.length > 0 ? (
+              {!!quickTimers.length && (
                 <button
                   className="btn btn-square btn-ghost btn-sm"
                   type="button"
@@ -202,7 +199,7 @@ export function QuickTimersWidget() {
                   onClick={toggleQuickTimersEditing}>
                   <IconPencil className="size-4" />
                 </button>
-              ) : null}
+              )}
               <button
                 className="btn btn-square btn-ghost btn-sm"
                 type="button"
@@ -213,7 +210,7 @@ export function QuickTimersWidget() {
             </div>
           </header>
 
-          {quickTimers.length > 0 ? (
+          {!!quickTimers.length && (
             <div
               className="grid gap-4 p-4"
               style={{ gridTemplateColumns: `repeat(${normalizedColumns}, minmax(0, 1fr))` }}>
@@ -267,7 +264,7 @@ export function QuickTimersWidget() {
                 </button>
               ))}
             </div>
-          ) : null}
+          )}
         </div>
       </section>
 
@@ -573,6 +570,7 @@ function QuickTimerStartForm({ manual, onCancel, quickTimerId }: QuickTimerStart
     return (
       <ClockifyEntryTimeForm
         description={quickTimerPreset.name}
+        workspaceId={clockifyTimerProject?.workspaceId}
         onCancel={onCancel}
         onMutate={() => persistQuickTimerValues({ preset: quickTimerPreset, values: form.getValues() })}
         onSave={interval => {

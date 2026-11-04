@@ -2,35 +2,13 @@ import type { TimeEntryWithRatesDtoV1 } from '../clockify/generated/clockify'
 import type { SyncedGithubWorkItem } from './sync'
 
 import { formatInternalRef } from '../../utils/templates'
-import {
-  type ClockifyWorkItemTimeSummaries,
-  getClockifyEntryWorkItem,
-  summarizeClockifyWorkItemTimeEntries,
-} from '../clockify/work-item-summaries'
+import { type ClockifyWorkItemTimeSummaries, getClockifyEntryWorkItem } from '../clockify/work-item-summaries'
 
 export type GithubWorkItemWithTracking = SyncedGithubWorkItem & {
   lastTrackedAt: string | null
   totalTrackedAmount: number | null
   totalTrackedAmountCurrency: string | null
   totalTrackedSeconds: number | null
-}
-
-export function summarizeClockifyGithubWorkItemTimeEntries({
-  entries,
-  now,
-  workItems,
-}: {
-  entries: TimeEntryWithRatesDtoV1[]
-  now?: Date
-  workItems: SyncedGithubWorkItem[]
-}) {
-  return summarizeClockifyWorkItemTimeEntries({
-    entries,
-    getWorkItemId: workItem => workItem.id,
-    getWorkItemInternalRef: getGithubWorkItemInternalRef,
-    now,
-    workItems,
-  })
 }
 
 export function getClockifyEntryGithubWorkItem(

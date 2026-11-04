@@ -1,0 +1,185 @@
+// @vitest-environment happy-dom
+import type * as LinearSync from '../../../src/services/linear/sync'
+import type { AssignedIssueNode } from '../../../src/services/linear/tickets'
+import type { Root } from 'react-dom/client'
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, createElement, Profiler, useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import { afterEach, expect, test, vi } from 'vitest'
+
+import { LinearWidget } from '../../../src/components/LinearWidget'
+import { db } from '../../../src/services/db'
+import { clearSyncedLinearTickets } from '../../../src/services/linear/sync'
+import { createLinearTicketCache, linearTicketCache } from '../../../src/services/linear/ticket-cache'
+
+vi.mock('../../../src/hooks/useAppAuth', () => ({
+  useAppAuth: () => ({ loading: false, value: { linearAuthenticated: true } }),
+}))
+vi.mock('../../../src/hooks/useClockifyTimerProject', () => ({ useClockifyTimerProject: () => null }))
+vi.mock('../../../src/services/linear/sync', async original => ({
+  ...(await original<typeof LinearSync>()),
+  useLinearSync: () => ({
+    viewerId: 'viewer',
+    queries: {
+      syncQuery: {
+        isSuccess: true,
+        isLoading: false,
+        isError: false,
+      },
+    },
+  }),
+}))
+vi.mock('../../../src/services/clockify/client', () => ({
+  clockify: { getLoggedUser: async () => ({}), getWorkspacesOfUser: async () => [] },
+}))
+vi.mock('../../../src/services/storage/useStorage', () => ({
+  useStorage: (key: string) => {
+    const defaults: Record<string, unknown> = {
+      linearTicketSyncLimit: 2,
+      linearTicketSortOrder: 'custom',
+      clockifyBillable: true,
+    }
+    const [value, setValue] = useState(defaults[key])
+    return [value, async (next: unknown) => setValue(next), async () => {}]
+  },
+}))
+
+const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+let root: Root | undefined
+let container: HTMLDivElement | undefined
+let rowCommits: number[] = []
+function ticket(id: string, title: string, type: string, day: number): AssignedIssueNode {
+  const date = `2026-01-0${day}T00:00:00Z`
+  return {
+    id,
+    identifier: `APP-${id}`,
+    title,
+    url: `https://linear.app/acme/issue/APP-${id}`,
+    createdAt: date,
+    updatedAt: date,
+    assignee: null,
+    state: { id: type, type, name: type, position: 1, color: '#fff' },
+  }
+}
+afterEach(async () => {
+  if (root) await act(async () => root?.unmount())
+  container?.remove()
+  root = undefined
+  container = undefined
+  client.clear()
+  rowCommits = []
+  vi.restoreAllMocks()
+  await clearSyncedLinearTickets()
+})
+
+test('widget displays retained rows beyond the fetch limit and sorts them and Show all changes terminal visibility', async () => {
+  vi.spyOn(console, 'info').mockImplementation(() => {})
+  await linearTicketCache.replace(
+    'viewer',
+    [ticket('1', 'Zulu', 'started', 1), ticket('2', 'Alpha', 'completed', 2), ticket('3', 'Bravo', 'started', 3)],
+    linearTicketCache.beginSync(),
+    'now',
+  )
+  const other = createLinearTicketCache(db)
+  await other.replace('other-viewer', [ticket('4', 'Foreign', 'started', 1)], other.beginSync(), 'now')
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+  container = document.createElement('div')
+  document.body.append(container)
+  root = createRoot(container)
+  await act(async () =>
+    root?.render(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(
+          Profiler,
+          { id: 'linear', onRender: () => rowCommits.push(container!.querySelectorAll('tbody tr').length) },
+          createElement(LinearWidget),
+        ),
+      ),
+    ),
+  )
+  const tableText = () => container!.querySelector('tbody')!.textContent
+  await vi.waitFor(() => expect(tableText()).toContain('Zulu'))
+  rowCommits = []
+  expect(tableText()).not.toContain('Alpha')
+  expect(tableText()).toContain('Bravo')
+  expect(tableText()).not.toContain('Foreign')
+  await act(async () =>
+    container!
+      .querySelector<HTMLInputElement>('input[aria-label="Show all Linear tickets, including terminal states"]')!
+      .click(),
+  )
+  await vi.waitFor(() => expect(tableText()).toContain('Alpha'))
+  const select = container!.querySelector<HTMLSelectElement>('select[aria-label="Ticket sort order"]')!
+  await act(async () => {
+    select.value = 'alphabetical'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await vi.waitFor(() =>
+    expect([...container!.querySelectorAll('tbody tr')].map(item => item.textContent)).toEqual([
+      expect.stringContaining('Alpha'),
+      expect.stringContaining('Bravo'),
+      expect.stringContaining('Zulu'),
+    ]),
+  )
+  expect(tableText()).toContain('Bravo')
+  expect(rowCommits.length).toBeGreaterThan(0)
+  expect(rowCommits.every(count => count > 0)).toBe(true)
+})
+
+test('all matching rows stay visible across filters and live edits without pagination', async () => {
+  const tickets = Array.from({ length: 56 }, (_, index) =>
+    ticket(
+      String(index).padStart(2, '0'),
+      `Title ${String(index).padStart(2, '0')}`,
+      index === 55 ? 'completed' : 'started',
+      1,
+    ),
+  )
+  await linearTicketCache.replace('viewer', tickets, linearTicketCache.beginSync(), 'now')
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+  container = document.createElement('div')
+  document.body.append(container)
+  root = createRoot(container)
+  await act(async () =>
+    root?.render(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(
+          Profiler,
+          { id: 'linear', onRender: () => rowCommits.push(container!.querySelectorAll('tbody tr').length) },
+          createElement(LinearWidget),
+        ),
+      ),
+    ),
+  )
+  const button = (name: string) =>
+    [...container!.querySelectorAll('button')].find(item => item.textContent?.trim() === name)!
+  const showAll = () =>
+    container!.querySelector<HTMLInputElement>(
+      'input[aria-label="Show all Linear tickets, including terminal states"]',
+    )!
+  const rowCount = () => container!.querySelectorAll('tbody tr').length
+  await vi.waitFor(() => expect(rowCount()).toBe(55))
+  expect(button('Next')).toBeUndefined()
+  expect(button('Previous')).toBeUndefined()
+  rowCommits = []
+  await act(async () => showAll().click())
+  await vi.waitFor(() => expect(rowCount()).toBe(56))
+  await act(async () => showAll().click())
+  await vi.waitFor(() => expect(rowCount()).toBe(55))
+  await act(async () =>
+    linearTicketCache.replace(
+      'viewer',
+      [{ ...tickets[0], title: 'Updated live' }],
+      linearTicketCache.beginSync(),
+      'later',
+    ),
+  )
+  await vi.waitFor(() => expect(container!.textContent).toContain('Updated live'))
+  expect(rowCount()).toBe(55)
+  expect(rowCommits.every(count => count > 0)).toBe(true)
+})

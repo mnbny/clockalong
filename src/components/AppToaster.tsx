@@ -11,6 +11,7 @@ type AppToastOptions = {
     onClick: () => Promise<void> | void
   }
   description?: ReactNode
+  duration?: number
 }
 
 export function AppToaster() {
@@ -25,32 +26,35 @@ export const appToast = {
 }
 
 function showAppToast(level: AppToastLevel, message: ReactNode, options?: AppToastOptions) {
-  return toast.custom(toastId => (
-    <div className={`alert ${getAlertClassName(level)} max-w-sm items-start shadow-lg`}>
-      {getToastIcon(level)}
-      <div className="min-w-0">
-        <div className="text-sm leading-5 font-medium">{message}</div>
-        {options?.description ? <div className="mt-1 text-xs leading-5">{options.description}</div> : null}
-      </div>
-      {options?.action ? (
+  return toast.custom(
+    toastId => (
+      <div className={`alert ${getAlertClassName(level)} max-w-sm items-start shadow-lg`}>
+        {getToastIcon(level)}
+        <div className="min-w-0">
+          <div className="text-sm leading-5 font-medium">{message}</div>
+          {!!options?.description && <div className="mt-1 text-xs leading-5">{options.description}</div>}
+        </div>
+        {!!options?.action && (
+          <button
+            className="btn btn-sm ml-2"
+            type="button"
+            onClick={() => {
+              void options.action?.onClick()
+            }}>
+            {options.action.label}
+          </button>
+        )}
         <button
-          className="btn btn-sm ml-2"
+          className="btn btn-square btn-ghost btn-xs ml-auto"
+          style={{ color: 'inherit' }}
           type="button"
-          onClick={() => {
-            void options.action?.onClick()
-          }}>
-          {options.action.label}
+          onClick={() => toast.dismiss(toastId)}>
+          <IconX className="size-4" />
         </button>
-      ) : null}
-      <button
-        className="btn btn-square btn-ghost btn-xs ml-auto"
-        style={{ color: 'inherit' }}
-        type="button"
-        onClick={() => toast.dismiss(toastId)}>
-        <IconX className="size-4" />
-      </button>
-    </div>
-  ))
+      </div>
+    ),
+    { duration: options?.duration },
+  )
 }
 
 function getAlertClassName(level: AppToastLevel) {

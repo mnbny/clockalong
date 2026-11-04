@@ -14,26 +14,31 @@ import {
   IconPlayerStop,
   IconWand,
 } from '@tabler/icons-react'
-import { and, eq, gte, lt, useLiveQuery } from '@tanstack/react-db'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import humanizeDuration from 'humanize-duration'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useStopwatch } from 'react-timer-hook'
 
+import { useDexieQuery } from '../hooks/useDexieQuery'
 import { queryKeys } from '../lib/query-client'
 import { clockify, clockifyReports } from '../services/clockify/client'
+import { clockifyEntryCache } from '../services/clockify/entry-cache'
+import { clockifyEntriesInRange } from '../services/clockify/entry-queries'
 import {
   type ClockifyTimeEntryOverlapFix,
   fixClockifyTimeEntryOverlaps,
   getCompletedClockifyTimeEntryOverlapFixes,
 } from '../services/clockify/overlaps'
-import { clockifyTimeEntriesCollection, type SyncedClockifyTimeEntry } from '../services/clockify/sync'
+import { getClockifyEntryTableRange, getClockifyPeriodRange, getDayStart } from '../services/clockify/ranges'
+import { cacheClockifyEntryResult, type SyncedClockifyTimeEntry } from '../services/clockify/sync'
 import {
   createClockifyTimeEntryFromEntry,
   getClockifyTimeEntryTitle,
   getClockifyTimeEntryUpdateBody,
   stopClockifyTimeEntry,
 } from '../services/clockify/time-entries'
+import { selectClockifyWorkspace } from '../services/clockify/workspaces'
+import { db } from '../services/db'
 import { useStorage } from '../services/storage/useStorage'
 import { getErrorMessage } from '../utils/errors'
 import { appToast } from './AppToaster'
@@ -53,6 +58,7 @@ const clockifyReportPeriods = [
   { id: 'month', label: 'Month' },
 ] as const
 type ClockifyReportPeriodId = (typeof clockifyReportPeriods)[number]['id']
+const emptyClockifyEntries: SyncedClockifyTimeEntry[] = []
 const clockifyEntryTableDayRanges = [1, 3, 7] as const
 type ClockifyEntryTableDayRange = (typeof clockifyEntryTableDayRanges)[number]
 type ClockifyOverlapDialogState = {
@@ -105,11 +111,7 @@ export function ClockifyWidget() {
       return null
     }
 
-    return (
-      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
-      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
-      workspaces[0]
-    )
+    return selectClockifyWorkspace(user, workspaces)
   }, [userQuery.data, workspacesQuery.data])
   const clockifyProjectsQuery = useQuery({
     enabled: clockifyOverrideProjectVisibility && Boolean(selectedWorkspace?.id),
@@ -214,22 +216,31 @@ export function ClockifyWidget() {
       staleTime: 60_000,
     })),
   })
-  const todaySyncedEntries = useSyncedClockifyEntriesForPeriod('today', {
+  const todayEntriesQuery = useSyncedClockifyEntriesForRange(getClockifyPeriodRange('today', new Date()), {
     userId: userQuery.data?.id,
     workspaceId: selectedWorkspace?.id,
   })
-  const entryTableSyncedEntries = useSyncedClockifyEntriesForRecentDays(entryTableDayRange, {
+  const entryTableEntriesQuery = useSyncedClockifyEntriesForRange(
+    getClockifyEntryTableRange(entryTableDayRange, new Date()),
+    {
+      userId: userQuery.data?.id,
+      workspaceId: selectedWorkspace?.id,
+    },
+  )
+  const weekEntriesQuery = useSyncedClockifyEntriesForRange(getClockifyPeriodRange('week', new Date()), {
     userId: userQuery.data?.id,
     workspaceId: selectedWorkspace?.id,
   })
-  const weekSyncedEntries = useSyncedClockifyEntriesForPeriod('week', {
+  const monthEntriesQuery = useSyncedClockifyEntriesForRange(getClockifyPeriodRange('month', new Date()), {
     userId: userQuery.data?.id,
     workspaceId: selectedWorkspace?.id,
   })
-  const monthSyncedEntries = useSyncedClockifyEntriesForPeriod('month', {
-    userId: userQuery.data?.id,
-    workspaceId: selectedWorkspace?.id,
-  })
+  const todaySyncedEntries = todayEntriesQuery.data ?? emptyClockifyEntries
+  const weekSyncedEntries = weekEntriesQuery.data ?? emptyClockifyEntries
+  const monthSyncedEntries = monthEntriesQuery.data ?? emptyClockifyEntries
+  const entryTableSyncedEntries = entryTableEntriesQuery.data ?? emptyClockifyEntries
+  const entryQueries = [todayEntriesQuery, weekEntriesQuery, monthEntriesQuery, entryTableEntriesQuery]
+  const entryReadError = entryQueries.find(query => query.error)?.error
   const todayOverlapFixes = useClockifyOverlapFixes(todaySyncedEntries)
   const weekOverlapFixes = useClockifyOverlapFixes(weekSyncedEntries)
   const monthOverlapFixes = useClockifyOverlapFixes(monthSyncedEntries)
@@ -263,7 +274,31 @@ export function ClockifyWidget() {
   }, [monthSyncedEntries, selectedWorkspace?.id, todaySyncedEntries, userQuery.data?.id, weekSyncedEntries])
   const overlapFixes = overlapDialogState?.fixes ?? []
   const fixOverlapMutation = useMutation({
-    mutationFn: () => fixClockifyTimeEntryOverlaps(overlapFixes),
+    mutationFn: () => {
+      const lifecycle = clockifyEntryCache.getLifecycle()
+      return fixClockifyTimeEntryOverlaps(overlapFixes, async (entries, fixes) => {
+        try {
+          for (const fixed of fixes) {
+            const response = entries.find(entry => entry.id === fixed.entry.id) ?? {}
+            await cacheClockifyEntryResult(
+              response,
+              {
+                ...fixed.entry,
+                timeInterval: {
+                  ...fixed.entry.timeInterval,
+                  start: fixed.start.toISOString(),
+                  end: fixed.end.toISOString(),
+                },
+              },
+              lifecycle,
+            )
+          }
+        } catch (error) {
+          console.warn('[clockify sync] Could not cache repaired entries:', error)
+          appToast.warning('Entries were repaired in Clockify, but the local cache could not be updated.')
+        }
+      })
+    },
     onError: error => {
       appToast.error('Could not fix Clockify overlap', {
         description: getErrorMessage(error),
@@ -297,12 +332,19 @@ export function ClockifyWidget() {
   })
   const stopRunningEntryMutation = useMutation({
     mutationFn: stopClockifyTimeEntry,
+    onMutate: () => clockifyEntryCache.getLifecycle(),
     onError: error => {
       appToast.error('Could not stop Clockify timer', {
         description: getErrorMessage(error),
       })
     },
-    onSuccess: () => {
+    onSuccess: async (response, original, lifecycle) => {
+      try {
+        await cacheClockifyEntryResult(response, original, lifecycle)
+      } catch (error) {
+        console.warn('[clockify sync] Could not cache stopped entry:', error)
+        appToast.warning('Timer stopped, but the local cache could not be updated.')
+      }
       void setQuickTimersActiveEntry(null)
       appToast.success('Stopped Clockify timer')
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
@@ -324,7 +366,7 @@ export function ClockifyWidget() {
               </div>
             </div>
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-              {clockifyOverrideProjectVisibility ? (
+              {clockifyOverrideProjectVisibility && (
                 <div className="flex min-w-0 items-center gap-2">
                   <select
                     aria-label="Clockify project override"
@@ -348,13 +390,13 @@ export function ClockifyWidget() {
                       void setClockifyOverrideProject(selectedProject ?? null)
                     }}>
                     <option value="">Use default project</option>
-                    {clockifyOverrideProjectValue &&
-                    !selectedClockifyOverrideProjectLoaded &&
-                    clockifyOverrideProject ? (
-                      <option value={clockifyOverrideProjectValue}>
-                        {`${clockifyOverrideProject.workspaceName} / ${clockifyOverrideProject.projectName}`}
-                      </option>
-                    ) : null}
+                    {!!clockifyOverrideProjectValue &&
+                      !selectedClockifyOverrideProjectLoaded &&
+                      !!clockifyOverrideProject && (
+                        <option value={clockifyOverrideProjectValue}>
+                          {`${clockifyOverrideProject.workspaceName} / ${clockifyOverrideProject.projectName}`}
+                        </option>
+                      )}
                     {clockifyProjectOptions.map(project => (
                       <option
                         key={`${project.workspaceId}:${project.projectId}`}
@@ -363,9 +405,9 @@ export function ClockifyWidget() {
                       </option>
                     ))}
                   </select>
-                  {clockifyProjectsQuery.isFetching ? <span className="loading loading-spinner loading-xs" /> : null}
+                  {clockifyProjectsQuery.isFetching && <span className="loading loading-spinner loading-xs" />}
                 </div>
-              ) : null}
+              )}
               <button
                 className="btn btn-square btn-ghost btn-sm"
                 type="button"
@@ -442,20 +484,34 @@ export function ClockifyWidget() {
             </div>
           </div>
 
-          {entriesVisible ? (
-            <ClockifyEntriesTable
-              activeEntryId={runningEntry?.id ?? null}
-              entries={entryTableSyncedEntries}
-              entryTableDayRange={entryTableDayRange}
-              onEdit={setEditingEntry}
-              onAddTime={setManualEntry}
-              onEntryTableDayRangeChange={setEntryTableDayRange}
-              onResume={entry => resumeClockifyEntryMutation.mutate(entry)}
-              onStop={entry => stopRunningEntryMutation.mutate(entry)}
-              resumingEntryId={resumeClockifyEntryMutation.isPending ? resumeClockifyEntryMutation.variables?.id : null}
-              stoppingEntryId={stopRunningEntryMutation.isPending ? stopRunningEntryMutation.variables?.id : null}
-            />
-          ) : null}
+          {!!entryReadError && (
+            <div role="alert" className="text-error px-4 py-2">
+              Could not read Clockify entries: {getErrorMessage(entryReadError)}{' '}
+              <button type="button" className="btn btn-sm" onClick={() => entryQueries.forEach(query => query.retry())}>
+                Retry
+              </button>
+            </div>
+          )}
+          {entriesVisible &&
+            !entryReadError &&
+            (entryTableEntriesQuery.data ? (
+              <ClockifyEntriesTable
+                activeEntryId={runningEntry?.id ?? null}
+                entries={entryTableSyncedEntries}
+                entryTableDayRange={entryTableDayRange}
+                onEdit={setEditingEntry}
+                onAddTime={setManualEntry}
+                onEntryTableDayRangeChange={setEntryTableDayRange}
+                onResume={entry => resumeClockifyEntryMutation.mutate(entry)}
+                onStop={entry => stopRunningEntryMutation.mutate(entry)}
+                resumingEntryId={
+                  resumeClockifyEntryMutation.isPending ? resumeClockifyEntryMutation.variables?.id : null
+                }
+                stoppingEntryId={stopRunningEntryMutation.isPending ? stopRunningEntryMutation.variables?.id : null}
+              />
+            ) : (
+              <p className="px-4 py-2">Loading Clockify entries…</p>
+            ))}
         </div>
       </section>
 
@@ -479,6 +535,7 @@ export function ClockifyWidget() {
       {!!manualEntry && (
         <ClockifyEntryTimeDialog
           description={getClockifyTimeEntryTitle(manualEntry)}
+          workspaceId={clockifyTimerProject?.workspaceId ?? manualEntry.workspaceId}
           onCancel={() => setManualEntry(null)}
           onSave={interval => createClockifyTimeEntryFromEntry(manualEntry, clockifyTimerProject, interval)}
         />
@@ -570,78 +627,20 @@ function PeriodStatIcon({ label }: { label: string }) {
   }
 }
 
-function useSyncedClockifyEntriesForPeriod(
-  period: ClockifyReportPeriodId,
-  {
-    userId,
-    workspaceId,
-  }: {
-    userId: string | undefined
-    workspaceId: string | undefined
-  },
+function useSyncedClockifyEntriesForRange(
+  range: { start: Date; end: Date },
+  { userId, workspaceId }: { userId: string | undefined; workspaceId: string | undefined },
 ) {
-  const range = getClockifyPeriodRange(period, new Date())
   const rangeStart = range.start.toISOString()
   const rangeEnd = range.end.toISOString()
-  const syncedEntriesQuery = useLiveQuery(
-    q => {
-      if (!userId || !workspaceId) {
-        return null
-      }
-
-      return q
-        .from({ syncedEntry: clockifyTimeEntriesCollection })
-        .where(({ syncedEntry }) =>
-          and(
-            eq(syncedEntry.userId, userId),
-            eq(syncedEntry.workspaceId, workspaceId),
-            gte(syncedEntry.startedAt, rangeStart),
-            lt(syncedEntry.startedAt, rangeEnd),
-          ),
-        )
-        .orderBy(({ syncedEntry }) => syncedEntry.startedAt)
-    },
-    [rangeEnd, rangeStart, userId, workspaceId],
+  const read = useCallback(
+    () =>
+      userId && workspaceId
+        ? clockifyEntriesInRange(db, { userId, workspaceId }, rangeStart, rangeEnd)
+        : Promise.resolve([]),
+    [userId, workspaceId, rangeStart, rangeEnd],
   )
-
-  return syncedEntriesQuery.data ?? []
-}
-
-function useSyncedClockifyEntriesForRecentDays(
-  days: ClockifyEntryTableDayRange,
-  {
-    userId,
-    workspaceId,
-  }: {
-    userId: string | undefined
-    workspaceId: string | undefined
-  },
-) {
-  const range = getClockifyEntryTableRange(days, new Date())
-  const rangeStart = range.start.toISOString()
-  const rangeEnd = range.end.toISOString()
-  const syncedEntriesQuery = useLiveQuery(
-    q => {
-      if (!userId || !workspaceId) {
-        return null
-      }
-
-      return q
-        .from({ syncedEntry: clockifyTimeEntriesCollection })
-        .where(({ syncedEntry }) =>
-          and(
-            eq(syncedEntry.userId, userId),
-            eq(syncedEntry.workspaceId, workspaceId),
-            gte(syncedEntry.startedAt, rangeStart),
-            lt(syncedEntry.startedAt, rangeEnd),
-          ),
-        )
-        .orderBy(({ syncedEntry }) => syncedEntry.startedAt)
-    },
-    [rangeEnd, rangeStart, userId, workspaceId],
-  )
-
-  return syncedEntriesQuery.data ?? []
+  return useDexieQuery(read, JSON.stringify([userId, workspaceId]))
 }
 
 function summarizeSyncedEntryLog(entries: SyncedClockifyTimeEntry[]) {
@@ -1011,41 +1010,6 @@ function getClockifyReportDateRangeType(period: ClockifyReportPeriodId): 'TODAY'
     case 'month':
       return 'THIS_MONTH'
   }
-}
-
-function getClockifyPeriodRange(period: ClockifyReportPeriodId, now: Date) {
-  const todayStart = getDayStart(now)
-  const start = new Date(todayStart)
-  const end = new Date(todayStart)
-
-  switch (period) {
-    case 'month':
-      start.setDate(start.getDate() - 27)
-      end.setDate(end.getDate() - 6)
-      break
-    case 'today':
-      end.setDate(end.getDate() + 1)
-      break
-    case 'week':
-      start.setDate(start.getDate() - 6)
-      break
-  }
-
-  return { end, start }
-}
-
-function getClockifyEntryTableRange(days: ClockifyEntryTableDayRange, now: Date) {
-  const start = getDayStart(now)
-  const end = getDayStart(now)
-
-  start.setDate(start.getDate() - (days - 1))
-  end.setDate(end.getDate() + 1)
-
-  return { end, start }
-}
-
-function getDayStart(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
 
 function clockifyWidgetLog(message: string, details?: unknown) {

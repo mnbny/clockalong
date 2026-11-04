@@ -1,38 +1,33 @@
-import type { AssignedIssueNode, LinearTicket, LinearTicketStatus } from '../services/linear/tickets'
+import type { LinearTicket, LinearTicketStatus } from '../services/linear/tickets'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
 
 import { IconExternalLink, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react'
-import { and, eq, useLiveQuery } from '@tanstack/react-db'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
 import { useClockifyTimerProject } from '../hooks/useClockifyTimerProject'
+import { useDexieQuery } from '../hooks/useDexieQuery'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
-import { type TimeEntryDtoImplV1 } from '../services/clockify/generated/clockify'
-import { clockifyTimeEntriesCollection, upsertSyncedClockifyEntry } from '../services/clockify/sync'
-import {
-  type ClockifyTicketTimeSummaries,
-  getClockifyEntryLinearTicket,
-  summarizeClockifyTicketTimeEntries,
-} from '../services/clockify/ticket-summaries'
+import { clockifyEntryCache } from '../services/clockify/entry-cache'
+import { cacheClockifyEntryResult } from '../services/clockify/sync'
 import { MissingClockifyProjectError } from '../services/clockify/time-entries'
-import { linearTicketsCollection, useLinearSync } from '../services/linear/sync'
+import { selectClockifyWorkspace } from '../services/clockify/workspaces'
+import { db } from '../services/db'
+import { useLinearSync } from '../services/linear/sync'
+import { queryLinearTickets } from '../services/linear/ticket-queries'
 import {
   getLinearTicketSortOrderLabel,
   type LinearTicketSortOrderOption,
   linearTicketSortOrderOptions,
-  normalizeLinearTicketSyncLimit,
 } from '../services/linear/ticket-settings'
-import { isLinearTicketTerminal, sortLinearTickets } from '../services/linear/tickets-sorting'
 import { createClockifyTimeEntryForTicket, stopClockifyTimerForEntry } from '../services/linear/timers'
 import { useStorage } from '../services/storage/useStorage'
 import { getContrastingColor } from '../utils/colors'
 import { getErrorMessage } from '../utils/errors'
-import { parseInternalRefs } from '../utils/templates'
 import { appToast } from './AppToaster'
 import { ClockifyEntryTimeDialog } from './ClockifyEntryTimeDialog'
 import { LinearIcon } from './icons/LinearIcon'
@@ -131,6 +126,7 @@ const ticketColumns: Array<ColumnDef<LinearTicket>> = [
 ]
 
 const ticketTableCoreRowModel = getCoreRowModel<LinearTicket>()
+const emptyLinearTickets: LinearTicket[] = []
 
 export function LinearWidget() {
   const authState = useAppAuth()
@@ -150,29 +146,13 @@ function LinearWidgetContent() {
   const clockifyTimerProject = useClockifyTimerProject()
   const [clockifyDescriptionTemplate] = useStorage('clockifyDescriptionTemplate')
   const [clockifyDescriptionTemplateFallback] = useStorage('clockifyDescriptionTemplateFallback')
-  const [linearTicketSyncLimit] = useStorage('linearTicketSyncLimit')
   const [linearTicketSortOrder, setLinearTicketSortOrder] = useStorage('linearTicketSortOrder')
   const [showAllLinearTickets, setShowAllLinearTickets] = useState(false)
   const linearSync = useLinearSync()
   const {
-    lastSyncResult: linearLastSyncResult,
+    viewerId: linearViewerId,
     queries: { syncQuery: linearSyncQuery },
   } = linearSync
-  const normalizedLinearTicketSyncLimit = normalizeLinearTicketSyncLimit(linearTicketSyncLimit)
-  const linearViewerId = linearLastSyncResult?.viewerId
-  const syncedLinearTicketsQuery = useLiveQuery(
-    q => {
-      if (!linearViewerId) {
-        return null
-      }
-
-      return q
-        .from({ syncedTicket: linearTicketsCollection })
-        .where(({ syncedTicket }) => eq(syncedTicket.viewerId, linearViewerId))
-        .orderBy(({ syncedTicket }) => syncedTicket.updatedAt)
-    },
-    [linearViewerId],
-  )
   const clockifyUserQuery = useQuery({
     queryKey: queryKeys.clockify.loggedUser,
     queryFn: () => clockify.getLoggedUser(),
@@ -191,11 +171,7 @@ function LinearWidgetContent() {
       return null
     }
 
-    return (
-      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
-      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
-      workspaces[0]
-    )
+    return selectClockifyWorkspace(user, workspaces)
   }, [clockifyUserQuery.data, clockifyWorkspacesQuery.data])
   const runningEntryQuery = useQuery({
     enabled: Boolean(clockifyUserQuery.data?.id && selectedClockifyWorkspace?.id),
@@ -219,77 +195,37 @@ function LinearWidgetContent() {
     const runningEntries = runningEntryQuery.data ?? []
     return runningEntries.find(entry => entry.userId === clockifyUserQuery.data?.id) ?? runningEntries[0] ?? null
   }, [clockifyUserQuery.data?.id, runningEntryQuery.data])
-  const syncedTimeEntriesQuery = useLiveQuery(
-    q => {
-      if (!clockifyUserQuery.data?.id || !selectedClockifyWorkspace?.id) {
-        return null
-      }
-
-      return q
-        .from({ syncedEntry: clockifyTimeEntriesCollection })
-        .where(({ syncedEntry }) =>
-          and(
-            eq(syncedEntry.userId, clockifyUserQuery.data.id!),
-            eq(syncedEntry.workspaceId, selectedClockifyWorkspace.id!),
-          ),
-        )
-        .orderBy(({ syncedEntry }) => syncedEntry.startedAt)
+  const readTickets = useCallback(
+    (signal: AbortSignal) => {
+      if (!linearViewerId) return Promise.resolve({ rows: emptyLinearTickets, activeId: undefined })
+      const userId = clockifyUserQuery.data?.id
+      const workspaceId = selectedClockifyWorkspace?.id
+      return queryLinearTickets(db, {
+        viewerId: linearViewerId,
+        clockifyScope: userId && workspaceId ? { userId, workspaceId } : null,
+        runningEntries: runningEntry ? [runningEntry] : [],
+        sortOrder: linearTicketSortOrder,
+        showAll: showAllLinearTickets,
+        now: new Date(),
+        signal,
+      })
     },
-    [clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id],
+    [
+      linearViewerId,
+      clockifyUserQuery.data?.id,
+      selectedClockifyWorkspace?.id,
+      runningEntry,
+      linearTicketSortOrder,
+      showAllLinearTickets,
+    ],
   )
-  const linearTickets = useMemo(
-    () =>
-      (syncedLinearTicketsQuery.data?.map(syncedTicket => syncedTicket.ticket) ?? [])
-        .slice(0, normalizedLinearTicketSyncLimit)
-        .map(toLinearTicket),
-    [normalizedLinearTicketSyncLimit, syncedLinearTicketsQuery.data],
+  const result = useDexieQuery(
+    readTickets,
+    JSON.stringify([linearViewerId, clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id]),
   )
-  const ticketTimeSummaries = useMemo(() => {
-    return summarizeClockifyTicketTimeEntries({
-      entries: [
-        ...(syncedTimeEntriesQuery.data?.map(syncedEntry => syncedEntry.entry) ?? []),
-        ...(runningEntryQuery.data ?? []),
-      ],
-      tickets: linearTickets,
-    })
-  }, [linearTickets, runningEntryQuery.data, syncedTimeEntriesQuery.data])
-  useEffect(() => {
-    linearWidgetLog('clockify summary inputs', {
-      linearTicketCount: linearTickets.length,
-      runningEntryCount: runningEntryQuery.data?.length ?? 0,
-      sampleSyncedEntries: summarizeLinearWidgetSyncedEntries(syncedTimeEntriesQuery.data ?? []),
-      summaryCount: Object.keys(ticketTimeSummaries).length,
-      syncedEntryCount: syncedTimeEntriesQuery.data?.length ?? 0,
-      userId: clockifyUserQuery.data?.id,
-      workspaceId: selectedClockifyWorkspace?.id,
-    })
-  }, [
-    clockifyUserQuery.data?.id,
-    linearTickets.length,
-    runningEntryQuery.data,
-    selectedClockifyWorkspace?.id,
-    syncedTimeEntriesQuery.data,
-    ticketTimeSummaries,
-  ])
-  const ticketsWithTracking = useMemo(
-    () => mergeTicketTimeSummaries(linearTickets, ticketTimeSummaries),
-    [linearTickets, ticketTimeSummaries],
-  )
+  const tickets = result.data?.rows ?? emptyLinearTickets
   const runningEntryId = runningEntry?.id ?? null
-  const activeLinearIssueId = getClockifyEntryLinearTicket(runningEntry, linearTickets)?.id
-  const tickets = useMemo(
-    () =>
-      sortLinearTickets(
-        showAllLinearTickets
-          ? ticketsWithTracking
-          : ticketsWithTracking.filter(ticket => !isLinearTicketTerminal(ticket)),
-        {
-          activeLinearIssueId,
-          sortOrder: linearTicketSortOrder,
-        },
-      ),
-    [activeLinearIssueId, linearTicketSortOrder, showAllLinearTickets, ticketsWithTracking],
-  )
+  const activeLinearIssueId = result.data?.activeId
   const startTrackingMutation = useMutation({
     mutationFn: async (ticket: LinearTicket) => {
       clockifyTimerLog('start mutation requested', {
@@ -350,6 +286,7 @@ function LinearWidgetContent() {
     },
   })
   const stopTrackingMutation = useMutation({
+    onMutate: () => clockifyEntryCache.getLifecycle(),
     mutationFn: async (ticket: LinearTicket) => {
       clockifyTimerLog('stop mutation requested', {
         clockifyEntryId: runningEntry?.id,
@@ -362,7 +299,7 @@ function LinearWidgetContent() {
 
       const entry = await stopClockifyTimerForEntry({ entry: runningEntry, ticket })
 
-      return { entry, ticket }
+      return { entry, original: runningEntry, ticket }
     },
     onError: error => {
       if (error instanceof MissingRunningClockifyEntryError) {
@@ -380,31 +317,19 @@ function LinearWidgetContent() {
         description: getErrorMessage(error),
       })
     },
-    onSuccess: async ({ entry, ticket }) => {
+    onSuccess: async ({ entry, original, ticket }, _variables, lifecycle) => {
       clockifyTimerLog('stop mutation succeeded', {
         ticketIdentifier: ticket.identifier,
       })
 
-      if (entry.id && entry.userId && entry.workspaceId) {
-        try {
-          await upsertSyncedClockifyEntry({
-            entry,
-            userId: entry.userId,
-            workspaceId: entry.workspaceId,
-          })
-        } catch (error) {
-          clockifyTimerLog('stop mutation entry persistence failed', {
-            error: getErrorMessage(error),
-            ticketIdentifier: ticket.identifier,
-          })
-        }
-      } else {
-        clockifyTimerLog('stop mutation returned incomplete entry', {
-          hasEntryId: Boolean(entry.id),
-          hasUserId: Boolean(entry.userId),
-          hasWorkspaceId: Boolean(entry.workspaceId),
+      try {
+        await cacheClockifyEntryResult(entry, original, lifecycle)
+      } catch (error) {
+        clockifyTimerLog('stop mutation entry persistence failed', {
+          error: getErrorMessage(error),
           ticketIdentifier: ticket.identifier,
         })
+        appToast.warning('Timer stopped, but the local cache could not be updated.')
       }
 
       appToast.success(`Stopped timer for ${ticket.identifier}`)
@@ -539,28 +464,38 @@ function LinearWidgetContent() {
           </table>
         </div>
 
-        {linearSyncQuery.isLoading ? (
+        {linearSyncQuery.isLoading && (
           <div className="grid min-h-48 place-items-center">
             <span className="loading loading-spinner loading-md" />
           </div>
-        ) : null}
+        )}
 
-        {linearSyncQuery.isError ? (
+        {!!result.error && (
+          <div role="alert" className="text-error px-4 py-2 text-sm">
+            Could not load Linear tickets. {getErrorMessage(result.error)}{' '}
+            <button className="btn btn-sm" type="button" onClick={result.retry}>
+              Retry
+            </button>
+          </div>
+        )}
+
+        {linearSyncQuery.isError && (
           <div className="text-error grid min-h-48 place-items-center px-4 text-center text-sm">
             Could not load Linear tickets.
           </div>
-        ) : null}
+        )}
 
-        {linearSyncQuery.isSuccess && linearTickets.length === 0 ? (
+        {linearSyncQuery.isSuccess && !!linearViewerId && !!result.data && !result.error && tickets.length === 0 && (
           <div className="text-base-content/60 grid min-h-48 place-items-center px-4 text-center text-sm">
             No assigned tickets found.
           </div>
-        ) : null}
+        )}
       </div>
 
       {!!manualTicket && (
         <ClockifyEntryTimeDialog
           description={`${manualTicket.identifier}: ${manualTicket.title}`}
+          workspaceId={clockifyTimerProject?.workspaceId}
           onCancel={() => setManualTicket(null)}
           onSave={interval => {
             if (!clockifyTimerProject) throw new MissingClockifyProjectError()
@@ -686,44 +621,6 @@ function StatusCell({ status }: { status: LinearTicketStatus }) {
   )
 }
 
-function mergeTicketTimeSummaries(
-  tickets: LinearTicket[],
-  ticketTimeSummaries: ClockifyTicketTimeSummaries,
-): LinearTicket[] {
-  return tickets.map(ticket => {
-    const summary = ticketTimeSummaries[ticket.id]
-
-    if (!summary) {
-      return ticket
-    }
-
-    return {
-      ...ticket,
-      lastTrackedAt: summary.lastTrackedAt,
-      totalTrackedAmount: summary.totalTrackedAmount,
-      totalTrackedAmountCurrency: summary.totalTrackedAmountCurrency,
-      totalTrackedSeconds: summary.totalTrackedSeconds,
-    }
-  })
-}
-
-function toLinearTicket(issue: AssignedIssueNode): LinearTicket {
-  return {
-    assignee: issue.assignee,
-    createdAt: issue.createdAt,
-    id: issue.id,
-    identifier: issue.identifier,
-    lastTrackedAt: null,
-    status: issue.state,
-    title: issue.title,
-    totalTrackedAmount: null,
-    totalTrackedAmountCurrency: null,
-    totalTrackedSeconds: null,
-    updatedAt: issue.updatedAt,
-    url: issue.url,
-  }
-}
-
 function getTicketTableCellClassName(columnId: string) {
   switch (columnId) {
     case 'trackingAction':
@@ -760,33 +657,4 @@ function clockifyTimerLog(message: string, details?: unknown) {
   }
 
   console.info(`[clockify api] timer ${message}`, details)
-}
-
-function summarizeLinearWidgetSyncedEntries(
-  entries: Array<{ entry: TimeEntryDtoImplV1; id: string; startedAt: string }>,
-) {
-  return entries.slice(0, 5).map(entry => ({
-    description: truncateLinearWidgetLogText(entry.entry.description),
-    end: entry.entry.timeInterval?.end,
-    id: entry.id,
-    refs: parseInternalRefs(entry.entry.description).map(ref => ref.provider),
-    startedAt: entry.startedAt,
-  }))
-}
-
-function truncateLinearWidgetLogText(value: string | undefined, maxLength = 140) {
-  if (!value) {
-    return value
-  }
-
-  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
-}
-
-function linearWidgetLog(message: string, details?: unknown) {
-  if (details === undefined) {
-    console.info(`[linear widget] ${message}`)
-    return
-  }
-
-  console.info(`[linear widget] ${message}`, details)
 }

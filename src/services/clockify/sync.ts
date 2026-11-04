@@ -1,39 +1,26 @@
+import type { StoredClockifyTimeEntry } from './entry-cache'
 import type { TimeEntryWithRatesDtoV1 } from './generated/clockify'
 import type { PropsWithChildren } from 'react'
 
-import { createCollection, createTransaction, localStorageCollectionOptions } from '@tanstack/react-db'
-import { useQuery } from '@tanstack/react-query'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 import { createContext, createElement, useCallback, useContext, useMemo } from 'react'
 
 import { useAppAuth } from '../../hooks/useAppAuth'
-import { queryKeys } from '../../lib/query-client'
+import { queryClient, queryKeys } from '../../lib/query-client'
 import { getErrorMessage } from '../../utils/errors'
-import { pick } from '../../utils/objects'
 import { parseInternalRefs } from '../../utils/templates'
 import { storage } from '../storage/config'
 import { useStorage } from '../storage/useStorage'
 import { clockify } from './client'
-import { type ClockifyEntrySyncDaysOption, getClockifyEntrySyncIntervalMilliseconds } from './sync-settings'
+import { clockifyEntryCache } from './entry-cache'
+import {
+  type ClockifyEntrySyncDaysOption,
+  type ClockifyEntrySyncIntervalOption,
+  getClockifyEntrySyncIntervalMilliseconds,
+} from './sync-settings'
+import { selectClockifyWorkspace } from './workspaces'
 
 const clockifyEntrySyncPageSize = 100
-const clockifyEntrySyncStorageKey = 'clockalong.clockify.timeEntries.v1'
-
-const storedClockifyEntryFields = [
-  'billable',
-  'description',
-  'hourlyRate',
-  'id',
-  'projectId',
-  'tagIds',
-  'taskId',
-  'timeInterval',
-  'type',
-  'userId',
-  'workspaceId',
-] as const satisfies ReadonlyArray<keyof TimeEntryWithRatesDtoV1>
-
-type StoredClockifyTimeEntry = Pick<TimeEntryWithRatesDtoV1, (typeof storedClockifyEntryFields)[number]>
-
 export type SyncedClockifyTimeEntry = {
   entry: StoredClockifyTimeEntry
   id: string
@@ -62,14 +49,6 @@ type ClockifyEntrySyncResult = {
   syncedAt: string
 }
 
-export const clockifyTimeEntriesCollection = createCollection(
-  localStorageCollectionOptions<SyncedClockifyTimeEntry, string>({
-    id: 'clockify-time-entries',
-    storageKey: clockifyEntrySyncStorageKey,
-    getKey: entry => entry.id,
-  }),
-)
-
 function useClockifySyncData() {
   const authState = useAppAuth()
   const [clockifyEntrySyncInterval] = useStorage('clockifyEntrySyncInterval')
@@ -96,24 +75,14 @@ function useClockifySyncData() {
       return null
     }
 
-    return (
-      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
-      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
-      workspaces[0]
-    )
+    return selectClockifyWorkspace(user, workspaces)
   }, [userQuery.data, workspacesQuery.data])
   const userId = userQuery.data?.id
   const workspaceId = selectedWorkspace?.id
   const syncEnabled = Boolean(clockifyAuthenticated && userId && workspaceId)
-  const syncQuery = useQuery({
-    queryKey: queryKeys.clockify.entrySync({
-      params: { userId, workspaceId },
-    }),
-    queryFn: () => syncClockifyEntries({ userId: userId!, workspaceId: workspaceId! }),
-    enabled: syncEnabled,
-    refetchInterval: getClockifyEntrySyncIntervalMilliseconds(clockifyEntrySyncInterval),
-    staleTime: 60_000,
-  })
+  const syncQuery = useQuery(
+    clockifyEntrySyncQueryOptions({ userId, workspaceId, enabled: syncEnabled, interval: clockifyEntrySyncInterval }),
+  )
   const syncNow = useCallback(() => syncQuery.refetch(), [syncQuery])
 
   return {
@@ -124,6 +93,28 @@ function useClockifySyncData() {
     },
     syncing: syncQuery.isFetching,
   }
+}
+
+export function clockifyEntrySyncQueryOptions({
+  userId,
+  workspaceId,
+  enabled,
+  interval,
+}: {
+  userId: string | undefined
+  workspaceId: string | undefined
+  enabled: boolean
+  interval: ClockifyEntrySyncIntervalOption
+}) {
+  return queryOptions({
+    queryKey: queryKeys.clockify.entrySync({
+      params: { userId, workspaceId },
+    }),
+    queryFn: () => syncClockifyEntries({ userId: userId!, workspaceId: workspaceId! }),
+    enabled,
+    refetchInterval: getClockifyEntrySyncIntervalMilliseconds(interval),
+    staleTime: 60_000,
+  })
 }
 
 type ClockifySyncContext = ReturnType<typeof useClockifySyncData>
@@ -142,20 +133,13 @@ export function useClockifySync() {
 }
 
 export async function clearSyncedClockifyTimeEntries() {
-  await clockifyTimeEntriesCollection.preload()
-  const entryIds = clockifyTimeEntriesCollection.toArray.map(syncedEntry => syncedEntry.id)
-
-  if (!entryIds.length) {
-    return 0
-  }
-
-  const transaction = clockifyTimeEntriesCollection.delete(entryIds)
-  await transaction.isPersisted.promise
-  return entryIds.length
+  return clockifyEntryCache.clear()
 }
 
-async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOptions) {
+export async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOptions) {
+  const generation = clockifyEntryCache.beginSync()
   const now = new Date()
+  const initialRevision = await clockifyEntryCache.getRevision()
   const syncDays = await storage.get('clockifyEntrySyncDays')
   const start = getClockifyEntrySyncStart(syncDays, now).toISOString()
   const syncedAt = new Date().toISOString()
@@ -164,7 +148,6 @@ async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOpt
     linear: 0,
   }
   const entriesToSync: TimeEntryWithRatesDtoV1[] = []
-  const fetchedEntryIds = new Set<string>()
   let page = 1
   let entriesFetched = 0
   let entriesInserted = 0
@@ -179,15 +162,6 @@ async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOpt
     syncedAt,
     userId,
     workspaceId,
-  })
-  await clockifyTimeEntriesCollection.preload()
-  const prunableEntryIds = new Set(
-    clockifyTimeEntriesCollection.toArray
-      .filter(syncedEntry => syncedEntry.userId === userId && syncedEntry.workspaceId === workspaceId)
-      .map(syncedEntry => syncedEntry.id),
-  )
-  clockifySyncLog('entry sync collection preloaded', {
-    storageKey: clockifyEntrySyncStorageKey,
   })
 
   try {
@@ -210,12 +184,6 @@ async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOpt
 
       entriesToSync.push(...entries)
 
-      for (const entry of entries) {
-        if (entry.id) {
-          fetchedEntryIds.add(entry.id)
-        }
-      }
-
       clockifySyncLog('entry sync page fetched', {
         entriesFetched: entries.length,
         page,
@@ -230,14 +198,26 @@ async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOpt
       page += 1
     }
 
-    const staleEntryIds = [...prunableEntryIds].filter(entryId => !fetchedEntryIds.has(entryId))
-    const upsertResult = await upsertSyncedClockifyEntries({
-      entries: entriesToSync,
-      staleEntryIds,
+    const currentUser = queryClient.getQueryData<{ id?: string; activeWorkspace?: string; defaultWorkspace?: string }>(
+      queryKeys.clockify.loggedUser,
+    )
+    const currentWorkspaces = queryClient.getQueryData<Array<{ id?: string }>>(queryKeys.clockify.workspaces)
+    const currentWorkspace = selectClockifyWorkspace(currentUser, currentWorkspaces)
+    if (
+      (currentUser?.id && currentUser.id !== userId) ||
+      (currentWorkspace?.id && currentWorkspace.id !== workspaceId)
+    ) {
+      throw new Error('Clockify account or workspace changed during sync')
+    }
+    const upsertResult = await clockifyEntryCache.reconcile(
+      { userId, workspaceId },
+      entriesToSync,
+      start,
+      now.toISOString(),
       syncedAt,
-      userId,
-      workspaceId,
-    })
+      generation,
+      initialRevision,
+    )
     entriesInserted += upsertResult.inserted
     entriesStored += upsertResult.stored
     entriesUpdated += upsertResult.updated
@@ -274,101 +254,30 @@ async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOpt
   }
 }
 
-async function upsertSyncedClockifyEntries({
-  entries,
-  staleEntryIds = [],
-  syncedAt,
-  userId,
-  workspaceId,
-}: {
-  entries: TimeEntryWithRatesDtoV1[]
-  staleEntryIds?: string[]
-  syncedAt: string
-  userId: string
-  workspaceId: string
-}) {
-  const syncedEntriesById = new Map<string, SyncedClockifyTimeEntry>()
-  let skipped = 0
-
-  for (const entry of entries) {
-    if (!entry.id) {
-      skipped += 1
-      continue
-    }
-
-    syncedEntriesById.set(entry.id, {
-      entry: pick(entry, ...storedClockifyEntryFields),
-      id: entry.id,
-      startedAt: entry.timeInterval?.start ?? '',
-      syncedAt,
-      userId: entry.userId ?? userId,
-      workspaceId: entry.workspaceId ?? workspaceId,
-    })
+export async function cacheClockifyEntryResult(
+  response: TimeEntryWithRatesDtoV1,
+  fallback: TimeEntryWithRatesDtoV1 = {},
+  lifecycle = clockifyEntryCache.getLifecycle(),
+) {
+  const entry = {
+    ...fallback,
+    ...response,
+    timeInterval: { ...fallback.timeInterval, ...response.timeInterval },
   }
-
-  const syncedEntries = [...syncedEntriesById.values()]
-  const entriesToInsert = syncedEntries.filter(entry => !clockifyTimeEntriesCollection.has(entry.id))
-  const entriesToUpdate = syncedEntries.filter(entry => clockifyTimeEntriesCollection.has(entry.id))
-
-  if (entriesToInsert.length || entriesToUpdate.length || staleEntryIds.length) {
-    const transaction = createTransaction({
-      mutationFn: async ({ transaction: mutations }) => {
-        clockifyTimeEntriesCollection.utils.acceptMutations(mutations)
-      },
-    })
-
-    transaction.mutate(() => {
-      if (entriesToInsert.length) {
-        clockifyTimeEntriesCollection.insert(entriesToInsert)
-      }
-
-      if (entriesToUpdate.length) {
-        clockifyTimeEntriesCollection.update(
-          entriesToUpdate.map(entry => entry.id),
-          drafts => {
-            drafts.forEach((draft, index) => Object.assign(draft, entriesToUpdate[index]))
-          },
-        )
-      }
-
-      if (staleEntryIds.length) {
-        clockifyTimeEntriesCollection.delete(staleEntryIds)
-      }
-    })
-    await transaction.isPersisted.promise
-  }
-
-  return {
-    deleted: staleEntryIds.length,
-    inserted: entriesToInsert.length,
-    skipped,
-    stored: syncedEntries.length,
-    updated: entriesToUpdate.length,
-  }
+  const currentUserId = queryClient.getQueryData<{ id?: string }>(queryKeys.clockify.loggedUser)?.id
+  const userId = entry.userId ?? currentUserId
+  if (!entry.id || !userId || !entry.workspaceId) return false
+  if (currentUserId && currentUserId !== userId) return false
+  const result = await clockifyEntryCache.upsert(
+    entry,
+    { userId, workspaceId: entry.workspaceId },
+    undefined,
+    lifecycle,
+  )
+  return result.stored > 0
 }
 
-export async function upsertSyncedClockifyEntry({
-  entry,
-  syncedAt = new Date().toISOString(),
-  userId,
-  workspaceId,
-}: {
-  entry: TimeEntryWithRatesDtoV1
-  syncedAt?: string
-  userId: string
-  workspaceId: string
-}) {
-  await clockifyTimeEntriesCollection.preload()
-
-  return upsertSyncedClockifyEntries({
-    entries: [entry],
-    syncedAt,
-    userId,
-    workspaceId,
-  })
-}
-
-function getClockifyEntrySyncStart(days: ClockifyEntrySyncDaysOption, now: Date) {
+export function getClockifyEntrySyncStart(days: ClockifyEntrySyncDaysOption, now: Date) {
   const start = new Date(now)
   start.setDate(start.getDate() - days)
   return start

@@ -1,8 +1,9 @@
 import type { ProjectDtoImplV1, TimeEntryWithRatesDtoV1 } from '../clockify/generated/clockify'
 import type { TimeEntrySummaryReportDto } from '../clockify/generated/reports'
 import type { SyncedClockifyTimeEntry } from '../clockify/sync'
+import type { ClockifyWorkItemTimeSummaries } from '../clockify/work-item-summaries'
 import type { SyncedGithubWorkItem } from '../github/sync'
-import type { SyncedLinearTicket } from '../linear/sync'
+import type { StoredLinearTicket } from '../linear/ticket-cache'
 import type { LinearTicket } from '../linear/tickets'
 import type {
   ClockifyProject,
@@ -12,16 +13,10 @@ import type {
 } from '../storage/config'
 
 import { parseTemplateTokens } from '../../utils/templates'
-import {
-  getClockifyEntryLinearTicket,
-  getLinearTicketInternalRef,
-  summarizeClockifyTicketTimeEntries,
-} from '../clockify/ticket-summaries'
-import {
-  getClockifyEntryGithubWorkItem,
-  getGithubWorkItemInternalRef,
-  summarizeClockifyGithubWorkItemTimeEntries,
-} from '../github/work-item-summaries'
+import { getClockifyEntryTableRange } from '../clockify/ranges'
+import { getClockifyEntryLinearTicket, getLinearTicketInternalRef } from '../clockify/ticket-summaries'
+import { getClockifyEntryGithubWorkItem, getGithubWorkItemInternalRef } from '../github/work-item-summaries'
+import { toLinearTicket } from '../linear/tickets'
 import { isLinearTicketTerminal } from '../linear/tickets-sorting'
 
 export type McpWorkSource = 'github' | 'linear' | 'quick_timer'
@@ -127,7 +122,7 @@ export type BuildMcpSnapshotInput = {
   githubConnected?: boolean
   githubWorkItems?: SyncedGithubWorkItem[]
   linearConnected?: boolean
-  linearTickets?: SyncedLinearTicket[]
+  linearTickets?: StoredLinearTicket[]
   linearViewerId?: string | null
   now?: Date
   quickTimers?: QuickTimerPreset[]
@@ -181,20 +176,6 @@ export function buildMcpSnapshot({
     userId: clockifyUserId,
     workspaceId: clockifyWorkspaceId,
   })
-  const summaryEntries = [
-    ...scopedSyncedEntries.map(syncedEntry => syncedEntry.entry),
-    ...(scopedRunningEntry ? [scopedRunningEntry] : []),
-  ]
-  const linearSummaries = summarizeClockifyTicketTimeEntries({
-    entries: summaryEntries,
-    now,
-    tickets: scopedLinearTickets,
-  })
-  const githubSummaries = summarizeClockifyGithubWorkItemTimeEntries({
-    entries: summaryEntries,
-    now,
-    workItems: scopedGithubWorkItems,
-  })
   const runningSource = resolveEntrySource({
     entry: scopedRunningEntry,
     githubWorkItems: scopedGithubWorkItems,
@@ -207,48 +188,6 @@ export function buildMcpSnapshot({
     ...(clockifyTimerProject ? ([[clockifyTimerProject.projectId, clockifyTimerProject.projectName]] as const) : []),
   ])
   const trackableWork = [
-    ...scopedLinearTickets.map(ticket => {
-      const summary = linearSummaries[ticket.id] ?? emptyTimeSummary
-
-      return {
-        id: ticket.id,
-        identifier: ticket.identifier,
-        internalRef: getLinearTicketInternalRef(ticket),
-        isClosed: isLinearTicketTerminal(ticket),
-        isRunning: runningSource.source === 'linear' && runningSource.sourceId === ticket.id,
-        lastTrackedAt: summary.lastTrackedAt,
-        repository: null,
-        source: 'linear',
-        status: ticket.status.name,
-        title: ticket.title,
-        totalTrackedAmount: summary.totalTrackedAmount,
-        totalTrackedAmountCurrency: summary.totalTrackedAmountCurrency,
-        totalTrackedSeconds: summary.totalTrackedSeconds,
-        updatedAt: ticket.updatedAt,
-        url: ticket.url,
-      } satisfies McpTrackableWorkRow & { isClosed: boolean }
-    }),
-    ...scopedGithubWorkItems.map(workItem => {
-      const summary = githubSummaries[workItem.id] ?? emptyTimeSummary
-
-      return {
-        id: workItem.id,
-        identifier: `${workItem.type === 'pullRequest' ? 'PR' : 'Issue'}#${workItem.number}`,
-        internalRef: getGithubWorkItemInternalRef(workItem),
-        isClosed: workItem.state.toLowerCase() === 'closed',
-        isRunning: runningSource.source === 'github' && runningSource.sourceId === workItem.id,
-        lastTrackedAt: summary.lastTrackedAt,
-        repository: workItem.repositoryFullName,
-        source: 'github',
-        status: workItem.state,
-        title: workItem.title,
-        totalTrackedAmount: summary.totalTrackedAmount,
-        totalTrackedAmountCurrency: summary.totalTrackedAmountCurrency,
-        totalTrackedSeconds: summary.totalTrackedSeconds,
-        updatedAt: workItem.updatedAt,
-        url: workItem.url,
-      } satisfies McpTrackableWorkRow & { isClosed: boolean }
-    }),
     ...scopedQuickTimers.map(
       preset =>
         ({
@@ -335,37 +274,74 @@ export function buildMcpSnapshot({
   }
 }
 
-function getScopedLinearTickets({
+export function buildGithubWorkRows(
+  workItems: SyncedGithubWorkItem[],
+  summaries: ClockifyWorkItemTimeSummaries,
+  runningId: string | null,
+) {
+  return workItems.map(workItem => {
+    const summary = summaries[workItem.id] ?? emptyTimeSummary
+    return {
+      id: workItem.id,
+      identifier: `${workItem.type === 'pullRequest' ? 'PR' : 'Issue'}#${workItem.number}`,
+      internalRef: getGithubWorkItemInternalRef(workItem),
+      isClosed: workItem.state.toLowerCase() === 'closed',
+      isRunning: runningId === workItem.id,
+      lastTrackedAt: summary.lastTrackedAt,
+      repository: workItem.repositoryFullName,
+      source: 'github',
+      status: workItem.state,
+      title: workItem.title,
+      totalTrackedAmount: summary.totalTrackedAmount,
+      totalTrackedAmountCurrency: summary.totalTrackedAmountCurrency,
+      totalTrackedSeconds: summary.totalTrackedSeconds,
+      updatedAt: workItem.updatedAt,
+      url: workItem.url,
+    } satisfies McpTrackableWorkRow & { isClosed: boolean }
+  })
+}
+
+export function buildLinearWorkRows(
+  tickets: LinearTicket[],
+  summaries: ClockifyWorkItemTimeSummaries,
+  runningId: string | null,
+) {
+  return tickets.map(ticket => {
+    const summary = summaries[ticket.id] ?? emptyTimeSummary
+    return {
+      id: ticket.id,
+      identifier: ticket.identifier,
+      internalRef: getLinearTicketInternalRef(ticket),
+      isClosed: isLinearTicketTerminal(ticket),
+      isRunning: runningId === ticket.id,
+      lastTrackedAt: summary.lastTrackedAt,
+      repository: null,
+      source: 'linear',
+      status: ticket.status.name,
+      title: ticket.title,
+      totalTrackedAmount: summary.totalTrackedAmount,
+      totalTrackedAmountCurrency: summary.totalTrackedAmountCurrency,
+      totalTrackedSeconds: summary.totalTrackedSeconds,
+      updatedAt: ticket.updatedAt,
+      url: ticket.url,
+    } satisfies McpTrackableWorkRow & { isClosed: boolean }
+  })
+}
+
+export function getScopedLinearTickets({
   connected,
   syncedTickets,
   viewerId,
 }: {
   connected: boolean
-  syncedTickets: SyncedLinearTicket[]
+  syncedTickets: StoredLinearTicket[]
   viewerId: string | null
 }) {
   if (!connected || !viewerId) {
     return []
   }
 
-  return syncedTickets.filter(ticket => ticket.viewerId === viewerId).map(ticket => toLinearTicket(ticket))
-}
-
-function toLinearTicket(syncedTicket: SyncedLinearTicket): LinearTicket {
-  return {
-    assignee: syncedTicket.ticket.assignee,
-    createdAt: syncedTicket.ticket.createdAt,
-    id: syncedTicket.ticket.id,
-    identifier: syncedTicket.ticket.identifier,
-    lastTrackedAt: null,
-    status: syncedTicket.ticket.state,
-    title: syncedTicket.ticket.title,
-    totalTrackedAmount: null,
-    totalTrackedAmountCurrency: null,
-    totalTrackedSeconds: null,
-    updatedAt: syncedTicket.ticket.updatedAt,
-    url: syncedTicket.ticket.url,
-  }
+  return syncedTickets.filter(ticket => ticket.viewerId === viewerId).map(ticket => toLinearTicket(ticket.ticket))
 }
 
 function getScopedClockifyEntries({
@@ -496,7 +472,7 @@ function getRecentEntries({
   quickTimers: QuickTimerPreset[]
   quickTimersActiveEntry: QuickTimersActiveEntry
 }) {
-  const range = getRecentEntryRange(days, now)
+  const range = getClockifyEntryTableRange(days, now)
 
   return entries
     .filter(entry => {
@@ -533,20 +509,6 @@ function getRecentEntries({
         startedAt,
       } satisfies McpRecentEntry
     })
-}
-
-function getRecentEntryRange(days: number, now: Date) {
-  const start = getDayStart(now)
-  const end = getDayStart(now)
-
-  start.setDate(start.getDate() - (days - 1))
-  end.setDate(end.getDate() + 1)
-
-  return { end, start }
-}
-
-function getDayStart(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
 
 function getDurationSeconds(startedAt: string, endedAt: string) {

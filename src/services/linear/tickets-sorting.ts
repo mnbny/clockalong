@@ -29,11 +29,13 @@ const linearStatusTypeRank: Record<string, number> = {
   duplicate: 6,
 }
 
-let previousSortLogSignature: string | null = null
-
-export function sortLinearTickets(tickets: LinearTicket[], options: SortLinearTicketsOptions) {
-  const now = Date.now()
-  const sortedTickets = [...tickets].sort((firstTicket, secondTicket) => {
+export function compareLinearTickets(
+  firstTicket: LinearTicket,
+  secondTicket: LinearTicket,
+  options: SortLinearTicketsOptions,
+  now: number,
+) {
+  const result = (() => {
     switch (options.sortOrder) {
       case 'alphabetical':
         return compareAlphabetical(firstTicket, secondTicket)
@@ -50,37 +52,8 @@ export function sortLinearTickets(tickets: LinearTicket[], options: SortLinearTi
           compareDateDesc(firstTicket.updatedAt, secondTicket.updatedAt) || compareStable(firstTicket, secondTicket)
         )
     }
-  })
-
-  logSortSummary(sortedTickets, options)
-
-  return sortedTickets
-}
-
-function logSortSummary(sortedTickets: LinearTicket[], options: SortLinearTicketsOptions) {
-  const activeLinearIssuePresent = sortedTickets.some(ticket => ticket.id === options.activeLinearIssueId)
-  const trackedTicketCount = sortedTickets.filter(ticket => ticket.lastTrackedAt || ticket.totalTrackedSeconds).length
-  const topIdentifiers = sortedTickets.slice(0, 5).map(ticket => ticket.identifier)
-  const signature = JSON.stringify({
-    activeLinearIssuePresent,
-    count: sortedTickets.length,
-    sortOrder: options.sortOrder,
-    topIdentifiers,
-    trackedTicketCount,
-  })
-
-  if (signature === previousSortLogSignature) {
-    return
-  }
-
-  previousSortLogSignature = signature
-  linearTicketsLog('sort complete', {
-    activeLinearIssuePresent,
-    sortOrder: options.sortOrder,
-    topIdentifiers,
-    totalTickets: sortedTickets.length,
-    trackedTicketCount,
-  })
+  })()
+  return result || firstTicket.id.localeCompare(secondTicket.id)
 }
 
 function compareCustom(
@@ -196,13 +169,4 @@ function compareNumberAsc(firstNumber: number, secondNumber: number) {
 
 function compareNumberDesc(firstNumber: number, secondNumber: number) {
   return secondNumber - firstNumber
-}
-
-function linearTicketsLog(message: string, details?: unknown) {
-  if (details === undefined) {
-    console.info(`[linear tickets] ${message}`)
-    return
-  }
-
-  console.info(`[linear tickets] ${message}`, details)
 }

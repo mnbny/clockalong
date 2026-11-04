@@ -1,6 +1,4 @@
 import type { TimeEntryWithRatesDtoV1 } from '../clockify/generated/clockify'
-import type { SyncedLinearTicket } from '../linear/sync'
-import type { LinearTicket } from '../linear/tickets'
 import type { ClockifyProject } from '../storage/config'
 import type {
   McpAddTimeEntryResult,
@@ -11,17 +9,23 @@ import type {
   McpStopTimerResult,
 } from '../tauri/mcp-client'
 
+import { isTauri } from '@tauri-apps/api/core'
+
+import { getClockalongAuthState } from '../../hooks/useAppAuth'
 import { queryClient, queryKeys } from '../../lib/query-client'
 import { getErrorMessage } from '../../utils/errors'
-import { upsertSyncedClockifyEntry } from '../clockify/sync'
+import { clockifyEntryCache } from '../clockify/entry-cache'
+import { cacheClockifyEntryResult } from '../clockify/sync'
 import { stopClockifyTimeEntry } from '../clockify/time-entries'
 import {
   type ClockifyTimeEntryInterval,
   getClockifyTimeEntryIntervalFromMinutes,
 } from '../clockify/time-entry-interval'
-import { githubWorkItemsCollection } from '../github/sync'
+import { db } from '../db'
 import { createClockifyTimeEntryForGithubWorkItem, formatGithubWorkItemDescription } from '../github/timers'
-import { linearTicketsCollection } from '../linear/sync'
+import { isGithubItemInScope } from '../github/work-item-cache'
+import { linearTicketCache } from '../linear/ticket-cache'
+import { toLinearTicket } from '../linear/tickets'
 import { createClockifyTimeEntryForTicket } from '../linear/timers'
 import {
   createQuickTimerTimeEntry,
@@ -56,6 +60,8 @@ export type McpCommandExecution =
 
 export type ExecuteMcpCommandContext = {
   clockifyConnected: boolean
+  githubConnected: boolean
+  linearConnected: boolean
   clockifyTimerProject: ClockifyProject | null
   linearViewerId: string | null
   runningEntry: TimeEntryWithRatesDtoV1 | null
@@ -74,10 +80,11 @@ export async function executeMcpCommand(
     return commandError('clockify_disconnected', clockifyDisconnectedMessage)
   }
 
+  const lifecycle = clockifyEntryCache.getLifecycle()
   try {
     switch (command.tool) {
       case 'start_timer': {
-        const execution = await executeCreateTimeEntry(command.arguments, context)
+        const execution = await executeCreateTimeEntry(command.arguments, context, lifecycle)
         return execution
       }
       case 'add_time_entry': {
@@ -85,11 +92,11 @@ export async function executeMcpCommand(
           command.arguments.durationMinutes,
           command.arguments.endedAt === undefined ? new Date() : new Date(command.arguments.endedAt),
         )
-        const execution = await executeCreateTimeEntry(command.arguments, context, interval)
+        const execution = await executeCreateTimeEntry(command.arguments, context, lifecycle, interval)
         return execution
       }
       case 'stop_timer': {
-        const execution = await executeStopTimer(context)
+        const execution = await executeStopTimer(context, lifecycle)
         return execution
       }
       default:
@@ -103,6 +110,7 @@ export async function executeMcpCommand(
 async function executeCreateTimeEntry(
   arguments_: McpStartTimerArguments,
   context: ExecuteMcpCommandContext,
+  lifecycle: number,
   interval?: ClockifyTimeEntryInterval,
 ): Promise<McpCommandExecution> {
   const project = context.clockifyTimerProject
@@ -117,6 +125,8 @@ async function executeCreateTimeEntry(
 
   switch (arguments_.source) {
     case 'linear': {
+      if (!context.linearConnected) return commandError('unknown_target', unknownTargetMessage)
+      const linearLifecycle = linearTicketCache.getLifecycle()
       const ticket = await getLinearTicket(arguments_.id, context.linearViewerId)
 
       if (!ticket) {
@@ -127,6 +137,13 @@ async function executeCreateTimeEntry(
         storage.get('clockifyDescriptionTemplate'),
         storage.get('clockifyDescriptionTemplateFallback'),
       ])
+      if (
+        linearLifecycle !== linearTicketCache.getLifecycle() ||
+        (isTauri() && !(await getClockalongAuthState()).linearAuthenticated) ||
+        !(await getLinearTicket(arguments_.id, context.linearViewerId)) ||
+        linearLifecycle !== linearTicketCache.getLifecycle()
+      )
+        return commandError('unknown_target', unknownTargetMessage)
       entry = await createClockifyTimeEntryForTicket({
         billable,
         interval,
@@ -139,6 +156,7 @@ async function executeCreateTimeEntry(
       break
     }
     case 'github': {
+      if (!context.githubConnected) return commandError('unknown_target', unknownTargetMessage)
       const workItem = await getGithubWorkItem(arguments_.id)
 
       if (!workItem) {
@@ -159,6 +177,12 @@ async function executeCreateTimeEntry(
         pullRequestTemplate,
         pullRequestTemplateFallback,
       })
+      if (
+        (isTauri() && !(await getClockalongAuthState()).githubAuthenticated) ||
+        !(await getGithubWorkItem(arguments_.id))
+      ) {
+        return commandError('unknown_target', unknownTargetMessage)
+      }
       entry = await createClockifyTimeEntryForGithubWorkItem({
         billable,
         interval,
@@ -196,12 +220,19 @@ async function executeCreateTimeEntry(
   }
 
   const result = interval ? getAddTimeEntryResult(entry, project) : getStartTimerResult(entry, project, stoppedPrevious)
+  if (interval) {
+    try {
+      await cacheClockifyEntryResult(entry, { workspaceId: project.workspaceId, timeInterval: interval }, lifecycle)
+    } catch (error) {
+      console.warn('[mcp command] Could not cache created Clockify entry:', error)
+    }
+  }
   invalidateClockifyTimerData()
 
   return { ok: true, result }
 }
 
-async function executeStopTimer(context: ExecuteMcpCommandContext): Promise<McpCommandExecution> {
+async function executeStopTimer(context: ExecuteMcpCommandContext, lifecycle: number): Promise<McpCommandExecution> {
   const runningEntry = context.runningEntry
 
   if (!runningEntry) {
@@ -220,11 +251,7 @@ async function executeStopTimer(context: ExecuteMcpCommandContext): Promise<McpC
 
   if (runningEntry.userId && runningEntry.workspaceId) {
     try {
-      await upsertSyncedClockifyEntry({
-        entry: stoppedEntry,
-        userId: runningEntry.userId,
-        workspaceId: runningEntry.workspaceId,
-      })
+      await cacheClockifyEntryResult(stoppedEntry, runningEntry, lifecycle)
     } catch (error) {
       console.warn('[mcp command] Could not cache stopped Clockify entry:', error)
     }
@@ -238,36 +265,30 @@ async function executeStopTimer(context: ExecuteMcpCommandContext): Promise<McpC
 }
 
 async function getLinearTicket(id: string, viewerId: string | null) {
-  if (!viewerId) {
+  if (!viewerId || linearTicketCache.getViewer() !== viewerId) {
     return null
   }
 
-  await linearTicketsCollection.preload()
-  const syncedTicket = linearTicketsCollection.toArray.find(ticket => ticket.id === id && ticket.viewerId === viewerId)
+  const syncedTicket = await db.linearTickets.get([viewerId, id])
 
-  return syncedTicket ? toLinearTicket(syncedTicket) : null
-}
-
-function toLinearTicket(syncedTicket: SyncedLinearTicket): LinearTicket {
-  return {
-    assignee: syncedTicket.ticket.assignee,
-    createdAt: syncedTicket.ticket.createdAt,
-    id: syncedTicket.ticket.id,
-    identifier: syncedTicket.ticket.identifier,
-    lastTrackedAt: null,
-    status: syncedTicket.ticket.state,
-    title: syncedTicket.ticket.title,
-    totalTrackedAmount: null,
-    totalTrackedAmountCurrency: null,
-    totalTrackedSeconds: null,
-    updatedAt: syncedTicket.ticket.updatedAt,
-    url: syncedTicket.ticket.url,
-  }
+  return syncedTicket ? toLinearTicket(syncedTicket.ticket) : null
 }
 
 async function getGithubWorkItem(id: string) {
-  await githubWorkItemsCollection.preload()
-  return githubWorkItemsCollection.toArray.find(item => item.id === id) ?? null
+  const [item, repositories, visibleWorkItemTypes] = await Promise.all([
+    db.githubWorkItems.get(id),
+    storage.get('githubSelectedRepositories'),
+    storage.get('githubVisibleWorkItemTypes'),
+  ])
+  if (
+    !item ||
+    !isGithubItemInScope(item, {
+      repositories: repositories.map(repository => repository.fullName),
+      visibleWorkItemTypes,
+    })
+  )
+    return null
+  return item
 }
 
 function getStartTimerResult(

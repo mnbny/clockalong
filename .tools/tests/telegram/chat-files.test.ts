@@ -7,7 +7,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import {
   type AttachmentInput,
   downloadAvatar,
-  downloadFile,
+  downloadImage,
   downloadPreview,
   prepareAttachment,
   probeVideo,
@@ -30,7 +30,7 @@ const location: tl.RawInputDocumentFileLocation = {
   fileReference: new Uint8Array([1]),
   thumbSize: '',
 }
-const ref = (parts = 12) => ({ location, dcId: 2, size: PART * parts, mediaId: '1', messageId: 7 })
+const ref = () => ({ location, dcId: 2, size: 4, mediaId: '1' })
 const expired = () => new tl.RpcError(400, 'FILE_REFERENCE_EXPIRED')
 const category = (expected: TelegramFileError['category']) => (error: unknown) =>
   error instanceof TelegramFileError && error.category === expected && !('cause' in error)
@@ -45,172 +45,94 @@ function clientFor(handler: (request: Extract<tl.RpcMethod, { _: 'upload.getFile
   } as unknown as ITelegramClient
 }
 
-test('bounded download awaits slow sink, preserves order despite out-of-order workers, and closes', async () => {
-  let requested = 0
-  let written = 0
-  let ahead = 0
-  let closed = false
-  const progress: [number, number][] = []
-  const completed: number[] = []
-  const client = clientFor(async request => {
-    requested++
-    ahead = Math.max(ahead, requested - written)
-    const index = Number(request.offset) / PART
-    await delay(index === 0 ? 110 : 1)
-    completed.push(index)
-    return { _: 'upload.file', bytes: new Uint8Array(PART).fill(index) }
-  })
-  const sink = new WritableStream({
-    async write(chunk) {
-      expect(chunk.length).toBe(PART)
-      expect(chunk[0]).toBe(written)
-      await delay(3)
-      written++
-    },
-    close() {
-      closed = true
-    },
-  })
-  await downloadFile(
-    client,
-    ref(),
-    { sink, signal: signal(), onProgress: (...args) => progress.push(args) },
-    async () => null,
-  )
-  expect(written).toBe(12)
-  expect(completed[0]).not.toBe(0)
-  expect(ahead <= 4, `in-flight and buffered chunks peaked at ${ahead}`).toBeTruthy()
-  expect(closed).toBe(true)
-  expect(sink.locked).toBe(false)
-  expect(progress.slice(-1)[0]).toStrictEqual([12 * PART, 12 * PART])
-})
-
-test('abort while sink and SDK throttles are blocked stops work and requests sink cleanup', async () => {
-  const controller = new AbortController()
-  const writing = deferred()
-  const release = deferred()
-  const full = deferred()
-  let requested = 0
-  let aborted = false
-  const client = clientFor(async () => {
-    requested++
-    if (requested === 4) full.resolve()
-    return { _: 'upload.file', bytes: new Uint8Array(PART) }
-  })
-  const sink = new WritableStream({
-    async write() {
-      writing.resolve()
-      await release.promise
-    },
-    abort(error) {
-      aborted = error.category === 'aborted'
-    },
-  })
-  const pending = downloadFile(client, ref(100), { sink, signal: controller.signal }, async () => null)
-  await writing.promise
-  await full.promise
-  expect(requested).toBe(4)
-  controller.abort(new Error('private cancellation reason'))
-  await expect(pending).rejects.toSatisfy(category('aborted'))
-  release.resolve()
-  await delay(10)
-  expect(requested).toBe(4)
-  expect(aborted).toBe(true)
-  expect(sink.locked).toBe(false)
-})
-
-test('expired file reference refreshes once and resumes without duplicate sink bytes', async () => {
-  let refreshed = 0
-  let written = 0
-  const offsets: [number, number][] = []
-  const firstWritten = deferred()
-  const client = clientFor(async request => {
-    offsets.push(['fileReference' in request.location ? request.location.fileReference[0] : 0, Number(request.offset)])
-    if (
-      ('fileReference' in request.location ? request.location.fileReference[0] : undefined) === 1 &&
-      Number(request.offset) >= PART
-    ) {
-      await firstWritten.promise
-      throw expired()
-    }
-    return { _: 'upload.file', bytes: new Uint8Array(PART).fill(Number(request.offset) / PART) }
-  }, 1)
-  const sink = new WritableStream({
-    write(chunk) {
-      expect(chunk[0]).toBe(written++)
-      firstWritten.resolve()
-    },
-  })
-  await downloadFile(client, ref(3), { sink, signal: signal() }, async () => {
-    refreshed++
-    return { ...ref(3), location: { ...location, fileReference: new Uint8Array([2]) } }
-  })
-  expect(refreshed).toBe(1)
-  expect(written).toBe(3)
-  const retry = offsets.find(([version]) => version === 2)
-  expect(retry?.[1]).toBe(PART)
-})
-
-for (const replacement of [null, { ...ref(), mediaId: 'other' }, { ...ref(), size: 3 }]) {
-  test(`reject deleted or replaced media on refresh: ${replacement?.mediaId ?? 'deleted'} / ${replacement?.size}`, async () => {
-    let aborted = false
-    const sink = new WritableStream({
-      abort() {
-        aborted = true
-      },
-    })
-    await expect(
-      downloadFile(
-        clientFor(async () => {
-          throw expired()
-        }),
-        ref(),
-        { sink, signal: signal() },
-        async () => replacement,
-      ),
-    ).rejects.toSatisfy(category('unavailable'))
-    expect(aborted).toBe(true)
-  })
+const avatarReference: AvatarReference = {
+  location: { _: 'inputPeerPhotoFileLocation', peer: { _: 'inputPeerChat', chatId: 9 }, photoId: Long.ONE },
+  dcId: 2,
+  senderId: 'chat:9',
+  photoId: '1',
 }
 
-test('second expired reference is unavailable and CDN limitation is a safe category', async () => {
-  let refreshed = 0
+test('full image reads validate bytes and reject oversized requests before download', async () => {
+  const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10])
+  const client = clientFor(async () => ({ _: 'upload.file', bytes }))
+  const result = await downloadImage(client, { ...ref(), size: bytes.length }, signal())
+  expect(result.type).toBe('image/png')
+  expect(new Uint8Array(await result.arrayBuffer())).toEqual(bytes)
   await expect(
-    downloadFile(
+    downloadImage(
       clientFor(async () => {
-        throw expired()
+        throw new Error('must not download')
       }),
-      ref(),
-      { sink: new WritableStream(), signal: signal() },
-      async () => {
-        refreshed++
-        return ref()
+      {
+        ...ref(),
+        size: 21 * 1024 * 1024,
       },
+      signal(),
     ),
   ).rejects.toSatisfy(category('unavailable'))
-  expect(refreshed).toBe(1)
   await expect(
-    downloadFile(
-      clientFor(async () => ({ _: 'upload.fileCdnRedirect' })),
+    downloadImage(
+      clientFor(async () => ({ _: 'upload.file', bytes: new Uint8Array([1, 2, 3, 4]) })),
       ref(),
-      { sink: new WritableStream(), signal: signal() },
-      async () => null,
+      signal(),
     ),
-  ).rejects.toSatisfy(category('cdn-unsupported'))
+  ).rejects.toSatisfy(category('unavailable'))
 })
 
-test('sink failure aborts workers, releases its lock, and hides raw errors', async () => {
-  const client = clientFor(async () => ({ _: 'upload.file', bytes: new Uint8Array(PART) }))
-  const sink = new WritableStream({
-    write() {
-      throw new Error('private filename')
-    },
+test('avatar bytes preserve order when SDK workers finish out of order', async () => {
+  const part = 64 * 1024
+  const completed: number[] = []
+  const client = clientFor(async request => {
+    const index = Number(request.offset) / part
+    await delay(index === 0 ? 50 : 1)
+    completed.push(index)
+    return { _: 'upload.file', bytes: new Uint8Array(index < 8 ? part : 0).fill(index) }
   })
-  await expect(downloadFile(client, ref(), { sink, signal: signal() }, async () => null)).rejects.toMatchObject({
+  const blob = await downloadAvatar(client, avatarReference, signal())
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  expect(completed[0]).not.toBe(0)
+  expect(bytes.length).toBe(512 * 1024)
+  for (let index = 0; index < 8; index++)
+    expect(bytes.subarray(index * part, (index + 1) * part).every(byte => byte === index)).toBe(true)
+})
+
+test('cancelled preview discards a late chunk and aborts SDK workers', async () => {
+  const controller = new AbortController()
+  const started = deferred()
+  const response = deferred<unknown>()
+  const client = clientFor(async () => {
+    started.resolve()
+    return response.promise
+  })
+  const pending = downloadPreview(client, { ...ref(), location: { ...location, thumbSize: 'm' } }, controller.signal)
+  const assertion = expect(pending).rejects.toSatisfy(category('aborted'))
+  await started.promise
+  controller.abort(new Error('private cancellation reason'))
+  response.resolve({ _: 'upload.file', bytes: new Uint8Array(4) })
+  await assertion
+})
+
+test('preview CDN and provider errors have safe categories', async () => {
+  const preview = { ...ref(), location: { ...location, thumbSize: 'm' } }
+  await expect(
+    downloadPreview(
+      clientFor(async () => ({ _: 'upload.fileCdnRedirect' })),
+      preview,
+      signal(),
+    ),
+  ).rejects.toSatisfy(category('cdn-unsupported'))
+  await expect(
+    downloadPreview(
+      clientFor(async () => {
+        throw new Error('private filename')
+      }),
+      preview,
+      signal(),
+    ),
+  ).rejects.toMatchObject({
     category: 'transfer-failed',
     message: expect.not.stringContaining('private'),
   })
-  expect(sink.locked).toBe(false)
 })
 
 test('avatar only downloads small peer photo and returns a bounded blob', async () => {

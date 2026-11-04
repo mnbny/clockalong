@@ -126,7 +126,35 @@ async fn call_tool<R: Runtime>(
     let output = match name {
         "list_trackable_work" => {
             let arguments = validate_list_trackable_work(&arguments)?;
-            list_work_with_refresh(state, arguments, || refresh_tool(app, state)).await
+            if arguments.source.as_deref() == Some("quick_timer") {
+                list_work_with_refresh(state, arguments, || refresh_tool(app, state)).await
+            } else {
+                query_list_with_refresh(
+                    state,
+                    arguments,
+                    || refresh_tool(app, state),
+                    |snapshot, arguments| async move {
+                        if !requires_work_query(&snapshot, arguments.source.as_deref()) {
+                            return list_trackable_work(&snapshot, arguments);
+                        }
+                        state
+                            .dispatch_command(
+                                app,
+                                "list_trackable_work".to_string(),
+                                json!({
+                                    "capturedAt": snapshot.captured_at,
+                                    "source": arguments.source,
+                                    "query": arguments.query,
+                                    "includeClosed": arguments.include_closed,
+                                    "limit": arguments.limit,
+                                }),
+                            )
+                            .await
+                            .map_err(bridge_error_message)
+                    },
+                )
+                .await
+            }
         }
         "refresh" => {
             validate_empty_arguments(&arguments)?;
@@ -214,6 +242,25 @@ where
     read_tool(state, |snapshot| list_trackable_work(snapshot, arguments))
 }
 
+async fn query_list_with_refresh<F, Fut, Q, QueryFuture>(
+    state: &McpBridgeState,
+    arguments: ListTrackableWorkArguments,
+    refresh: F,
+    query: Q,
+) -> Result<Value, String>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<Value, String>>,
+    Q: FnOnce(CachedMcpSnapshot, ListTrackableWorkArguments) -> QueryFuture,
+    QueryFuture: std::future::Future<Output = Result<Value, String>>,
+{
+    if arguments.refresh {
+        refresh().await?;
+    }
+    let snapshot = state.snapshot().map_err(bridge_error_message)?;
+    query(snapshot, arguments).await
+}
+
 async fn write_tool<R: Runtime>(
     app: &AppHandle<R>,
     state: &McpBridgeState,
@@ -237,7 +284,7 @@ async fn write_tool<R: Runtime>(
             .get("id")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        if !snapshot_has_target(&snapshot, source, id) {
+        if !work_target_allowed(&snapshot, source, id) {
             return Err(TARGET_ERROR.to_string());
         }
     } else if status.get("running").is_none_or(Value::is_null) {
@@ -248,6 +295,38 @@ async fn write_tool<R: Runtime>(
         .dispatch_command(app, name.to_string(), arguments)
         .await
         .map_err(bridge_error_message)
+}
+
+fn work_target_allowed(snapshot: &CachedMcpSnapshot, source: &str, id: &str) -> bool {
+    let status = snapshot.value.get("trackingStatus");
+    match source {
+        "github" => {
+            status
+                .and_then(|s| s.get("githubConnected"))
+                .and_then(Value::as_bool)
+                == Some(true)
+        }
+        "linear" => {
+            status
+                .and_then(|s| s.get("linearConnected"))
+                .and_then(Value::as_bool)
+                == Some(true)
+        }
+        "quick_timer" => snapshot_has_target(snapshot, source, id),
+        _ => false,
+    }
+}
+
+fn requires_work_query(snapshot: &CachedMcpSnapshot, source: Option<&str>) -> bool {
+    let status = snapshot.value.get("trackingStatus");
+    let connected =
+        |name: &str| status.and_then(|s| s.get(name)).and_then(Value::as_bool) == Some(true);
+    match source {
+        Some("linear") => connected("linearConnected"),
+        Some("github") => connected("githubConnected"),
+        Some("quick_timer") => false,
+        _ => connected("linearConnected") || connected("githubConnected"),
+    }
 }
 
 fn list_trackable_work(
@@ -941,6 +1020,36 @@ mod tests {
     use super::*;
 
     #[test]
+    fn linear_and_mixed_lists_use_the_webview_even_without_github() {
+        let snapshot = CachedMcpSnapshot {
+            captured_at: "now".into(),
+            value: json!({"trackingStatus": {"linearConnected": true, "githubConnected": false}}),
+        };
+        assert!(requires_work_query(&snapshot, Some("linear")));
+        assert!(requires_work_query(&snapshot, None));
+        assert!(!requires_work_query(&snapshot, Some("github")));
+        assert!(!requires_work_query(&snapshot, Some("quick_timer")));
+    }
+
+    #[test]
+    fn provider_targets_require_connection_and_quick_timers_require_membership() {
+        let snapshot = CachedMcpSnapshot {
+            captured_at: "now".into(),
+            value: json!({"trackingStatus": {"linearConnected": true, "githubConnected": false},
+                "trackableWork": [{"source": "quick_timer", "id": "saved"}]}),
+        };
+        assert!(work_target_allowed(
+            &snapshot,
+            "linear",
+            "checked-in-webview"
+        ));
+        assert!(!work_target_allowed(&snapshot, "github", "missing"));
+        assert!(work_target_allowed(&snapshot, "quick_timer", "saved"));
+        assert!(!work_target_allowed(&snapshot, "quick_timer", "unknown"));
+        assert!(!work_target_allowed(&snapshot, "other", "saved"));
+    }
+
+    #[test]
     fn telegram_contract_rejects_unscoped_or_malformed_arguments() {
         for args in [
             json!({"groupId":"selected","topicId":1,"text":"hello"}),
@@ -998,40 +1107,6 @@ mod tests {
     }
 
     #[test]
-    fn list_waits_for_refreshed_snapshot_and_preserves_filters() {
-        tauri::async_runtime::block_on(async {
-            let state = McpBridgeState::default();
-            state
-                .publish_snapshot("old".to_string(), json!({ "trackableWork": [] }))
-                .unwrap();
-            let arguments =
-                validate_list_trackable_work(&json!({ "source": "github", "query": "new" }))
-                    .unwrap();
-            let result = list_work_with_refresh(&state, arguments, || async {
-                tokio::task::yield_now().await;
-                state
-                    .publish_snapshot(
-                        "fresh".to_string(),
-                        json!({ "trackableWork": [
-                    { "source": "linear", "title": "New ticket" },
-                    { "source": "github", "title": "New PR", "status": "open" },
-                    { "source": "github", "title": "New closed PR", "status": "closed" },
-                ] }),
-                    )
-                    .unwrap();
-                Ok(json!({}))
-            })
-            .await
-            .unwrap();
-            assert_eq!(result["capturedAt"], "fresh");
-            assert_eq!(
-                result["rows"],
-                json!([{ "source": "github", "title": "New PR", "status": "open" }])
-            );
-        });
-    }
-
-    #[test]
     fn cached_list_skips_refresh_and_refresh_failures_do_not_return_stale_rows() {
         tauri::async_runtime::block_on(async {
             let state = McpBridgeState::default();
@@ -1048,6 +1123,41 @@ mod tests {
             let result =
                 list_work_with_refresh(&state, fresh, || async { Err("Sync failed".to_string()) })
                     .await;
+            assert_eq!(result.unwrap_err(), "Sync failed");
+        });
+    }
+
+    #[test]
+    fn github_list_requires_webview_and_propagates_query_failure() {
+        tauri::async_runtime::block_on(async {
+            let state = McpBridgeState::default();
+            state
+                .publish_snapshot("cached".to_string(), json!({ "trackableWork": [] }))
+                .unwrap();
+            let arguments = validate_list_trackable_work(
+                &json!({ "source": "github", "query": "x", "refresh": false }),
+            )
+            .unwrap();
+            let result = query_list_with_refresh(
+                &state,
+                arguments,
+                || async { panic!("Must not refresh") },
+                |snapshot, args| async move {
+                    assert_eq!(snapshot.captured_at, "cached");
+                    assert_eq!(args.query.as_deref(), Some("x"));
+                    Err("webview unavailable".to_string())
+                },
+            )
+            .await;
+            assert_eq!(result.unwrap_err(), "webview unavailable");
+            let arguments = validate_list_trackable_work(&json!({ "source": "github" })).unwrap();
+            let result = query_list_with_refresh(
+                &state,
+                arguments,
+                || async { Err("Sync failed".to_string()) },
+                |_, _| async { panic!("Must not query") },
+            )
+            .await;
             assert_eq!(result.unwrap_err(), "Sync failed");
         });
     }

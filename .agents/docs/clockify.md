@@ -1,150 +1,35 @@
-# Clockify integration notes
+# Clockify
 
-Clockify's regular REST API uses user-owned API keys. Clockalong treats Clockify as a user-authorized external service, not as an OAuth provider with a shippable app credential.
+Clockify owns time entries, projects, workspaces, rates, and reports. Clockalong reads and writes through frontend clients using a validated native credential.
 
-Rust owns Clockify credential storage and auth state. Clockify API calls stay in the frontend. When the TypeScript client needs to call Clockify, it asks Rust for the validated API key and keeps that key in memory only.
+Generated Zodios clients cover the regular API and the separate reports host. Generation owns request types and schemas; app services own authentication, request timeouts, and domain behavior.
 
-## Primary references
+## Tracking context
 
-- API docs: https://docs.clockify.me/
-- OpenAPI spec: https://docs.clockify.me/openapi.json
-- API key management: https://app.clockify.me/manage-api-keys
-- Official API examples: https://github.com/clockify/api-examples
+The read workspace follows the user's active workspace, then the default workspace, then the first available workspace. New source entries use the selected dashboard project override or default project and the saved billable preference.
 
-## Authentication
+Provider services create both running and completed entries. Completed intervals require valid dates and positive duration. They do not replace a running timer, and overlaps are allowed.
 
-- Public REST API calls authenticate with the `X-Api-Key` header.
-- Users generate API keys from their Clockify profile settings.
-- API keys are user credentials and should not be shipped with Clockalong.
-- Clockify does not document an OAuth or PKCE flow for normal REST API consumers.
-- Clockalong should ask each user for their own Clockify API key and store it through native secure storage, not the Tauri JSON store.
-- Rust should handle saving, reading, validating, and clearing the key. The broader Clockify API client belongs in the frontend.
-- Validate a saved key by calling `GET /v1/user`.
-- Startup validation should mark Clockify disconnected whenever validation does not succeed; Clockalong does not support offline authenticated Clockify mode.
-- Clear the saved key only when validation clearly fails because the credential is invalid or revoked. Keep the saved key after network or provider failures so the app can retry without asking the user to paste it again.
-- Clockify disconnect should clear the saved key, reset all Clockify TanStack Query cache, clear the local synced Clockify entry collection, and remove workspace-bound Clockify settings such as the selected default project, dashboard project override, and active Quick Timer association. This keeps API-key rotation from showing the previous user's workspace, entries, or running timer.
-- Subdomain and regional workspaces may require a workspace-specific key or alternate base URL. Keep base URL handling configurable instead of hard-coding every request to the global host.
+Resuming an entry preserves its trackable fields in a new entry. Editing and overlap repair update Clockify-owned records. Clockalong does not create a separate authoritative time ledger.
 
-Clockify also has a CAKE.com Marketplace add-on model that uses `X-Addon-Token` and add-on scopes. That path is for marketplace add-ons embedded in or installed into Clockify workspaces. It is not the right auth model for Clockalong's local Tauri desktop app.
+## Synchronization and reports
 
-## API shape
+Entry sync fetches the configured recent window before changing the local cache. Only a complete fetch reconciles entries and missing records within that window. Entries outside it remain as last-known data; their edits and deletions remain unknown until fetched.
 
-The API is broad and documented through Redoc plus an OpenAPI 3 spec. The endpoints most relevant to Clockalong are:
+The cache is scoped by user and workspace. Direct writes and newer syncs take precedence over older in-flight results. Disconnect prevents stale results from restoring a previous session.
 
-- `GET /v1/user`: verify credentials and identify the current Clockify user.
-- `GET /v1/workspaces`: list workspaces available to the key.
-- `GET /v1/workspaces/{workspaceId}/projects`: list projects for mapping or selection.
-- `GET /v1/workspaces/{workspaceId}/projects/{projectId}/tasks`: list tasks if Clockalong maps Linear issues to tasks.
-- `POST /v1/workspaces/{workspaceId}/time-entries`: create or start a time entry.
-- `PUT /v1/workspaces/{workspaceId}/time-entries/{id}`: update a completed time entry, including overlap-repair start/end shifts.
-- `GET /v1/workspaces/{workspaceId}/time-entries/status/in-progress`: inspect running timers in a workspace.
-- `GET /v1/workspaces/{workspaceId}/user/{userId}/time-entries`: read a user's time entries for the background entry sync and small direct reads such as the running timer.
-- `PATCH /v1/workspaces/{workspaceId}/user/{userId}/time-entries`: stop the currently running timer for a user.
-- `POST /v1/workspaces/{workspaceId}/reports/detailed`: generate detailed reports for reconciliation.
-- `POST /v1/workspaces/{workspaceId}/reports/summary`: generate grouped summaries.
+The lookback and background interval are performance settings. Manual interval mode still permits the initial fetch and explicit refresh. Small direct reads retrieve the running timer; completed-entry views read the local cache.
 
-Clockify reports use a separate base URL from regular API calls:
+Today, week, and month totals come from Clockify summary reports. Work-item totals instead combine retained matching entries with the current running response. These totals can cover different periods.
 
-- Regular API: `https://api.clockify.me/api`
-- Reports API: `https://reports.api.clockify.me`
+## Source matching
 
-The public OpenAPI spec includes report paths and path-level report servers. Keep reports on a separate app client so the regular API base URL does not leak into report requests.
+Linear and GitHub templates include a stable internal reference in the Clockify description. Linear references identify workspace and issue; GitHub references identify repository, item type, and number.
 
-Clockify permissions follow the authenticated user's Clockify role and workspace access. Clockalong should assume a normal user key can manage that user's own timer and time entries. Admin-style workspace operations may fail unless the user has the required Clockify role.
+Shared parsing and matching keep widgets and agent tools consistent. Entries without supported references remain unlinked. Matching uses the first known reference within the applicable source scope.
 
-Overlap repairs use Clockify's bulk edit endpoint for one user and workspace. Each request retains the entry fields and the time intervals from the repair preview. Batch size is an app limit; Clockify does not publish a maximum in its API schema.
+Work-item summaries provide last tracked time, duration, and rate-derived value. Cached open entries do not accrue time unless they match the current running timer. Currency and hourly-rate availability govern monetary summaries.
 
-## Completed entry creation
+Quick Timers use a local association only for the active preset. Clockify remains the owner of their historical entries.
 
-Provider services create both running timers and completed entries through the existing Clockify client. An optional interval supplies explicit start and end timestamps. A completed interval must contain valid dates and a positive duration. Without an interval, the service starts a timer at the current time.
-
-The same services preserve provider templates, internal references, project selection, and billable settings for both paths. Interval validation and the conversion from minutes belong outside the UI so other callers can use them. Completed entry creation does not stop or replace a running timer. Overlaps are allowed.
-
-## Entry descriptions
-
-Clockalong builds Clockify time-entry descriptions from the user-configured Linear issue template in `src/services/clockify/description-template.ts`.
-
-- Default template: `{identifier}: {title} [{internal-ref}]`.
-- Template variables use single braces and must be explicitly listed by `ClockifyDescriptionTemplateToken`.
-- The settings UI should expose only values available from the synced assigned-ticket row: `{identifier}`, `{title}`, `{number}`, `{url}`, `{teamKey}`, `{stateName}`, `{assigneeName}`, and `{internal-ref}`.
-- Missing, `null`, `undefined`, and empty string values use the configured fallback.
-- The default fallback is `n/a`; numeric `0` remains a real value.
-- `{internal-ref}` is a stable Clockalong marker used to match Clockify entries back to provider work items. For Linear it renders as `ref:linear:{workspaceSlug}:{issueIdentifier}`.
-- Template and fallback preferences are stored through `useStorage` as `clockifyDescriptionTemplate` and `clockifyDescriptionTemplateFallback`.
-- Timer creation should format from the assigned-issue list DTO when possible. Do not fetch full issue details only to build the Clockify description.
-- New time entries should use the dashboard `clockifyOverrideProject` when present, otherwise `clockifyDefaultProject`, and use the `clockifyBillable` storage preference for their initial billable flag. The default is billable.
-
-## Client strategy
-
-Clockify does not publish an official TypeScript or Rust SDK for the API-key workflow. Clockalong uses Zodios for the frontend Clockify API client, following the generated-client pattern from `~/Dev/polybot-v2/api`.
-
-- `clockify/api-examples` is official and works as request reference, but it is not a maintained SDK.
-- `clockify/addon-java-sdk` is official for CAKE.com Marketplace add-ons, not Clockalong's desktop flow.
-- `clockifixed` is a newer third-party TypeScript wrapper generated from the OpenAPI spec, with Zod validation.
-- `clockify-ts` is an older third-party TypeScript wrapper.
-
-Clockalong implementation:
-
-- Keep the Clockify API client in the frontend.
-- Generate a Zodios client from Clockify's OpenAPI spec with `openapi-zod-client`.
-- Use `@zodios/core`, `axios`, and the generated Zod schemas/types for request and response typing.
-- Use `@tanstack/react-db` for the local Clockify time-entry collection when UI needs recent entry-level data.
-- Keep Rust limited to authentication/token responsibilities: secure key storage, auth-state initialization, validation, clearing credentials, and token/key retrieval according to the app's chosen bridge contract.
-- Do not build a Rust Clockify API client.
-
-## Zodios setup
-
-Use `~/Dev/polybot-v2/api` as the local reference, but keep Clockalong as a single app repo. Do not create workspace packages or an `api/` package here.
-
-The Clockalong setup lives under `src/services/clockify/`:
-
-- `specs/clockify-openapi.json`: downloaded Clockify OpenAPI spec.
-- `specs/clockify-reports-openapi.json`: generated report-only spec derived from the official Clockify spec.
-- `generated/clockify.ts`: generated Zodios client and exported schema/type definitions.
-- `generated/reports.ts`: generated Zodios client for Clockify's reports host.
-- `client.ts`: app-facing client factories and default client instances.
-- `projects.ts`: project-list helpers for selecting the default Clockify project.
-- `sync.ts`: TanStack DB localStorage-backed entry collection plus the `ClockifySyncProvider` that periodically reconciles recent Clockify entries.
-- `work-item-summaries.ts`: provider-neutral dashboard aggregation of Clockify time entries whose descriptions contain a supported `ref:*` internal marker.
-- `ticket-summaries.ts`: Linear wrapper around provider-neutral work-item summaries.
-
-Polybot reference points:
-
-- `api/package.json`: has a `generate` script that runs `openapi-zod-client ... -o src/*.ts`, depends on `@zodios/core`, `axios`, `zod`, and `openapi-zod-client`.
-- `api/specs/`: stores source OpenAPI specs.
-- `api/src/*.ts`: generated files export `schemas`, `api`, and `createApiClient(baseUrl, options)`.
-- `api/src/api.ts`: creates concrete clients with known base URLs and shared `axiosConfig`.
-
-For Clockalong, adapt that pattern to Clockify:
-
-- Regenerate with `pnpm clockify:generate`.
-- Fetch the spec from `https://docs.clockify.me/openapi.json`.
-- Generate `src/services/clockify/generated/clockify.ts`.
-- Prepare the report-only spec with `scripts/prepare-clockify-specs.mjs`.
-- Generate `src/services/clockify/generated/reports.ts` from the report-only spec.
-- Export `createClockifyClient(baseUrl, options)`, `createClockifyReportsClient(baseUrl, options)`, `clockify`, and `clockifyReports` from `src/services/clockify/client.ts`.
-- Configure auth by attaching `X-Api-Key` from the native auth bridge before Clockify requests.
-- Keep regional and subdomain base URL selection outside the generated client so it can be changed per workspace.
-- Keep a request timeout on `clockifyClientOptions.axiosConfig` so every Clockify client inherits it. Axios defaults to no timeout, and a single stalled request leaves the workspace lookup pending forever, which disables the running-timer read, the entry sync, and summary reports without surfacing an error.
-
-## Entry sync
-
-`src/services/clockify/sync.ts` owns broad Clockify time-entry pagination. It syncs recent entries into a TanStack DB collection persisted through browser localStorage under `clockalong.clockify.timeEntries.v1`.
-
-The synced row shape keeps the original Clockify entry plus local query fields: entry ID, workspace ID, user ID, started-at timestamp, and synced-at timestamp. UI code should query those indexed fields with TanStack DB live queries instead of repeatedly paging Clockify from routes or widgets.
-
-`ClockifySyncProvider` mounts inside the frontend provider stack after `QueryClientProvider`. It resolves the authenticated Clockify user and active/default workspace, then runs the entry sync on the configured interval and whenever callers invalidate or refetch `queryKeys.clockify.entrySync()`.
-
-For broad entry sync, send a `start` lookback but omit `end`. Clockify's user time-entry endpoint treats explicit `end` filters in a timezone-sensitive way that can exclude a user's current local-day entries when their machine timezone differs from the workspace/user timezone. Let Clockify default the upper bound to its own "now", then let local live queries decide which entries belong to today, week, or month.
-
-The sync must fetch every page before it reconciles the cache. After all page requests succeed, treat the returned entry IDs as the authoritative local snapshot for the selected user and workspace. Persist new entries, changed entries, and stale deletions in one collection transaction. Remove cached rows that were not returned, including rows outside the configured lookback, so Clockify-side deletions and sync-window reductions cannot leave stale entries behind. Before pagination starts, snapshot the rows eligible for removal. This prevents the current reconciliation from deleting entries written to the cache during pagination. Never prune the cache after a partial or failed pagination run.
-
-The `clockifyEntrySyncDays` setting controls the lookback window. Current supported values are `5`, `15`, and `30`, with `30` as the default. Keep this setting as a UX/performance knob, not as a correctness boundary for the Clockify API client.
-
-The `clockifyEntrySyncInterval` setting controls background sync frequency. Current supported values are `manual`, `5m`, `15m`, `30m`, and `1h`, with `30m` as the default. Manual mode still allows the app header's global sync action.
-
-Direct `getTimeEntries` reads are still appropriate for tiny single-purpose reads, especially the active running timer with page size `1`. Any feature that needs broad recent completed entries should use the synced collection.
-
-The reports generator uses a media-type expression that accepts Clockify's `*/*` report responses as JSON. Keep that logic in `scripts/generate-clockify-client.mjs`; do not put long generator pipelines directly in `package.json`.
-
-The generated file is intentionally marked `// @ts-nocheck`. Clockify's OpenAPI spec currently produces a few circular type/default-value errors in the generated implementation. App code should import generated aliases, schemas, and exported types from concrete Clockify service modules or generated files, but should not manually edit the generated file.
+Template variables and missing-value fallbacks belong to each work source. The shared entry path preserves these descriptions for both running and completed time.

@@ -1,51 +1,25 @@
 import type { PropsWithChildren } from 'react'
 
-import { createCollection, createTransaction, localStorageCollectionOptions } from '@tanstack/react-db'
-import { useQuery } from '@tanstack/react-query'
-import { createContext, createElement, useCallback, useContext } from 'react'
+import { queryOptions, useQuery } from '@tanstack/react-query'
+import { createContext, createElement, useCallback, useContext, useSyncExternalStore } from 'react'
 
 import { useAppAuth } from '../../hooks/useAppAuth'
-import { queryKeys } from '../../lib/query-client'
+import { queryClient, queryKeys } from '../../lib/query-client'
 import { useStorage } from '../storage/useStorage'
+import { linearTicketCache } from './ticket-cache'
 import {
   getLinearTicketSyncIntervalMilliseconds,
   linearTicketsPageSize,
+  type LinearTicketSyncIntervalOption,
   type LinearTicketSyncOrderByOption,
   normalizeLinearTicketSyncLimit,
 } from './ticket-settings'
-import { type AssignedIssueNode, requestAssignedIssuesPage } from './tickets'
-
-const linearTicketSyncStorageKey = 'clockalong.linear.tickets.v1'
-
-export type SyncedLinearTicket = {
-  id: string
-  syncedAt: string
-  ticket: AssignedIssueNode
-  updatedAt: string
-  viewerId: string
-}
+import { type AssignedIssueNode, AssignedIssuesPageSchema, requestAssignedIssuesPage } from './tickets'
 
 type LinearTicketSyncOptions = {
   orderBy: LinearTicketSyncOrderByOption
   syncLimit: number
 }
-
-type LinearTicketSyncResult = {
-  pagesFetched: number
-  syncLimit: number
-  ticketsDeleted: number
-  ticketsFetched: number
-  ticketsStored: number
-  viewerId: string | null
-}
-
-export const linearTicketsCollection = createCollection(
-  localStorageCollectionOptions<SyncedLinearTicket, string>({
-    id: 'linear-tickets',
-    storageKey: linearTicketSyncStorageKey,
-    getKey: ticket => ticket.id,
-  }),
-)
 
 function useLinearSyncData() {
   const authState = useAppAuth()
@@ -54,25 +28,52 @@ function useLinearSyncData() {
   const [linearTicketSyncOrderBy] = useStorage('linearTicketSyncOrderBy')
   const normalizedSyncLimit = normalizeLinearTicketSyncLimit(linearTicketSyncLimit)
   const linearAuthenticated = authState.value.linearAuthenticated && !authState.loading
-  const syncQuery = useQuery({
-    queryKey: queryKeys.linear.ticketSync({
-      params: { orderBy: linearTicketSyncOrderBy, syncLimit: normalizedSyncLimit },
+  const syncQuery = useQuery(
+    linearTicketSyncQueryOptions({
+      orderBy: linearTicketSyncOrderBy,
+      syncLimit: normalizedSyncLimit,
+      enabled: linearAuthenticated,
+      interval: linearTicketSyncInterval,
     }),
-    queryFn: () => syncLinearTickets({ orderBy: linearTicketSyncOrderBy, syncLimit: normalizedSyncLimit }),
-    enabled: linearAuthenticated,
-    refetchInterval: getLinearTicketSyncIntervalMilliseconds(linearTicketSyncInterval),
-    staleTime: 60_000,
-  })
+  )
   const syncNow = useCallback(() => syncQuery.refetch(), [syncQuery])
+  const viewerId = useSyncExternalStore(
+    linearTicketCache.subscribe,
+    linearTicketCache.getViewer,
+    linearTicketCache.getViewer,
+  )
 
   return {
     lastSyncResult: syncQuery.data ?? null,
+    viewerId,
     syncNow,
     queries: {
       syncQuery,
     },
     syncing: syncQuery.isFetching,
   }
+}
+
+export function linearTicketSyncQueryOptions({
+  orderBy,
+  syncLimit,
+  enabled,
+  interval,
+}: {
+  orderBy: LinearTicketSyncOrderByOption
+  syncLimit: number
+  enabled: boolean
+  interval: LinearTicketSyncIntervalOption
+}) {
+  return queryOptions({
+    queryKey: queryKeys.linear.ticketSync({
+      params: { orderBy, syncLimit },
+    }),
+    queryFn: () => syncLinearTickets({ orderBy, syncLimit }),
+    enabled,
+    refetchInterval: getLinearTicketSyncIntervalMilliseconds(interval),
+    staleTime: 60_000,
+  })
 }
 
 type LinearSyncContext = ReturnType<typeof useLinearSyncData>
@@ -90,143 +91,66 @@ export function useLinearSync() {
   return context
 }
 
-export async function clearSyncedLinearTickets() {
-  await linearTicketsCollection.preload()
-  const ticketIds = linearTicketsCollection.toArray.map(syncedTicket => syncedTicket.id)
+let sessionChanges = 0
 
-  if (!ticketIds.length) {
-    return 0
+export async function withLinearSessionChange<T>(operation: () => Promise<T>) {
+  sessionChanges++
+  linearTicketCache.suspend()
+  queryClient.removeQueries({ queryKey: queryKeys.linear.all })
+  try {
+    return await operation()
+  } finally {
+    sessionChanges--
+    if (sessionChanges === 0) {
+      linearTicketCache.resume()
+      void queryClient.invalidateQueries({ queryKey: queryKeys.linear.all })
+    }
   }
-
-  const transaction = linearTicketsCollection.delete(ticketIds)
-  await transaction.isPersisted.promise
-  return ticketIds.length
 }
 
-async function syncLinearTickets({ orderBy, syncLimit }: LinearTicketSyncOptions): Promise<LinearTicketSyncResult> {
+export async function clearSyncedLinearTickets() {
+  const count = await linearTicketCache.clear()
+  queryClient.removeQueries({ queryKey: queryKeys.linear.all })
+  return count
+}
+
+export async function syncLinearTickets({ orderBy, syncLimit }: LinearTicketSyncOptions) {
+  const generation = linearTicketCache.beginSync()
   const syncedAt = new Date().toISOString()
-  const fetchedTicketIds = new Set<string>()
   const ticketsToSync: AssignedIssueNode[] = []
   let after: string | null = null
   let pagesFetched = 0
-  let ticketsFetched = 0
-  let ticketsStored = 0
   let viewerId: string | null = null
+  const cursors = new Set<string>()
 
-  await linearTicketsCollection.preload()
-
-  while (ticketsFetched < syncLimit) {
-    const response = await requestAssignedIssuesPage({
-      after,
-      first: Math.min(linearTicketsPageSize, syncLimit - ticketsFetched),
-      orderBy,
-    })
-    const responseViewerId = response.data?.viewer.id ?? null
-    const page = response.data?.viewer.assignedIssues
-
-    viewerId = viewerId ?? responseViewerId
-    pagesFetched += 1
-
-    if (!page || !responseViewerId) {
-      break
+  while (ticketsToSync.length < syncLimit) {
+    const first = Math.min(linearTicketsPageSize, syncLimit - ticketsToSync.length)
+    const response = await requestAssignedIssuesPage({ after, first, orderBy })
+    linearTicketCache.requireCurrent(generation)
+    if (response.errors?.length || !response.data?.viewer?.id || !response.data.viewer.assignedIssues) {
+      throw new Error('Invalid Linear assigned-issues response')
     }
-
-    for (const ticket of page.nodes) {
-      fetchedTicketIds.add(ticket.id)
+    const responseViewerId = response.data.viewer.id
+    const page = response.data.viewer.assignedIssues
+    linearTicketCache.checkViewer(responseViewerId, generation)
+    if (viewerId && viewerId !== responseViewerId) {
+      linearTicketCache.invalidate()
+      throw new Error('Linear viewer changed during pagination')
     }
-    ticketsToSync.push(...page.nodes)
-    ticketsFetched += page.nodes.length
-
-    if (!page.pageInfo.hasNextPage || !page.pageInfo.endCursor || page.nodes.length === 0) {
-      break
+    viewerId = responseViewerId
+    pagesFetched++
+    const parsed = AssignedIssuesPageSchema.safeParse(page)
+    if (!parsed.success || parsed.data.nodes.length > first) {
+      throw new Error('Invalid Linear assigned-issues page')
     }
-
-    after = page.pageInfo.endCursor
+    ticketsToSync.push(...parsed.data.nodes)
+    if (!parsed.data.pageInfo.hasNextPage) break
+    const cursor = parsed.data.pageInfo.endCursor
+    if (!cursor || !parsed.data.nodes.length || cursors.has(cursor)) throw new Error('Invalid Linear pagination cursor')
+    cursors.add(cursor)
+    after = cursor
   }
-
-  let ticketsDeleted = 0
-
-  if (viewerId) {
-    const staleTicketIds = linearTicketsCollection.toArray
-      .filter(syncedTicket => syncedTicket.viewerId === viewerId && !fetchedTicketIds.has(syncedTicket.id))
-      .map(syncedTicket => syncedTicket.id)
-    const upsertResult = await upsertSyncedLinearTickets({
-      staleTicketIds,
-      syncedAt,
-      tickets: ticketsToSync,
-      viewerId,
-    })
-
-    ticketsDeleted = upsertResult.deleted
-    ticketsStored = upsertResult.stored
-  }
-
-  return {
-    pagesFetched,
-    syncLimit,
-    ticketsDeleted,
-    ticketsFetched,
-    ticketsStored,
-    viewerId,
-  }
-}
-
-async function upsertSyncedLinearTickets({
-  staleTicketIds,
-  syncedAt,
-  tickets,
-  viewerId,
-}: {
-  staleTicketIds: string[]
-  syncedAt: string
-  tickets: AssignedIssueNode[]
-  viewerId: string
-}) {
-  const syncedTickets = tickets.map(
-    ticket =>
-      ({
-        id: ticket.id,
-        syncedAt,
-        ticket,
-        updatedAt: ticket.updatedAt,
-        viewerId,
-      }) satisfies SyncedLinearTicket,
-  )
-  const ticketsToInsert = syncedTickets.filter(ticket => !linearTicketsCollection.has(ticket.id))
-  const ticketsToUpdate = syncedTickets.filter(ticket => linearTicketsCollection.has(ticket.id))
-
-  if (ticketsToInsert.length || ticketsToUpdate.length || staleTicketIds.length) {
-    const transaction = createTransaction({
-      mutationFn: async ({ transaction: mutations }) => {
-        linearTicketsCollection.utils.acceptMutations(mutations)
-      },
-    })
-
-    transaction.mutate(() => {
-      if (ticketsToInsert.length) {
-        linearTicketsCollection.insert(ticketsToInsert)
-      }
-
-      if (ticketsToUpdate.length) {
-        linearTicketsCollection.update(
-          ticketsToUpdate.map(ticket => ticket.id),
-          drafts => {
-            drafts.forEach((draft, index) => Object.assign(draft, ticketsToUpdate[index]))
-          },
-        )
-      }
-
-      if (staleTicketIds.length) {
-        linearTicketsCollection.delete(staleTicketIds)
-      }
-    })
-    await transaction.isPersisted.promise
-  }
-
-  return {
-    deleted: staleTicketIds.length,
-    inserted: ticketsToInsert.length,
-    stored: syncedTickets.length,
-    updated: ticketsToUpdate.length,
-  }
+  if (!viewerId) throw new Error('Missing Linear viewer')
+  const ticketsStored = await linearTicketCache.replace(viewerId, ticketsToSync, generation, syncedAt)
+  return { pagesFetched, syncLimit, ticketsDeleted: 0, ticketsFetched: ticketsToSync.length, ticketsStored, viewerId }
 }

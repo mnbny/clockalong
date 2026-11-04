@@ -49,6 +49,7 @@
   },
   "dependencies": {
     "@automattic/format-currency": "catalog:",
+    "@eslint-community/regexpp": "catalog:",
     "@fontsource-variable/intel-one-mono": "catalog:",
     "@fontsource-variable/oxanium": "catalog:",
     "@hookform/resolvers": "catalog:",
@@ -57,7 +58,6 @@
     "@mtcute/web": "catalog:",
     "@octokit/rest": "catalog:",
     "@tabler/icons-react": "catalog:",
-    "@tanstack/react-db": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "@tanstack/react-table": "catalog:",
@@ -72,6 +72,8 @@
     "change-case": "catalog:",
     "clsx": "catalog:",
     "dayjs": "catalog:",
+    "dexie": "catalog:",
+    "dexie-react-hooks": "catalog:",
     "humanize-duration": "catalog:",
     "qrcode.react": "catalog:",
     "react": "catalog:",
@@ -81,6 +83,7 @@
     "sonner": "catalog:",
     "tailwind-merge": "catalog:",
     "tailwind-variants": "catalog:",
+    "yet-another-react-lightbox": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -103,7 +106,9 @@
     "eslint-plugin-react": "catalog:",
     "eslint-plugin-react-hooks": "catalog:",
     "eslint-plugin-simple-import-sort": "catalog:",
+    "fake-indexeddb": "catalog:",
     "globals": "catalog:",
+    "happy-dom": "catalog:",
     "openapi-zod-client": "catalog:",
     "prettier": "catalog:",
     "prettier-plugin-packagejson": "catalog:",

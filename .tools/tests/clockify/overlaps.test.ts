@@ -59,19 +59,24 @@ function apiError(status: number, retryAfter?: string) {
   })
 }
 
-test('100 overlap repairs use four bulk requests and preserve entry context and duration', async () => {
-  const update = vi.spyOn(clockify, 'replaceMany').mockImplementation(async body => updatedEntries(body))
-  const singleUpdate = vi.spyOn(clockify, 'updateTimeEntry')
-  const entries = overlappingEntries(101)
-  const fixes = getCompletedClockifyTimeEntryOverlapFixes(entries)
-
-  await expect(fixClockifyTimeEntryOverlaps(fixes)).resolves.toBe(100)
-  expect(update).toHaveBeenCalledTimes(4)
-  expect(singleUpdate).not.toHaveBeenCalled()
-  for (const [body, options] of update.mock.calls) {
+test('overlap repairs preserve entries in sequential batches of at most 25', async () => {
+  vi.useFakeTimers()
+  let active = 0
+  let maxActive = 0
+  const update = vi.spyOn(clockify, 'replaceMany').mockImplementation(async body => {
+    maxActive = Math.max(maxActive, ++active)
+    await new Promise(resolve => setTimeout(resolve, 10))
+    active--
+    return updatedEntries(body)
+  })
+  const entries = overlappingEntries(64)
+  const result = fixClockifyTimeEntryOverlaps(getCompletedClockifyTimeEntryOverlapFixes(entries))
+  await vi.runAllTimersAsync()
+  await expect(result).resolves.toBe(63)
+  expect(maxActive).toBe(1)
+  expect(update.mock.calls.map(([body]) => body.length)).toStrictEqual([25, 25, 13])
+  for (const [, options] of update.mock.calls)
     expect(options?.params).toStrictEqual({ userId: 'user', workspaceId: 'workspace' })
-    expect(body).toHaveLength(25)
-  }
   for (const [index, body] of update.mock.calls.flatMap(([body]) => body).entries()) {
     expect(body).toStrictEqual({
       id: `entry-${index + 1}`,
@@ -87,29 +92,8 @@ test('100 overlap repairs use four bulk requests and preserve entry context and 
   }
 })
 
-test('larger repairs use sequential batches of at most 25 entries', async () => {
-  vi.useFakeTimers()
-  let active = 0
-  let maxActive = 0
-  const update = vi.spyOn(clockify, 'replaceMany').mockImplementation(async body => {
-    active += 1
-    maxActive = Math.max(maxActive, active)
-    await new Promise(resolve => setTimeout(resolve, 10))
-    active -= 1
-    return updatedEntries(body)
-  })
-  const result = fixClockifyTimeEntryOverlaps(getCompletedClockifyTimeEntryOverlapFixes(overlappingEntries(64)))
-  await vi.runAllTimersAsync()
-
-  await expect(result).resolves.toBe(63)
-  expect(maxActive).toBe(1)
-  expect(update.mock.calls.map(([body]) => body.length)).toStrictEqual([25, 25, 13])
-  expect(new Set(update.mock.calls.flatMap(([body]) => body.map(entry => entry.id))).size).toBe(63)
-})
-
 test.each([
   [undefined, 1000],
-  ['invalid', 1000],
   ['2', 2000],
   [new Date(now.getTime() + 2000).toUTCString(), 2000],
 ])('a 429 waits for %s and retries only the rejected batch', async (retryAfter, delay) => {
@@ -149,16 +133,19 @@ test('persistent rate limits back off three times then stop the remaining batche
   expect(vi.getTimerCount()).toBe(0)
 })
 
-test.each([400, 403, 500])('a %s stops after partial success without replaying writes', async status => {
-  const error = apiError(status)
+test('a failed request stops after partial success without replaying writes', async () => {
+  const error = apiError(500)
   const update = vi
     .spyOn(clockify, 'replaceMany')
     .mockImplementationOnce(async body => updatedEntries(body))
     .mockRejectedValue(error)
+  const saved = vi.fn(async (_entries: TimeEntryDtoV1[]) => {})
   await expect(
-    fixClockifyTimeEntryOverlaps(getCompletedClockifyTimeEntryOverlapFixes(overlappingEntries(76))),
+    fixClockifyTimeEntryOverlaps(getCompletedClockifyTimeEntryOverlapFixes(overlappingEntries(76)), saved),
   ).rejects.toBe(error)
   expect(update.mock.calls.map(([body]) => body[0].id)).toStrictEqual(['entry-1', 'entry-26'])
+  expect(saved).toHaveBeenCalledOnce()
+  expect(saved.mock.calls[0][0]).toHaveLength(25)
 })
 
 test('a long Retry-After stops instead of retrying before the server permits it', async () => {

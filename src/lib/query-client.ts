@@ -49,23 +49,26 @@ function spreadQueryKeySegments(keys?: QueryKeySegments<unknown>) {
 }
 
 export const queryKeys = {
+  paseo: {
+    status: ['paseo', 'status'] as const,
+    projects: ['paseo', 'projects'] as const,
+    providers: ['paseo', 'providers'] as const,
+    models: (provider: string) => ['paseo', 'models', provider] as const,
+  },
   telegram: {
     all: ['telegram'] as const,
+    reply: (keys?: QueryKeySegments<{ messageId: number; outsideGroup: boolean }>) =>
+      ['telegram', 'reply', ...spreadQueryKeySegments(keys)] as const,
+    image: (keys?: QueryKeySegments<{ messageId: number; mediaId: string; full: boolean }>) =>
+      ['telegram', 'image', ...spreadQueryKeySegments(keys)] as const,
+    avatar: (keys?: QueryKeySegments<{ senderId: string; photoId: string }>) =>
+      ['telegram', 'avatar', ...spreadQueryKeySegments(keys)] as const,
     summary: (keys?: QueryKeySegments<unknown>) => ['telegram', 'summary', ...spreadQueryKeySegments(keys)] as const,
     topics: (keys?: QueryKeySegments<unknown>) => ['telegram', 'topics', ...spreadQueryKeySegments(keys)] as const,
     topic: (keys?: QueryKeySegments<{ topicId: number }>) =>
       ['telegram', 'topic', ...spreadQueryKeySegments(keys)] as const,
-    reply: (keys?: QueryKeySegments<{ messageId: number }>) =>
-      ['telegram', 'reply', ...spreadQueryKeySegments(keys)] as const,
     history: (keys?: QueryKeySegments<{ topicId: number | null }>) =>
       ['telegram', 'history', ...spreadQueryKeySegments(keys)] as const,
-    avatar: (keys?: QueryKeySegments<{ senderId: string; photoId: string; size: 'small' }>) =>
-      ['telegram', 'avatar', ...spreadQueryKeySegments(keys)] as const,
-    attachment: (keys?: QueryKeySegments<unknown>) =>
-      ['telegram', 'attachment', ...spreadQueryKeySegments(keys)] as const,
-    send: (keys?: QueryKeySegments<unknown>) => ['telegram', 'send', ...spreadQueryKeySegments(keys)] as const,
-    outgoing: (keys?: QueryKeySegments<unknown>) => ['telegram', 'outgoing', ...spreadQueryKeySegments(keys)] as const,
-    read: (keys?: QueryKeySegments<unknown>) => ['telegram', 'read', ...spreadQueryKeySegments(keys)] as const,
   },
   clockify: {
     all: ['clockify'] as const,
@@ -81,6 +84,7 @@ export const queryKeys = {
     workspaces: ['clockify', 'workspaces'] as const,
   },
   linear: {
+    all: ['linear'] as const,
     ticketSync: (keys?: QueryKeySegments<LinearTicketSyncQueryParams>) =>
       ['linear', 'ticket-sync', ...spreadQueryKeySegments(keys)] as const,
   },

@@ -1,59 +1,21 @@
-# Project brief
+# Project
 
-Clockalong is a Clockify companion app. Clockify is the system of record for time entries. Clockalong makes it faster to start, stop, classify, review, and reconcile time from the work sources people already use.
+Clockalong is a desktop companion for personal time tracking in Clockify. It connects work context to timers and helps users review the resulting time entries.
 
-The app is opinionated around personal time tracking, billing-adjacent review, and source-linked work. It is not a general project-management client, a Clockify replacement, or an invoicing system.
+Clockify is the system of record for time entries, projects, workspaces, and reports. Linear and GitHub supply trackable work. Quick Timers supply local presets. Telegram supplies group notifications and destinations for agent messages; it is not a time-tracking source.
 
-## Product model
+## Product vocabulary
 
-- Clockify is the core integration. It owns workspaces, projects, timers, reports, and persisted time entries.
-- Work sources provide context that can become Clockify time-entry descriptions, links, grouping, matching, and review metadata.
-- External work-source providers include tools such as Linear and GitHub.
-- Local work sources include Quick Timers and other app-owned ad hoc presets.
-- Provider-specific behavior should stay provider-specific until multiple real sources prove a shared abstraction is useful.
+- Work source: an external provider or local preset that supplies trackable work.
+- Work item: a Linear issue, GitHub issue or pull request, or Quick Timer preset.
+- Internal reference: a stable marker in a Clockify description that identifies an external work item.
+- Tracked value: an amount calculated from tracked time and a Clockify hourly rate.
+- Notification: a retained incoming Telegram message with a local clear state.
 
-Vocabulary:
+## Product boundaries
 
-- Work source: anything that can produce trackable work, such as Linear, GitHub, or Quick Timers.
-- Trackable work item: a provider or local item that can start a Clockify timer.
-- Time-entry context: metadata used to build descriptions, links, grouping, matching, and review.
-- Review surface: UI for inspecting, repairing, and eventually reconciling raw Clockify entries.
+The dashboard supports finding work, starting and stopping timers, adding completed time, and reviewing entries. Source context supplies descriptions and links without turning Clockalong into a project-management client.
 
-## Core workflow
+Clockify is required for the tracking dashboard. Linear and GitHub are optional. Quick Timers need no external work-source connection. Telegram operates independently of Clockify authentication.
 
-- Authenticate with Clockify using a user-provided API key stored through native secure storage.
-- Connect one or more work sources, starting with Linear, GitHub, and Quick Timers.
-- Show relevant trackable work items from connected sources.
-- Let the user start and stop Clockify timers from those work items.
-- Build useful Clockify descriptions from the selected source's context.
-- Sum and review tracked Clockify time by source item where matching is possible.
-- Support useful ordering such as currently running, recently clocked, active work, and recently updated.
-
-## Current sources
-
-- Clockify: required core time-tracking provider.
-- Linear: existing external provider for assigned issues and issue-based time tracking.
-- Quick Timers: existing local source for reusable ad hoc Clockify timers that do not depend on external work data.
-- GitHub: existing external provider for repository-scoped issues, pull requests, and PR-centered tracking workflows.
-- Telegram: optional account connection and chat for one selected group. Dashboard chat supports topics, replies, attachments, and media viewing. Local agents can discover destinations and send messages or attachments within that group through MCP. Telegram is not a source of trackable work items.
-
-## Billing context
-
-The user bills hourly but often bills according to delivered value rather than raw elapsed time. Some work spans multiple source items, and some small implementation tasks can reasonably map to more billable time because the value delivered is higher than the wall-clock duration.
-
-Longer term, Clockalong should help reconcile tracked work with billable time. A later review flow may use an LLM to look at Clockify entries plus source context from Linear, GitHub, Quick Timers, and future sources, then propose how much time to bill or how to distribute billable time across related work. That billing intelligence is future scope and should wait until the Clockify core and source-specific tracking workflows are solid.
-
-## Near-term boundary
-
-- Keep new work focused on Clockify companion workflows: tracking, review, source context, and billing-adjacent reconciliation.
-- Avoid turning Clockalong into a broad Linear, GitHub, project-management, or invoicing client.
-- Avoid Streamlink-derived or unrelated domain concepts.
-- Placeholder UI is acceptable for product areas that are not wired yet, but provider auth should use real native flows once a provider is implemented.
-- Preserve the current Tauri, React, pnpm, and agent-doc conventions unless a specific product requirement needs a change.
-
-## Open research
-
-- How GitHub reviews, comments, and review requests should map to Clockify descriptions and review surfaces.
-- Whether Clockalong should support more than one default Clockify project or workspace, and whether task mapping is worth adding after the default-project flow proves out.
-- Whether Clockalong should ever create Clockify projects/tasks from source data or only attach source metadata to selected Clockify projects through descriptions and links.
-- How to represent value-based billable time separately from raw tracked time.
+Tracked value supports billing review but is not an invoice or an approved billable amount. Clockalong does not provide invoicing or automated value-based reconciliation.

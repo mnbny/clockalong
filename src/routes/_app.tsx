@@ -1,6 +1,5 @@
 import { createFileRoute, Navigate, Outlet } from '@tanstack/react-router'
 
-import { TelegramChat } from '../components/telegram/TelegramChat'
 import { useAppAuth } from '../hooks/useAppAuth'
 import { useAppInit } from '../hooks/useAppInit'
 import { useClockifyDefaults } from '../hooks/useClockifyDefaults'
@@ -25,10 +24,5 @@ function AppLayout() {
     return <Navigate to="/sign-in" replace />
   }
 
-  return (
-    <>
-      <Outlet />
-      <TelegramChat />
-    </>
-  )
+  return <Outlet />
 }

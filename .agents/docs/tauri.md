@@ -1,89 +1,51 @@
 # Tauri
 
-## Startup appearance
+Tauri owns the desktop window, native state, filesystem boundaries, and platform integrations. The frontend reaches these capabilities through typed domain clients.
 
-Clockalong reads the saved theme and applies its palette and native light or dark appearance before the frontend renders. The window stays hidden until the themed app shell mounts. Provider authentication and synchronization proceed independently.
+## Native state
 
-All bundled daisyUI themes are available in Light and Dark groups. The header palette icon and App settings use native selects. The theme shortcut focuses the header select. Missing or unsupported selections use Halloween. The theme upgrade resets existing selections to Halloween once. Later selections persist.
+Rust publishes canonical native state through snapshot commands and change events. Shared frontend hooks subscribe before reading the snapshot, so a late initial result cannot overwrite a newer event.
 
-Theme changes update the app palette, dark appearance styles, and native window appearance together. The shell and Quick Timer cards use theme surface colors.
+Hooks expose typed state, clean up listeners, and provide browser fallbacks. Payloads use serializable data with frontend-compatible field names.
 
-## Reactifying Rust Vars
+Authentication initialization and provider connection rules belong to the authentication domain.
 
-Tauri managed state is not reactive by itself. Treat Rust as the owner of canonical app state, then expose React-friendly hooks through a snapshot command plus a change event.
+## Paseo command boundary
 
-Use this pattern for Rust variables that the frontend should render reactively.
+Rust detects the installed Paseo CLI and checks its local daemon. Detection does not install, start, or restart Paseo. Missing or stopped installations appear as an optional integration's unavailable state.
 
-## Rust Contract
+Available Paseo installations need no global enable toggle. Individual triggers control execution. Pending requests wait for availability while their trigger and Telegram scope remain valid.
 
-For each reactive Rust var, expose:
+The native bridge discovers registered Git projects, enabled providers, models, thinking efforts, and permission modes. Provider discovery uses the installed Paseo client and runtime to retain mode identifiers and labels. It checks saved selections before execution and generates one command for a fresh worktree from the remote main branch. The user’s prompt controls subsequent checkout and task actions. The bridge passes the complete prompt as one argument and does not evaluate shell scripts.
 
-- a snapshot command for initial state
-- an event emitted whenever the state changes
+The command targets the default local Paseo home, independently of inherited agent, workspace, and host selection. Explicit permission modes are validated against the selected provider and passed to Paseo for each launch. Without an explicit mode, Paseo supplies its default permissions.
 
-Command names should use snake case:
+For automatic requests, the bridge rechecks trigger enable state and revision after discovery. Confirmed sample runs use the draft independently of saved trigger state. Both paths share selection checks and agent launch behavior. Execution has bounded output and a two-minute deadline.
 
-```txt
-app_get_initialization_state
-```
+A command may create a workspace or agent before its result reaches Clockalong. Timeouts and reported command failures therefore leave an unconfirmed result. A successful command does not establish that an agent finished its task.
 
-Event names should use scoped kebab case:
+## Appearance and window lifetime
 
-```txt
-app:initialization-state-changed
-```
+The saved theme is applied before React renders. The window remains hidden until the themed shell mounts. Theme changes update the palette and native light or dark appearance together.
 
-Payloads must be serializable structs using `camelCase` for frontend compatibility.
+The header and App settings share the theme selection. Bundled daisyUI themes are grouped by appearance, with Halloween as the fallback.
 
-## React Contract
+On macOS, closing the main window hides it rather than ending the process. The Dock restores it. The native Quit action exits the app.
 
-Hooks should:
+The optional menu-bar item shows timer state and provides timer actions. Recent choices come from completed cached entries, with one entry per displayed title. Hiding the window keeps background services available.
 
-- return typed state
-- call the snapshot command once on mount
-- listen for the matching Tauri event
-- ignore the initial snapshot result if an event arrives first
-- clean up the event listener on unmount
-- provide a non-Tauri fallback for browser/dev rendering
-- use `createTauriReactiveStateHook` from `src/utils/create-tauri-reactive-state-hook.ts` for shared mechanics
+## Native files
 
-Frontend-to-Rust bridge calls should be grouped by domain in `src/services/tauri/`.
+Telegram image caching uses bounded binary IPC. Rust chooses cache paths, enforces limits, and invalidates scoped handles. Frontend callers cannot choose arbitrary cache paths.
 
-## Updates
+MCP attachment reads are a separate boundary. Rust retains the absolute path only for a pending send. The frontend receives a filename and can claim bytes once through that request.
 
-Clockalong uses Tauri's updater plugin for direct-download macOS updates. The updater is not automatic UI; frontend code must call the plugin and decide how to notify or install.
+Attachment reads accept nonempty regular files up to 20 MiB and run off the main thread. Completed or expired requests cannot claim bytes. This reader does not grant general frontend filesystem access.
 
-- Updater configuration lives in `src-tauri/tauri.conf.json`.
-- Rust plugin initialization lives in `src-tauri/src/lib.rs`.
-- Frontend updater calls are wrapped in `src/services/tauri/app-updates.ts`.
-- `src/hooks/useAppUpdates.tsx` owns app-wide periodic update checks and update-available toasts.
-- `src/components/AppSettings.tsx` owns the manual update check/install/restart UI rendered from the settings route.
-- Do not auto-install or auto-restart. Active time tracking should stay user-controlled.
+## Update experience
 
-## macOS menu bar
+The root checks for updates after launch and every 30 minutes. App settings also provides a manual check.
 
-`src/hooks/useMenuBar.ts` owns the status item, active-timer title, native menu, and menu actions. It reads recent completed entries from the synced Clockify collection, retains the newest entry for each displayed title, then shows the five newest unique entries. `src/services/clockify/time-entries.ts` contains the shared start and stop behavior. `src-tauri/icons/menu_icon_64x64.png` is the macOS template icon. `menuBarVisible` persists the App settings toggle.
+Update-available and restart notifications remain visible until manually dismissed. This applies to automatic and manual update checks.
 
-On macOS, closing the main window hides it so the status item and timer remain available. The Dock restores the hidden window, while the native menu's Quit item explicitly exits the app.
-
-## Downloads
-
-Telegram attachment downloads use a narrow native writer for the system Downloads folder. The frontend supplies a filename and streams binary chunks through an opaque transfer handle. Rust owns filename restrictions, collision handling, completion checks, and partial-file cleanup. It accepts no arbitrary destination path and grants no general frontend filesystem access.
-
-File work runs off the main thread. Normal app exit waits for partial-file cleanup. Hiding the macOS window leaves active transfers running.
-
-The Telegram media viewer uses a separate native writer and an isolated temporary directory. Native code generates all paths and limits asset-protocol access to that directory. The viewer downloads a complete file before playback. It detaches the media source before release. Closure and scope teardown release temporary files.
-
-Normal exit removes registered files, and startup removes crash leftovers. Completed Downloads remain separate user files.
-
-Small Telegram avatars and previews use a separate persistent native image cache. Rust owns paths, storage limits, eviction, and access handles. Reads and writes use bounded binary IPC and run off the main thread. Restoring the same group retains completed images and removes partial writes. Unlink and disconnect invalidate handles and delete cached images. The frontend cannot select filesystem paths or reuse invalidated handles.
-
-MCP attachment sends use a separate native reader. Rust retains the caller's absolute path with the pending send request. The frontend receives only a filename and can claim bounded binary bytes once through the request identifier. Reads accept nonempty regular files of at most 20 MiB and run off the main thread. Completed or expired requests cannot claim files. This does not grant the frontend arbitrary path access.
-
-## Auth gate
-
-Rust owns the public authentication snapshot. Native startup validates Clockify before app initialization completes. Linear and GitHub checks run independently and do not block initialization.
-
-Telegram performs MTProto authentication in the frontend. Its provider waits for native initialization before restore, because startup replaces the initial auth snapshot. Rust owns Telegram session storage and connected-state events. Telegram failure does not block the app or change the Clockify route gate.
-
-Linear uses native OAuth. Clockify and GitHub use native credential validation. Frontend route decisions use the native auth snapshot.
+Available updates produce an install action. Installation and restart require user actions; active time tracking does not trigger an automatic restart. Distribution owns release artifacts and updater signing.

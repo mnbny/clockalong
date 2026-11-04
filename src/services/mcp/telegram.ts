@@ -4,17 +4,35 @@ import type { TopicCursor } from '../telegram/chat-data'
 import type { AttachmentInput } from '../telegram/chat-files'
 import type { TelegramGroupState } from '../telegram/group'
 
-import { queryClient } from '../../lib/query-client'
-import { chatError } from '../../utils/telegram-chat'
 import { mcp } from '../tauri/mcp-client'
 import { TelegramChatError } from '../telegram/chat'
-import { photoMime, probeVideo } from '../telegram/chat-files'
-import { telegramSendOptions } from '../telegram/chat-queries'
+import { photoMime, probeVideo, TelegramFileError } from '../telegram/chat-files'
 
 export type McpTelegramContext = { chat: TelegramChat | null; group: TelegramGroupState; busy: boolean }
 const uncertainDelivery =
   'Delivery could not be confirmed. The message may have been sent; check Telegram before retrying. Do not automatically resend.'
 class McpTelegramError extends Error {}
+
+function chatError(error: unknown) {
+  if (error instanceof TelegramFileError) return error.message
+  if (error instanceof TelegramChatError) {
+    switch (error.category) {
+      case 'unknown-send':
+        return 'Could not confirm delivery.'
+      case 'aborted':
+        return 'Send cancelled.'
+      case 'restricted':
+        return 'Telegram does not allow this action here.'
+      case 'unavailable':
+        return 'Telegram is unavailable. Reconnect in Settings.'
+      case 'invalid-input':
+        return 'Telegram could not accept this message or file.'
+      case 'wait':
+        return error.waitSeconds ? `Try again in ${error.waitSeconds} seconds.` : 'Please wait before trying again.'
+    }
+  }
+  return 'Could not reach Telegram. Try again.'
+}
 
 export async function executeMcpTelegramCommand(
   command: McpTelegramCommand,
@@ -69,7 +87,6 @@ export async function executeMcpTelegramCommand(
       } else {
         destinations.push({ topicId: null, title: summary.title, closed: false })
       }
-      // Project only the selected group's public fields, never SDK peers or provider state.
       return { group: { id: group.id, title: summary.title, hasTopics: chat.forum }, destinations }
     }
 
@@ -117,10 +134,7 @@ export async function executeMcpTelegramCommand(
     }
     check()
     const operation = chat.createSend({ topicId: args.topicId, text: args.text ?? '' }, attachment)
-    const result = await queryClient
-      .getMutationCache()
-      .build(queryClient, telegramSendOptions(chat))
-      .execute({ operation, signal })
+    const result = await chat.send(operation, { signal })
     check()
     return { groupId: group.id, topicId: args.topicId, messageId: result.view.id }
   } catch (error) {

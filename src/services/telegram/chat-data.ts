@@ -3,6 +3,8 @@ import type { SavedTelegramGroup } from './group'
 
 import { Long, type PeersIndex, type tl } from '@mtcute/web'
 
+import { isImageAttachment } from './attachment-image'
+
 export type Conversation = { topicId: number | null }
 export type HistoryCursor = { id: number; date: number }
 export type TopicCursor = { id: number; date: number; topic: number }
@@ -61,9 +63,9 @@ export type ChatMessage = {
 }
 export type MessageRecord = {
   view: ChatMessage
-  file?: FileReference
   avatar?: AvatarReference
   preview?: FileReference
+  image?: FileReference
 }
 export type HistoryPage = {
   items: MessageRecord[]
@@ -71,6 +73,11 @@ export type HistoryPage = {
   serverCount?: number
   countExact?: boolean
 }
+export type NotificationHistoryPage = HistoryPage & { newestId: number }
+export type TelegramMessageEvent =
+  | { type: 'message'; record: MessageRecord; edited: boolean }
+  | { type: 'deleted'; ids: number[] }
+  | { type: 'recover' }
 export type Topic = {
   id: number
   title: string
@@ -118,7 +125,7 @@ export function topicFor(group: SavedTelegramGroup, raw: tl.RawMessage | tl.RawM
   const reply = raw.replyTo
   return reply?._ === 'messageReplyHeader' && reply.forumTopic ? (reply.replyToTopId ?? reply.replyToMsgId ?? 1) : 1
 }
-function entityView(entity: tl.TypeMessageEntity): TextEntity {
+function entityView(entity: tl.TypeMessageEntity) {
   return {
     kind: entity._,
     offset: entity.offset,
@@ -181,8 +188,8 @@ export function projectMessage(
     }
   }
   let attachment: Attachment | null = null
-  let file: FileReference | undefined
   let preview: FileReference | undefined
+  let image: FileReference | undefined
   const media = raw._ === 'message' ? raw.media : undefined
   const protectedContent =
     (raw._ === 'message' && !!raw.noforwards) ||
@@ -211,25 +218,24 @@ export function projectMessage(
           mime: 'image/jpeg',
           downloadable: allowed,
         }
-        if (allowed)
-          file = {
-            messageId: raw.id,
-            mediaId: String(photo.id),
-            size: bytes,
-            dcId: photo.dcId,
-            location: {
-              _: 'inputPhotoFileLocation',
-              id: photo.id,
-              accessHash: photo.accessHash,
-              fileReference: photo.fileReference.slice(),
-              thumbSize: size.type,
-            },
-          }
       }
       const thumb = sizes.find(size => size._ === 'photoSize' && size.size <= 512 * 1024)
+      if (isImageAttachment(attachment) && size) {
+        image = {
+          mediaId: String(photo.id),
+          size: attachment.size!,
+          dcId: photo.dcId,
+          location: {
+            _: 'inputPhotoFileLocation',
+            id: photo.id,
+            accessHash: photo.accessHash,
+            fileReference: photo.fileReference.slice(),
+            thumbSize: size.type,
+          },
+        }
+      }
       if (allowed && thumb?._ === 'photoSize')
         preview = {
-          messageId: raw.id,
           mediaId: String(photo.id),
           size: thumb.size,
           dcId: photo.dcId,
@@ -268,23 +274,8 @@ export function projectMessage(
         if (attribute._ === 'documentAttributeAnimated') attachment.kind = 'animation'
       }
       const thumb = document.thumbs?.find(size => size._ === 'photoSize' && size.size <= 512 * 1024)
-      if (allowed && thumb?._ === 'photoSize')
-        preview = {
-          messageId: raw.id,
-          mediaId: String(document.id),
-          size: thumb.size,
-          dcId: document.dcId,
-          location: {
-            _: 'inputDocumentFileLocation',
-            id: document.id,
-            accessHash: document.accessHash,
-            fileReference: document.fileReference.slice(),
-            thumbSize: thumb.type,
-          },
-        }
-      if (allowed)
-        file = {
-          messageId: raw.id,
+      if (isImageAttachment(attachment)) {
+        image = {
           mediaId: String(document.id),
           size: document.size,
           dcId: document.dcId,
@@ -294,6 +285,20 @@ export function projectMessage(
             accessHash: document.accessHash,
             fileReference: document.fileReference.slice(),
             thumbSize: '',
+          },
+        }
+      }
+      if (allowed && thumb?._ === 'photoSize')
+        preview = {
+          mediaId: String(document.id),
+          size: thumb.size,
+          dcId: document.dcId,
+          location: {
+            _: 'inputDocumentFileLocation',
+            id: document.id,
+            accessHash: document.accessHash,
+            fileReference: document.fileReference.slice(),
+            thumbSize: thumb.type,
           },
         }
     }
@@ -321,9 +326,9 @@ export function projectMessage(
       service: raw._ === 'messageService' ? raw.action._ : undefined,
       attachment,
     },
-    file,
     avatar,
     preview,
+    image,
   }
 }
 export function projectTopic(topic: tl.RawForumTopic): Topic {

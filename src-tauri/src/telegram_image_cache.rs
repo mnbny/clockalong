@@ -13,10 +13,19 @@ use tauri::{
 };
 
 const IMAGE_BYTES: usize = 512 * 1024;
+const FULL_IMAGE_BYTES: usize = 20 * 1024 * 1024;
 const CACHE_BYTES: u64 = 64 * 1024 * 1024;
 const CACHE_FILES: usize = 1024;
 const FAILED: &str = "Could not access the Telegram image cache.";
 const INACTIVE: &str = "This Telegram image cache is no longer available.";
+
+fn image_limit(key: &str) -> usize {
+    if key.starts_with("notification-image:") {
+        FULL_IMAGE_BYTES
+    } else {
+        IMAGE_BYTES
+    }
+}
 
 #[derive(Default)]
 pub struct TelegramImageCacheState(Arc<Mutex<ImageCache>>);
@@ -65,7 +74,7 @@ fn prune(directory: &Path, bytes: u64, count: usize) -> Result<(), String> {
         let metadata = entry.metadata().map_err(|_| FAILED)?;
         if entry.path().extension().is_some()
             || !metadata.is_file()
-            || metadata.len() > IMAGE_BYTES as u64
+            || metadata.len() > FULL_IMAGE_BYTES as u64
         {
             if metadata.is_dir() {
                 remove_directory(&entry.path())?;
@@ -96,6 +105,13 @@ fn prune(directory: &Path, bytes: u64, count: usize) -> Result<(), String> {
 
 impl ImageCache {
     fn select(&mut self, root: &Path, group: &str) -> Result<(), String> {
+        if self
+            .active
+            .as_ref()
+            .is_some_and(|scope| scope.group == group)
+        {
+            return Ok(());
+        }
         self.active = None;
         private_directory(root)?;
         let directory = root.join(hash(group));
@@ -150,10 +166,10 @@ impl ImageCache {
         };
         let mut bytes = Vec::new();
         (&file)
-            .take(IMAGE_BYTES as u64 + 1)
+            .take(image_limit(key) as u64 + 1)
             .read_to_end(&mut bytes)
             .map_err(|_| FAILED)?;
-        if bytes.is_empty() || bytes.len() > IMAGE_BYTES {
+        if bytes.is_empty() || bytes.len() > image_limit(key) {
             fs::remove_file(path).map_err(|_| FAILED)?;
             return Ok(Vec::new());
         }
@@ -163,7 +179,7 @@ impl ImageCache {
 
     fn write(&self, token: &str, key: &str, bytes: &[u8]) -> Result<(), String> {
         let path = self.path(token, key)?;
-        if bytes.is_empty() || bytes.len() > IMAGE_BYTES {
+        if bytes.is_empty() || bytes.len() > image_limit(key) {
             return Err(FAILED.into());
         }
         let directory = path.parent().ok_or(FAILED)?;
@@ -276,7 +292,9 @@ pub async fn telegram_image_cache_write<R: Runtime>(
     let token = header("x-telegram-image-token")?;
     let key = header("x-telegram-image-key")?;
     let bytes = match request.body() {
-        InvokeBody::Raw(bytes) if !bytes.is_empty() && bytes.len() <= IMAGE_BYTES => bytes.clone(),
+        InvokeBody::Raw(bytes) if !bytes.is_empty() && bytes.len() <= image_limit(&key) => {
+            bytes.clone()
+        }
         _ => return Err(FAILED.into()),
     };
     with_cache(
@@ -303,12 +321,28 @@ mod tests {
     }
 
     #[test]
+    fn selecting_the_saved_group_again_preserves_active_image_handles() {
+        let root = Directory::new();
+        let mut cache = ImageCache::default();
+        cache.select(&root.0, "1:basic:123").unwrap();
+        let token = cache.token("1:basic:123").unwrap();
+        cache.write(&token, "avatar", b"image").unwrap();
+        cache.select(&root.0, "1:basic:123").unwrap();
+        assert_eq!(cache.token("1:basic:123").unwrap(), token);
+        assert_eq!(cache.read(&token, "avatar").unwrap(), b"image");
+    }
+
+    #[test]
     fn restart_reuses_images_but_not_old_handles_or_partial_files() {
         let root = Directory::new();
         let mut cache = ImageCache::default();
         cache.select(&root.0, "1:basic:123").unwrap();
         let old = cache.token("1:basic:123").unwrap();
         cache.write(&old, "avatar:1:9", b"image").unwrap();
+        let full_image = vec![1; IMAGE_BYTES + 1];
+        cache
+            .write(&old, "notification-image:photo:9", &full_image)
+            .unwrap();
         let path = cache.path(&old, "avatar:1:9").unwrap();
         fs::write(path.with_extension("part"), b"unfinished").unwrap();
         drop(cache);
@@ -317,6 +351,10 @@ mod tests {
         cache.select(&root.0, "1:basic:123").unwrap();
         let token = cache.token("1:basic:123").unwrap();
         assert_eq!(cache.read(&token, "avatar:1:9").unwrap(), b"image");
+        assert_eq!(
+            cache.read(&token, "notification-image:photo:9").unwrap(),
+            full_image
+        );
         assert!(cache.read(&token, "avatar:1:10").unwrap().is_empty());
         assert!(cache.read(&old, "avatar:1:9").is_err());
         assert!(!path.with_extension("part").exists());
@@ -398,6 +436,13 @@ mod tests {
         let token = cache.token("group").unwrap();
         assert!(cache
             .write(&token, "oversize", &vec![0; IMAGE_BYTES + 1])
+            .is_err());
+        assert!(cache
+            .write(
+                &token,
+                "notification-image:photo:1",
+                &vec![0; FULL_IMAGE_BYTES + 1]
+            )
             .is_err());
         let key = "../../outside";
         cache.write(&token, key, b"image").unwrap();

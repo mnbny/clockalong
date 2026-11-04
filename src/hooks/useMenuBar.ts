@@ -2,7 +2,6 @@ import type { TimeEntryWithRatesDtoV1 } from '../services/clockify/generated/clo
 import type { SyncedClockifyTimeEntry } from '../services/clockify/sync'
 import type { MenuItemOptions, PredefinedMenuItemOptions } from '@tauri-apps/api/menu'
 
-import { and, eq, useLiveQuery } from '@tanstack/react-db'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { isTauri } from '@tauri-apps/api/core'
@@ -10,18 +9,23 @@ import { Image } from '@tauri-apps/api/image'
 import { Menu } from '@tauri-apps/api/menu'
 import { TrayIcon } from '@tauri-apps/api/tray'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import menuBarIconUrl from '../../src-tauri/icons/menu_icon_64x64.png?url'
 import { appToast } from '../components/AppToaster'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
-import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
+import { clockifyEntryCache } from '../services/clockify/entry-cache'
+import { recentClockifyEntries } from '../services/clockify/entry-queries'
+import { cacheClockifyEntryResult } from '../services/clockify/sync'
 import {
   createClockifyTimeEntryFromEntry,
   getClockifyTimeEntryTitle,
   stopClockifyTimeEntry,
 } from '../services/clockify/time-entries'
+import { selectClockifyWorkspace } from '../services/clockify/workspaces'
+import { db } from '../services/db'
 import { useStorage } from '../services/storage/useStorage'
 import { getErrorMessage } from '../utils/errors'
 import { useAppAuth } from './useAppAuth'
@@ -30,6 +34,7 @@ import { useClockifyTimerProject } from './useClockifyTimerProject'
 
 const menuBarTrayId = 'clockalong-menu-bar'
 const recentEntryLimit = 5
+const emptyRecentEntries: SyncedClockifyTimeEntry[] = []
 const menuBarTitleSeparator = ' · '
 
 type MenuBarDestination = '/dashboard' | '/settings'
@@ -67,11 +72,7 @@ export function useMenuBar() {
       return null
     }
 
-    return (
-      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
-      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
-      workspaces[0]
-    )
+    return selectClockifyWorkspace(user, workspaces)
   }, [userQuery.data, workspacesQuery.data])
   const userId = userQuery.data?.id
   const workspaceId = selectedWorkspace?.id
@@ -97,36 +98,20 @@ export function useMenuBar() {
     const entries = runningEntryQuery.data ?? []
     return entries.find(entry => entry.userId === userId) ?? entries[0] ?? null
   }, [runningEntryQuery.data, userId])
-  const syncedEntriesQuery = useLiveQuery(
-    query => {
-      if (!userId || !workspaceId) {
-        return null
-      }
-
-      return query
-        .from({ syncedEntry: clockifyTimeEntriesCollection })
-        .where(({ syncedEntry }) => and(eq(syncedEntry.userId, userId), eq(syncedEntry.workspaceId, workspaceId)))
-    },
-    [userId, workspaceId],
-  )
-  const recentEntries = useMemo(() => {
-    const seenTitles = new Set<string>()
-
-    return (syncedEntriesQuery.data ?? [])
-      .filter(syncedEntry => Boolean(syncedEntry.entry.timeInterval?.end) && syncedEntry.id !== runningEntry?.id)
-      .sort((left, right) => right.startedAt.localeCompare(left.startedAt))
-      .filter(syncedEntry => {
-        const title = getClockifyTimeEntryTitle(syncedEntry.entry)
-
-        if (seenTitles.has(title)) {
-          return false
-        }
-
-        seenTitles.add(title)
-        return true
-      })
-      .slice(0, recentEntryLimit)
-  }, [runningEntry?.id, syncedEntriesQuery.data])
+  const recentScope = JSON.stringify([clockifyEnabled, userId, workspaceId])
+  const recent = useLiveQuery(async () => {
+    try {
+      const rows =
+        clockifyEnabled && userId && workspaceId
+          ? await recentClockifyEntries(db, { userId, workspaceId }, runningEntry?.id, recentEntryLimit)
+          : emptyRecentEntries
+      return { scope: recentScope, rows }
+    } catch (error) {
+      console.warn('[menu bar] could not read recent entries', error)
+      return { scope: recentScope, rows: emptyRecentEntries }
+    }
+  }, [recentScope, runningEntry?.id])
+  const recentEntries = recent?.scope === recentScope ? recent.rows : emptyRecentEntries
 
   const openDestination = useCallback(
     async (destination: MenuBarDestination) => {
@@ -158,11 +143,18 @@ export function useMenuBar() {
   }, [])
   const { mutate: stopRunningEntry } = useMutation({
     mutationFn: stopClockifyTimeEntry,
+    onMutate: () => clockifyEntryCache.getLifecycle(),
     onError: error => {
       console.warn('[menu bar] Could not stop Clockify timer:', error)
       appToast.error('Could not stop Clockify timer', { description: getErrorMessage(error) })
     },
-    onSuccess: () => {
+    onSuccess: async (response, original, lifecycle) => {
+      try {
+        await cacheClockifyEntryResult(response, original, lifecycle)
+      } catch (error) {
+        console.warn('[menu bar] Could not cache stopped entry:', error)
+        appToast.warning('Timer stopped, but the local cache could not be updated.')
+      }
       queryClient.setQueryData<TimeEntryWithRatesDtoV1[]>(
         queryKeys.clockify.runningEntry({ params: { userId, workspaceId } }),
         [],

@@ -9,36 +9,43 @@ import {
   IconUserPlus,
   IconX,
 } from '@tabler/icons-react'
-import { and, eq, useLiveQuery } from '@tanstack/react-db'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useAppAuth } from '../hooks/useAppAuth'
 import { useClockifyTimerProject } from '../hooks/useClockifyTimerProject'
+import { useDexieQuery } from '../hooks/useDexieQuery'
 import { queryKeys } from '../lib/query-client'
 import { clockify } from '../services/clockify/client'
-import { type TimeEntryDtoImplV1 } from '../services/clockify/generated/clockify'
-import { clockifyTimeEntriesCollection } from '../services/clockify/sync'
+import { clockifyEntryCache } from '../services/clockify/entry-cache'
+import { queryClockifySummaries } from '../services/clockify/entry-queries'
+import { cacheClockifyEntryResult } from '../services/clockify/sync'
 import { MissingClockifyProjectError } from '../services/clockify/time-entries'
+import { selectClockifyWorkspace } from '../services/clockify/workspaces'
+import { db } from '../services/db'
 import { createGithubClient } from '../services/github/client'
 import { getGithubRepositoryLabels } from '../services/github/labels'
-import {
-  getGithubWorkItemInvolvementReasons,
-  githubWorkItemsCollection,
-  type SyncedGithubWorkItem,
-  useGithubSync,
-} from '../services/github/sync'
+import { type SyncedGithubWorkItem, useGithubSync } from '../services/github/sync'
 import {
   createClockifyTimeEntryForGithubWorkItem,
   formatGithubWorkItemDescription,
   stopClockifyTimerForEntry,
 } from '../services/github/timers'
 import {
+  compareGithubAuthors,
+  getGithubSelectedAuthorUsernames,
+  getGithubSelectedLabelNames,
+  mergeGithubAuthors,
+  normalizeGithubLabelName,
+  normalizeGithubUsername,
+} from '../services/github/work-item-filters'
+import { type GithubPageCursor, queryGithubAuthors, queryGithubWorkItems } from '../services/github/work-item-queries'
+import {
   getClockifyEntryGithubWorkItem,
+  getGithubWorkItemInternalRef,
   type GithubWorkItemWithTracking,
   mergeGithubWorkItemTimeSummaries,
-  summarizeClockifyGithubWorkItemTimeEntries,
 } from '../services/github/work-item-summaries'
 import {
   type GithubSelectedAuthor,
@@ -48,7 +55,6 @@ import {
 import { useStorage } from '../services/storage/useStorage'
 import { cx } from '../utils/cx'
 import { getErrorMessage } from '../utils/errors'
-import { parseInternalRefs } from '../utils/templates'
 import { appToast } from './AppToaster'
 import { ClockifyEntryTimeDialog } from './ClockifyEntryTimeDialog'
 import { LastTrackedCell, TotalTrackedAmountCell, TotalTrackedCell } from './TrackingSummaryCells'
@@ -67,7 +73,7 @@ const githubWorkItemColumns: Array<ColumnDef<GithubWorkItemWithTracking>> = [
     id: 'trackingAction',
     header: () => <span className="sr-only">Time tracking</span>,
     cell: info => {
-      const meta = getGithubWorkItemTableMeta(info.table.options.meta)
+      const meta = info.table.options.meta as GithubWorkItemTableMeta
       const workItem = info.row.original
 
       return (
@@ -156,6 +162,8 @@ const githubWorkItemColumns: Array<ColumnDef<GithubWorkItemWithTracking>> = [
 ]
 
 const githubWorkItemTableCoreRowModel = getCoreRowModel<GithubWorkItemWithTracking>()
+const emptyGithubWorkItems: SyncedGithubWorkItem[] = []
+const emptyClockifySummaries = {}
 
 export function GitHubWidget() {
   const authState = useAppAuth()
@@ -178,18 +186,15 @@ function GitHubWidgetContent() {
   const [githubPullRequestDescriptionTemplate] = useStorage('githubPullRequestDescriptionTemplate')
   const [githubPullRequestDescriptionTemplateFallback] = useStorage('githubPullRequestDescriptionTemplateFallback')
   const [githubSelectedRepositories] = useStorage('githubSelectedRepositories')
+  const [githubVisibleWorkItemTypes] = useStorage('githubVisibleWorkItemTypes')
   const [githubSelectedAuthors, setGithubSelectedAuthors] = useStorage('githubSelectedAuthors')
   const [githubSelectedLabels, setGithubSelectedLabels] = useStorage('githubSelectedLabels')
   const [githubShowClosedWorkItems, setGithubShowClosedWorkItems] = useStorage('githubShowClosedWorkItems')
   const [showAllGithubWorkItems, setShowAllGithubWorkItems] = useState(false)
   const [showMentionedGithubWorkItems, setShowMentionedGithubWorkItems] = useState(false)
-  const githubSync = useGithubSync()
   const {
     queries: { syncQuery },
-  } = githubSync
-  const syncedWorkItemsQuery = useLiveQuery(q =>
-    q.from({ syncedWorkItem: githubWorkItemsCollection }).orderBy(({ syncedWorkItem }) => syncedWorkItem.updatedAt),
-  )
+  } = useGithubSync()
   const githubViewerQuery = useQuery({
     queryKey: queryKeys.github.viewer,
     queryFn: async () => {
@@ -206,51 +211,59 @@ function GitHubWidgetContent() {
         username: githubViewerQuery.data.login,
       }
     : null
-  const githubAvailableAuthors = useMemo(
-    () =>
-      mergeGithubAuthors(
-        getGithubAuthorsFromWorkItems(syncedWorkItemsQuery.data ?? []),
-        githubSelectedAuthors,
-        githubViewerAuthor ? [githubViewerAuthor] : [],
-      ),
-    [githubSelectedAuthors, githubViewerAuthor, syncedWorkItemsQuery.data],
-  )
   const githubSelectedAuthorUsernames = useMemo(
-    () =>
-      new Set(
-        [githubViewerAuthor?.username, ...githubSelectedAuthors.map(author => author.username)]
-          .filter((username): username is string => Boolean(username))
-          .map(normalizeGithubUsername),
-      ),
+    () => getGithubSelectedAuthorUsernames(githubViewerAuthor?.username, githubSelectedAuthors),
     [githubSelectedAuthors, githubViewerAuthor?.username],
   )
   const githubSelectedLabelNames = useMemo(
-    () => new Set(githubSelectedLabels.map(label => normalizeGithubLabelName(label.name))),
+    () => getGithubSelectedLabelNames(githubSelectedLabels),
     [githubSelectedLabels],
   )
-  const workItems = useMemo(
-    () =>
-      (syncedWorkItemsQuery.data ?? [])
-        .filter(
-          item =>
-            showAllGithubWorkItems ||
-            (item.author !== null && githubSelectedAuthorUsernames.has(normalizeGithubUsername(item.author))) ||
-            (showMentionedGithubWorkItems && getGithubWorkItemInvolvementReasons(item).length > 0) ||
-            (githubSelectedLabelNames.size > 0 &&
-              getGithubWorkItemLabelNames(item).some(labelName => githubSelectedLabelNames.has(labelName))),
-        )
-        .filter(item => githubShowClosedWorkItems || item.state !== 'closed')
-        .map(row => row)
-        .sort(compareGithubWorkItems),
-    [
-      githubSelectedAuthorUsernames,
-      githubSelectedLabelNames,
-      githubShowClosedWorkItems,
-      showAllGithubWorkItems,
-      showMentionedGithubWorkItems,
-      syncedWorkItemsQuery.data,
-    ],
+  const filterKey = JSON.stringify({
+    scope: {
+      repositories: githubSelectedRepositories.map(repository => repository.fullName).sort(),
+      visibleWorkItemTypes: githubVisibleWorkItemTypes,
+    },
+    authors: [...githubSelectedAuthorUsernames].sort(),
+    labels: [...githubSelectedLabelNames].sort(),
+    showAll: showAllGithubWorkItems,
+    showClosed: githubShowClosedWorkItems,
+    showMentioned: showMentionedGithubWorkItems,
+  })
+  const [pagination, setPagination] = useState<{ key: string; cursors: GithubPageCursor[]; revision?: number }>({
+    key: filterKey,
+    cursors: [],
+  })
+  const cursors = pagination.key === filterKey ? pagination.cursors : []
+  const cursor = cursors[cursors.length - 1]
+  const queryOptions = useMemo(
+    () => JSON.parse(filterKey) as Omit<Parameters<typeof queryGithubWorkItems>[1], 'limit' | 'cursor'>,
+    [filterKey],
   )
+  const pageQuery = useCallback(
+    (signal: AbortSignal) => queryGithubWorkItems(db, { ...queryOptions, cursor, limit: 15, signal }),
+    [queryOptions, cursor],
+  )
+  const authorsQuery = useCallback(() => queryGithubAuthors(db, queryOptions.scope), [queryOptions])
+  const scopeKey = JSON.stringify([githubViewerAuthor?.username, queryOptions.scope])
+  const page = useDexieQuery(pageQuery, scopeKey)
+  const authors = useDexieQuery(authorsQuery, scopeKey)
+  useEffect(() => {
+    if (pagination.key !== filterKey) {
+      setPagination({ key: filterKey, cursors: [] })
+    } else if (!page.isPending && page.data && pagination.revision !== page.data.revision) {
+      const revision = page.data.revision
+      setPagination(current => {
+        if (current.key !== filterKey || current.revision === revision) return current
+        return { key: filterKey, cursors: current.revision === undefined ? current.cursors : [], revision }
+      })
+    }
+  }, [page.data, page.isPending, pagination.key, pagination.revision, filterKey])
+  const githubAvailableAuthors = useMemo(
+    () => mergeGithubAuthors(authors.data ?? [], githubSelectedAuthors, githubViewerAuthor ? [githubViewerAuthor] : []),
+    [authors.data, githubSelectedAuthors, githubViewerAuthor],
+  )
+  const workItems = page.data?.rows ?? emptyGithubWorkItems
   const clockifyUserQuery = useQuery({
     queryKey: queryKeys.clockify.loggedUser,
     queryFn: () => clockify.getLoggedUser(),
@@ -269,11 +282,7 @@ function GitHubWidgetContent() {
       return null
     }
 
-    return (
-      workspaces.find(candidate => candidate.id === user.activeWorkspace) ??
-      workspaces.find(candidate => candidate.id === user.defaultWorkspace) ??
-      workspaces[0]
-    )
+    return selectClockifyWorkspace(user, workspaces)
   }, [clockifyUserQuery.data, clockifyWorkspacesQuery.data])
   const runningEntryQuery = useQuery({
     enabled: Boolean(clockifyUserQuery.data?.id && selectedClockifyWorkspace?.id),
@@ -297,51 +306,25 @@ function GitHubWidgetContent() {
     const runningEntries = runningEntryQuery.data ?? []
     return runningEntries.find(entry => entry.userId === clockifyUserQuery.data?.id) ?? runningEntries[0] ?? null
   }, [clockifyUserQuery.data?.id, runningEntryQuery.data])
-  const syncedTimeEntriesQuery = useLiveQuery(
-    q => {
-      if (!clockifyUserQuery.data?.id || !selectedClockifyWorkspace?.id) {
-        return null
-      }
-
-      return q
-        .from({ syncedEntry: clockifyTimeEntriesCollection })
-        .where(({ syncedEntry }) =>
-          and(
-            eq(syncedEntry.userId, clockifyUserQuery.data.id!),
-            eq(syncedEntry.workspaceId, selectedClockifyWorkspace.id!),
-          ),
+  const readTracking = useCallback(() => {
+    const userId = clockifyUserQuery.data?.id
+    const workspaceId = selectedClockifyWorkspace?.id
+    return userId && workspaceId
+      ? queryClockifySummaries(
+          db,
+          { userId, workspaceId },
+          workItems,
+          item => item.id,
+          getGithubWorkItemInternalRef,
+          runningEntryQuery.data ?? [],
         )
-        .orderBy(({ syncedEntry }) => syncedEntry.startedAt)
-    },
-    [clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id],
+      : Promise.resolve({})
+  }, [clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id, workItems, runningEntryQuery.data])
+  const trackingQuery = useDexieQuery(
+    readTracking,
+    JSON.stringify([scopeKey, clockifyUserQuery.data?.id, selectedClockifyWorkspace?.id]),
   )
-  const workItemTimeSummaries = useMemo(() => {
-    return summarizeClockifyGithubWorkItemTimeEntries({
-      entries: [
-        ...(syncedTimeEntriesQuery.data?.map(syncedEntry => syncedEntry.entry) ?? []),
-        ...(runningEntryQuery.data ?? []),
-      ],
-      workItems,
-    })
-  }, [runningEntryQuery.data, syncedTimeEntriesQuery.data, workItems])
-  useEffect(() => {
-    githubWidgetLog('clockify summary inputs', {
-      githubWorkItemCount: workItems.length,
-      runningEntryCount: runningEntryQuery.data?.length ?? 0,
-      sampleSyncedEntries: summarizeGithubWidgetSyncedEntries(syncedTimeEntriesQuery.data ?? []),
-      summaryCount: Object.keys(workItemTimeSummaries).length,
-      syncedEntryCount: syncedTimeEntriesQuery.data?.length ?? 0,
-      userId: clockifyUserQuery.data?.id,
-      workspaceId: selectedClockifyWorkspace?.id,
-    })
-  }, [
-    clockifyUserQuery.data?.id,
-    runningEntryQuery.data,
-    selectedClockifyWorkspace?.id,
-    syncedTimeEntriesQuery.data,
-    workItemTimeSummaries,
-    workItems.length,
-  ])
+  const workItemTimeSummaries = trackingQuery.data ?? emptyClockifySummaries
   const workItemsWithTracking = useMemo(
     () => mergeGithubWorkItemTimeSummaries(workItems, workItemTimeSummaries),
     [workItemTimeSummaries, workItems],
@@ -375,15 +358,13 @@ function GitHubWidgetContent() {
         throw new MissingClockifyProjectError()
       }
 
-      const entry = await createClockifyTimeEntryForGithubWorkItem({
+      return createClockifyTimeEntryForGithubWorkItem({
         billable: clockifyBillable,
         description: workItemDescriptions.get(item.id) ?? '',
         item,
         workspaceId: clockifyTimerProject.workspaceId,
         projectId: clockifyTimerProject.projectId,
       })
-
-      return { entry, item }
     },
     onError: error => {
       if (error instanceof MissingClockifyProjectError) {
@@ -397,7 +378,7 @@ function GitHubWidgetContent() {
         description: getErrorMessage(error),
       })
     },
-    onSuccess: ({ item }) => {
+    onSuccess: (_, item) => {
       appToast.success(`Started timer for ${getGithubWorkItemLabel(item)}`)
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
@@ -405,12 +386,14 @@ function GitHubWidgetContent() {
     },
   })
   const stopTrackingMutation = useMutation({
+    onMutate: () => clockifyEntryCache.getLifecycle(),
     mutationFn: async (item: SyncedGithubWorkItem) => {
       if (!runningEntry) {
         throw new MissingRunningClockifyEntryError()
       }
 
-      return stopClockifyTimerForEntry({ entry: runningEntry, item })
+      const entry = await stopClockifyTimerForEntry({ entry: runningEntry, item })
+      return { entry, original: runningEntry }
     },
     onError: error => {
       if (error instanceof MissingRunningClockifyEntryError) {
@@ -422,7 +405,13 @@ function GitHubWidgetContent() {
         description: getErrorMessage(error),
       })
     },
-    onSuccess: (_, item) => {
+    onSuccess: async ({ entry, original }, item, lifecycle) => {
+      try {
+        await cacheClockifyEntryResult(entry, original, lifecycle)
+      } catch (error) {
+        console.warn('[github widget] Could not cache stopped entry:', error)
+        appToast.warning('Timer stopped, but the local cache could not be updated.')
+      }
       appToast.success(`Stopped timer for ${getGithubWorkItemLabel(item)}`)
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
@@ -534,7 +523,7 @@ function GitHubWidgetContent() {
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map(header => (
                     <th key={header.id} className={getGithubWorkItemTableCellClassName(header.column.id)}>
-                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                      {!header.isPlaceholder && flexRender(header.column.columnDef.header, header.getContext())}
                     </th>
                   ))}
                 </tr>
@@ -542,7 +531,9 @@ function GitHubWidgetContent() {
             </thead>
             <tbody>
               {table.getRowModel().rows.map(row => (
-                <tr key={row.id} className={getGithubTableRowClassName(row.original.id === activeGithubWorkItemId)}>
+                <tr
+                  key={row.id}
+                  className={row.original.id === activeGithubWorkItemId ? 'tracking-active-row' : undefined}>
                   {row.getVisibleCells().map(cell =>
                     cell.column.id === 'identifier' ? (
                       <th key={cell.id} className={getGithubWorkItemTableCellClassName(cell.column.id)} scope="row">
@@ -560,28 +551,78 @@ function GitHubWidgetContent() {
           </table>
         </div>
 
-        {syncQuery.isLoading ? (
+        {(syncQuery.isLoading || (!page.data && !page.error)) && (
           <div className="grid min-h-48 place-items-center">
             <span className="loading loading-spinner loading-md" />
           </div>
-        ) : null}
+        )}
 
-        {syncQuery.isError ? (
-          <div className="text-error grid min-h-48 place-items-center px-4 text-center text-sm">
-            Could not load GitHub work items. {getErrorMessage(syncQuery.error)}
+        {!!trackingQuery.error && (
+          <div role="alert" className="text-error px-4 py-2 text-sm">
+            Could not load Clockify totals. {getErrorMessage(trackingQuery.error)}{' '}
+            <button className="btn btn-sm" type="button" onClick={trackingQuery.retry}>
+              Retry
+            </button>
           </div>
-        ) : null}
+        )}
 
-        {syncQuery.isSuccess && workItems.length === 0 ? (
+        {!!(syncQuery.isError || page.error || authors.error) && (
+          <div className="text-error grid min-h-48 place-items-center px-4 text-center text-sm">
+            <span>
+              Could not load GitHub work items. {getErrorMessage(syncQuery.error ?? page.error ?? authors.error)}
+            </span>
+            {!!(page.error || authors.error) && (
+              <button
+                className="btn btn-sm"
+                type="button"
+                onClick={() => {
+                  page.retry()
+                  authors.retry()
+                }}>
+                Retry local data
+              </button>
+            )}
+          </div>
+        )}
+
+        {!!page.data && !authors.error && !syncQuery.isLoading && !syncQuery.isError && workItems.length === 0 && (
           <div className="text-base-content/60 grid min-h-48 place-items-center px-4 text-center text-sm">
             No GitHub work items found.
           </div>
-        ) : null}
+        )}
+        {!!page.data && (cursors.length > 0 || page.data.hasMore) && (
+          <div className="flex justify-end gap-2 p-3">
+            <button
+              className="btn btn-sm"
+              type="button"
+              disabled={page.isPending || !cursors.length}
+              onClick={() =>
+                setPagination({ key: filterKey, cursors: cursors.slice(0, -1), revision: page.data?.revision })
+              }>
+              Previous
+            </button>
+            <button
+              className="btn btn-sm"
+              type="button"
+              disabled={page.isPending || !page.data.hasMore}
+              onClick={() => {
+                if (page.data?.cursor)
+                  setPagination({
+                    key: filterKey,
+                    cursors: [...cursors, page.data.cursor],
+                    revision: page.data.revision,
+                  })
+              }}>
+              Next
+            </button>
+          </div>
+        )}
       </div>
 
       {!!manualWorkItem && (
         <ClockifyEntryTimeDialog
           description={`${getGithubWorkItemLabel(manualWorkItem)}: ${manualWorkItem.title}`}
+          workspaceId={clockifyTimerProject?.workspaceId}
           onCancel={() => setManualWorkItem(null)}
           onSave={interval => {
             if (!clockifyTimerProject) throw new MissingClockifyProjectError()
@@ -604,10 +645,6 @@ function GitHubWidgetContent() {
       )}
     </section>
   )
-}
-
-function getGithubWorkItemTableMeta(meta: unknown) {
-  return meta as GithubWorkItemTableMeta
 }
 
 function StartTrackingButton({
@@ -796,22 +833,22 @@ function GithubAuthorPicker({ availableAuthors, currentAuthor, onChange, selecte
   return (
     <>
       <div className="flex h-8 items-center gap-0">
-        {displayAuthors.length ? (
+        {!!displayAuthors.length && (
           <div
             aria-label={`Selected GitHub authors: ${displayAuthors.map(author => author.username).join(', ')}`}
             className="avatar-group -space-x-1">
             {displayAuthors.slice(0, 4).map(author => (
               <GithubAuthorAvatar key={author.username} author={author} className="size-6" />
             ))}
-            {displayAuthors.length > 4 ? (
+            {displayAuthors.length > 4 && (
               <div className="avatar avatar-placeholder" title={`${displayAuthors.length - 4} more selected authors`}>
                 <div className="bg-base-300 text-base-content/70 size-6 text-[10px] font-semibold">
                   <span>+{displayAuthors.length - 4}</span>
                 </div>
               </div>
-            ) : null}
+            )}
           </div>
-        ) : null}
+        )}
         <button
           aria-haspopup="dialog"
           aria-label="Filter GitHub work items by author"
@@ -856,7 +893,7 @@ function GithubAuthorPicker({ availableAuthors, currentAuthor, onChange, selecte
                 }}
                 onChange={event => setSearch(event.currentTarget.value)}
               />
-              {search ? (
+              {!!search && (
                 <button
                   aria-label="Clear author search"
                   className="btn btn-ghost btn-xs btn-circle"
@@ -864,7 +901,7 @@ function GithubAuthorPicker({ availableAuthors, currentAuthor, onChange, selecte
                   onClick={() => setSearch('')}>
                   <IconX className="size-3" />
                 </button>
-              ) : null}
+              )}
             </div>
 
             <fieldset
@@ -894,7 +931,7 @@ function GithubAuthorPicker({ availableAuthors, currentAuthor, onChange, selecte
                       />
                       <GithubAuthorAvatar author={author} className="size-8" />
                       <span className="min-w-0 flex-1 truncate text-sm">{author.username}</span>
-                      {isCurrentAuthor ? <span className="text-base-content/60 text-xs">You</span> : null}
+                      {isCurrentAuthor && <span className="text-base-content/60 text-xs">You</span>}
                     </label>
                   )
                 })
@@ -1032,13 +1069,13 @@ function GithubLabelPicker({ onChange, repositories, selectedLabels }: GithubLab
   return (
     <>
       <div className="flex h-8 items-center gap-1">
-        {selectedLabels.length ? (
+        {!!selectedLabels.length && (
           <span
             className="text-base-content/70 text-xs whitespace-nowrap"
             title={`Selected GitHub labels: ${selectedLabels.map(label => label.name).join(', ')}`}>
             {selectedLabels.length} {selectedLabels.length === 1 ? 'Label' : 'Labels'}
           </span>
-        ) : null}
+        )}
         <button
           aria-haspopup="dialog"
           aria-label="Filter GitHub work items by label"
@@ -1083,7 +1120,7 @@ function GithubLabelPicker({ onChange, repositories, selectedLabels }: GithubLab
                 }}
                 onChange={event => setSearch(event.currentTarget.value)}
               />
-              {search ? (
+              {!!search && (
                 <button
                   aria-label="Clear label search"
                   className="btn btn-ghost btn-xs btn-circle"
@@ -1091,30 +1128,32 @@ function GithubLabelPicker({ onChange, repositories, selectedLabels }: GithubLab
                   onClick={() => setSearch('')}>
                   <IconX className="size-3" />
                 </button>
-              ) : null}
+              )}
             </div>
 
             <fieldset
               className="border-base-content/10 max-h-72 overflow-y-auto border-y py-1"
               aria-label="GitHub labels">
-              {!repositories.length ? (
+              {!repositories.length && (
                 <div className="text-base-content/60 px-2 py-4 text-center text-sm">
                   Select active GitHub repositories in Settings first.
                 </div>
-              ) : null}
-              {repositories.length && labelsLoading ? (
+              )}
+              {!!repositories.length && labelsLoading && (
                 <div className="text-base-content/60 flex items-center justify-center gap-2 px-2 py-4 text-sm">
                   <span className="loading loading-spinner loading-sm" />
                   Loading labels…
                 </div>
-              ) : null}
-              {repositories.length && labelLoadError ? (
+              )}
+              {!!repositories.length && !!labelLoadError && (
                 <div className="text-error px-2 py-4 text-center text-sm">
                   Could not load labels. {getErrorMessage(labelLoadError)}
                 </div>
-              ) : null}
-              {repositories.length && !labelsLoading && !labelLoadError ? (
-                visibleLabels.length ? (
+              )}
+              {!!repositories.length &&
+                !labelsLoading &&
+                !labelLoadError &&
+                (visibleLabels.length ? (
                   visibleLabels.map(label => (
                     <label
                       key={normalizeGithubLabelName(label.name)}
@@ -1142,8 +1181,7 @@ function GithubLabelPicker({ onChange, repositories, selectedLabels }: GithubLab
                       ? 'No labels match your search.'
                       : 'No labels are available in the active repositories.'}
                   </div>
-                )
-              ) : null}
+                ))}
             </fieldset>
 
             <div className="modal-action mt-0">
@@ -1194,33 +1232,6 @@ function AuthorAvatar({ item }: { item: SyncedGithubWorkItem }) {
   )
 }
 
-function getGithubAuthorsFromWorkItems(items: SyncedGithubWorkItem[]) {
-  return mergeGithubAuthors(
-    items.flatMap(item => (item.author ? [{ avatarUrl: item.authorAvatarUrl, username: item.author }] : [])),
-  )
-}
-
-function mergeGithubAuthors(...authorGroups: GithubSelectedAuthor[][]) {
-  const authors = new Map<string, GithubSelectedAuthor>()
-
-  for (const authorGroup of authorGroups) {
-    for (const author of authorGroup) {
-      const usernameKey = normalizeGithubUsername(author.username)
-      const existingAuthor = authors.get(usernameKey)
-
-      if (!existingAuthor || (!existingAuthor.avatarUrl && author.avatarUrl)) {
-        authors.set(usernameKey, author)
-      }
-    }
-  }
-
-  return [...authors.values()].sort(compareGithubAuthors)
-}
-
-function compareGithubAuthors(left: GithubSelectedAuthor, right: GithubSelectedAuthor) {
-  return left.username.localeCompare(right.username, undefined, { sensitivity: 'base' })
-}
-
 function areGithubAuthorSelectionsEqual(left: GithubSelectedAuthor[], right: GithubSelectedAuthor[]) {
   const leftUsernames = left.map(author => normalizeGithubUsername(author.username)).sort()
   const rightUsernames = right.map(author => normalizeGithubUsername(author.username)).sort()
@@ -1265,25 +1276,6 @@ function isGithubUsernameEqual(left: string | undefined, right: string | undefin
   return Boolean(left && right) && normalizeGithubUsername(left!) === normalizeGithubUsername(right!)
 }
 
-function normalizeGithubUsername(username: string) {
-  return username.trim().toLowerCase()
-}
-
-function normalizeGithubLabelName(name: string) {
-  return name.trim().toLowerCase()
-}
-
-function getGithubWorkItemLabelNames(item: SyncedGithubWorkItem) {
-  return (item.item.labels ?? [])
-    .map(label => (typeof label === 'string' ? label : label.name))
-    .filter((labelName): labelName is string => Boolean(labelName))
-    .map(normalizeGithubLabelName)
-}
-
-function compareGithubWorkItems(left: SyncedGithubWorkItem, right: SyncedGithubWorkItem) {
-  return right.updatedAt.localeCompare(left.updatedAt)
-}
-
 function getGithubWorkItemLabel(item: SyncedGithubWorkItem) {
   return `${item.type === 'pullRequest' ? 'PR' : 'Issue'}#${item.number}`
 }
@@ -1292,10 +1284,6 @@ function getGithubRepositoryName(repositoryFullName: string) {
   const parts = repositoryFullName.split('/')
 
   return parts[parts.length - 1] ?? repositoryFullName
-}
-
-function getGithubTableRowClassName(active: boolean) {
-  return active ? 'tracking-active-row' : undefined
 }
 
 function getGithubWorkItemTableCellClassName(columnId: string) {
@@ -1324,33 +1312,4 @@ class MissingRunningClockifyEntryError extends Error {
   constructor() {
     super('Missing running Clockify timer.')
   }
-}
-
-function summarizeGithubWidgetSyncedEntries(
-  entries: Array<{ entry: TimeEntryDtoImplV1; id: string; startedAt: string }>,
-) {
-  return entries.slice(0, 5).map(entry => ({
-    description: truncateGithubWidgetLogText(entry.entry.description),
-    end: entry.entry.timeInterval?.end,
-    id: entry.id,
-    refs: parseInternalRefs(entry.entry.description).map(ref => ref.provider),
-    startedAt: entry.startedAt,
-  }))
-}
-
-function truncateGithubWidgetLogText(value: string | undefined, maxLength = 140) {
-  if (!value) {
-    return value
-  }
-
-  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
-}
-
-function githubWidgetLog(message: string, details?: unknown) {
-  if (details === undefined) {
-    console.info(`[github widget] ${message}`)
-    return
-  }
-
-  console.info(`[github widget] ${message}`, details)
 }

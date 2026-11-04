@@ -53,9 +53,8 @@ export function AppHeader() {
       </h1>
 
       <div className="flex items-center gap-1 justify-self-end">
-        {authenticated ? (
+        {authenticated && (
           <>
-            <div id="telegram-chat-launcher" className="contents" />
             <button
               className="btn btn-square btn-ghost"
               type="button"
@@ -76,7 +75,7 @@ export function AppHeader() {
               <IconLogout className="size-5" />
             </button>
           </>
-        ) : null}
+        )}
         <label
           className="btn btn-square btn-ghost relative has-focus-visible:outline-2 has-focus-visible:outline-offset-2"
           title={`Theme: ${capitalCase(theme.theme)} (⌘⇧A)`}>

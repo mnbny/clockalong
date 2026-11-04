@@ -6,6 +6,7 @@ import { ClockifySettings } from '../components/ClockifySettings'
 import { GitHubSettings } from '../components/GitHubSettings'
 import { LinearSettings } from '../components/LinearSettings'
 import { PageHeader } from '../components/PageHeader'
+import { PaseoSettings } from '../components/PaseoSettings'
 import { QuickTimersSettings } from '../components/QuickTimersSettings'
 import { TelegramSettings } from '../components/TelegramSettings'
 
@@ -27,10 +28,11 @@ function SettingsScreen() {
 
       <div className="flex w-full flex-col gap-10">
         <QuickTimersSettings />
+        <ClockifySettings />
         <LinearSettings />
         <GitHubSettings />
         <TelegramSettings />
-        <ClockifySettings />
+        <PaseoSettings />
         <AppSettings />
       </div>
     </section>
