@@ -6,8 +6,10 @@ import { createContext, createElement, useContext, useEffect, useMemo, useRef, u
 
 import { appToast } from '../../components/AppToaster'
 import { useAppInit } from '../../hooks/useAppInit'
+import { usePaseoAutomation } from '../../hooks/usePaseoAutomation'
 import { Consts } from '../../lib/consts'
 import { db } from '../db'
+import { preparePaseoRuns } from '../paseo/automation'
 import { type TelegramGroupState } from './group'
 import { TelegramNotificationCollector } from './notification-collector'
 import { TelegramNotificationStore } from './notification-store'
@@ -34,6 +36,7 @@ function useTelegramData() {
   const [notificationError, setNotificationError] = useState(false)
   const collector = useRef<TelegramNotificationCollector | null>(null)
   const chatReady = chatState.chat?.isReady
+  usePaseoAutomation(identity?.scope, !!chatReady)
 
   useEffect(() => {
     setNotificationError(false)
@@ -43,6 +46,7 @@ function useTelegramData() {
       notificationStore,
       setNotificationError,
       devReplayRun,
+      (items, signal) => preparePaseoRuns(items, notificationStore.scope, signal),
     )
     collector.current = next
     next.start()
