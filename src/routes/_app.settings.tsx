@@ -6,6 +6,7 @@ import { ClockifySettings } from '../components/ClockifySettings'
 import { GitHubSettings } from '../components/GitHubSettings'
 import { LinearSettings } from '../components/LinearSettings'
 import { PageHeader } from '../components/PageHeader'
+import { PaseoSettings } from '../components/PaseoSettings'
 import { QuickTimersSettings } from '../components/QuickTimersSettings'
 import { TelegramSettings } from '../components/TelegramSettings'
 
@@ -31,6 +32,7 @@ function SettingsScreen() {
         <LinearSettings />
         <GitHubSettings />
         <TelegramSettings />
+        <PaseoSettings />
         <AppSettings />
       </div>
     </section>
