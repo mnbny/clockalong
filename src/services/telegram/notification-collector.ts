@@ -1,6 +1,7 @@
+import type { PaseoRun } from '../paseo/triggers'
 import type { TelegramChat } from './chat'
 import type { HistoryCursor, MessageRecord, TelegramMessageEvent } from './chat-data'
-import type { TelegramNotificationStore } from './notification-store'
+import type { NotificationMessage, TelegramNotificationStore } from './notification-store'
 
 import { eligibleNotification } from './notification-store'
 
@@ -25,6 +26,7 @@ export class TelegramNotificationCollector {
     readonly store: TelegramNotificationStore,
     private readonly onError: (failed: boolean) => void = () => {},
     private readonly devReplayRun?: string,
+    private readonly prepareRuns?: (items: NotificationMessage[], signal: AbortSignal) => Promise<PaseoRun[]>,
   ) {}
 
   private get signal() {
@@ -64,8 +66,10 @@ export class TelegramNotificationCollector {
         // A failed first scan must still seed from history, not from an arbitrary live event.
         if (!checkpoint) return
         const items = await this.project([event.record])
+        const onlyExisting = event.edited || event.record.view.id <= checkpoint.lastMessageId
         await this.store.merge(items, {
-          onlyExisting: event.edited || event.record.view.id <= checkpoint.lastMessageId,
+          onlyExisting,
+          runs: !onlyExisting ? await this.prepareRuns?.(items, this.signal) : undefined,
           active: this.active,
         })
       }
@@ -125,7 +129,11 @@ export class TelegramNotificationCollector {
         : ordered.slice(0, 3)
       const items = await this.project(collected)
       // Only a fully successful scan advances the cursor. Realtime never advances it.
-      await this.store.merge(items, { checkpoint: newestId, active: this.active })
+      await this.store.merge(items, {
+        checkpoint: newestId,
+        active: this.active,
+        runs: checkpoint ? await this.prepareRuns?.(items, this.signal) : undefined,
+      })
       if (replay) {
         const recent = ordered.slice(0, 3)
         await this.store.merge(await this.project(recent), {

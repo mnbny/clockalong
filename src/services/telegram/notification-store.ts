@@ -1,4 +1,5 @@
 import type { DB } from '../db'
+import type { PaseoRun } from '../paseo/triggers'
 import type { ChatMessage } from './chat-data'
 
 export type TelegramNotification = {
@@ -61,6 +62,7 @@ export class TelegramNotificationStore {
       devReplayRun?: string
       replayIds?: number[]
       active?: () => boolean
+      runs?: PaseoRun[]
     } = {},
   ) {
     const { database, scope } = this
@@ -68,6 +70,7 @@ export class TelegramNotificationStore {
       'rw',
       database.telegramNotifications,
       database.telegramNotificationCheckpoints,
+      database.paseoRuns,
       async () => {
         if (options.active && !options.active()) return
         const checkpoint = await this.checkpoint()
@@ -77,6 +80,13 @@ export class TelegramNotificationStore {
           const replay = !!options.devReplayRun && options.replayIds?.includes(message.id)
           if (!existing && options.onlyExisting && !replay) continue
           const newer = !existing || (message.editDate ?? 0) >= (existing.message.editDate ?? 0)
+          if (!existing && !options.onlyExisting && !options.devReplayRun) {
+            for (const run of options.runs ?? []) {
+              if (run.messageId === message.id && run.scope === scope && !(await database.paseoRuns.get(run.id))) {
+                await database.paseoRuns.add(run)
+              }
+            }
+          }
           await database.telegramNotifications.put({
             scope,
             id: message.id,
