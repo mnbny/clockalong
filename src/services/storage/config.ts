@@ -1,3 +1,5 @@
+import type { PaseoTriggerSchema } from '../paseo/triggers'
+
 import {
   defaultClockifyDescriptionTemplate,
   defaultClockifyDescriptionTemplateFallback,
@@ -105,6 +107,11 @@ export type QuickTimersCacheEntry = {
 }
 
 const storageConfig = {
+  paseoTriggers: {
+    type: 'object',
+    default: [] as PaseoTriggerSchema[],
+    version: 1,
+  },
   clockifyBillable: {
     type: 'boolean',
     default: true,

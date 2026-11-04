@@ -2,6 +2,7 @@ import type { ClockifyEntryRef, StoredClockifyEntry } from './clockify/entry-cac
 import type { SyncedGithubWorkItem } from './github/sync'
 import type { GithubAuthorIndex, GithubWorkItemIndex, StoredGithubWorkItem } from './github/work-item-index'
 import type { StoredLinearTicket } from './linear/ticket-cache'
+import type { PaseoRun } from './paseo/triggers'
 import type { TelegramNotification, TelegramNotificationCheckpoint } from './telegram/notification-store'
 
 import Dexie, { type Table } from 'dexie'
@@ -9,6 +10,7 @@ import Dexie, { type Table } from 'dexie'
 import { getGithubAuthorEntry, getGithubIndexEntries, withGithubRefKey } from './github/work-item-index'
 
 export class DB extends Dexie {
+  declare paseoRuns: Table<PaseoRun, string>
   declare githubWorkItems: Table<StoredGithubWorkItem, string, SyncedGithubWorkItem>
   declare githubWorkItemIndex: Table<GithubWorkItemIndex, [string, string, string]>
   declare githubAuthors: Table<GithubAuthorIndex, string>
@@ -60,6 +62,23 @@ export class DB extends Dexie {
       telegramNotifications: '[scope+id],scope,[scope+clearedAt+id],[scope+devReplayRun]',
       telegramNotificationCheckpoints: 'scope',
     })
+    this.version(6).stores({ paseoRuns: 'id,status,createdAt,scope' })
+    this.version(7)
+      .stores({ paseoRuns: 'id,status,createdAt,scope' })
+      .upgrade(async transaction => {
+        await transaction
+          .table<PaseoRun & { args?: string[]; cwd?: string }>('paseoRuns')
+          .toCollection()
+          .modify(run => {
+            delete run.args
+            delete run.cwd
+            if (!run.request && (run.status === 'pending' || run.status === 'dispatching')) {
+              run.status = run.status === 'pending' ? 'cancelled' : 'unconfirmed'
+              run.detail =
+                'The trigger format changed. Review the trigger’s project and agent selections before using it again.'
+            }
+          })
+      })
   }
 }
 
