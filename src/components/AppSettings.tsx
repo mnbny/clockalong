@@ -14,6 +14,7 @@ import { capitalCase } from 'change-case'
 import { type ChangeEvent, useMemo, useRef, useState } from 'react'
 
 import { useAppLogs } from '../hooks/useAppLogs'
+import { parseStoredPaseoTrigger, readPaseoTriggers } from '../services/paseo/triggers'
 import { storage, themeOptions } from '../services/storage/config'
 import { type StorageKey, type StorageValue } from '../services/storage/storage'
 import { useStorage } from '../services/storage/useStorage'
@@ -39,6 +40,7 @@ const settingsBackupKeys = [
   'quickTimersColumns',
   'quickTimers',
   'quickTimersCache',
+  'paseoTriggers',
   'menuBarVisible',
   'mcpServerEnabled',
   'linearTicketSyncLimit',
@@ -662,6 +664,25 @@ async function importSettingsBackup(snapshot: Record<string, unknown>) {
 
     const value = snapshot[key]
 
+    if (key === 'paseoTriggers') {
+      if (!Array.isArray(value) || value.some(trigger => !parseStoredPaseoTrigger(trigger).success)) {
+        skippedKeys.push(key)
+        continue
+      }
+      await storage.set(
+        'paseoTriggers',
+        readPaseoTriggers(value).map(trigger => ({
+          ...trigger,
+          enabled: false,
+          enabledAt: 0,
+          afterMessageId: 0,
+          revision: crypto.randomUUID(),
+        })),
+      )
+      importedKeys.push(key)
+      continue
+    }
+
     if (!isStorageValue(key, value)) {
       skippedKeys.push(key)
       continue
@@ -743,6 +764,7 @@ const customFrontendLogPrefixes = [
   '[linear widget]',
   '[menu bar]',
   '[mcp command]',
+  '[paseo]',
   '[quick timers]',
   '[sign in]',
   '[storage]',
