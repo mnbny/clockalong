@@ -14,9 +14,12 @@ export type ClockifyEntryRef = ClockifyScope & { refKey: string; entryId: string
 
 const fields = [
   'billable',
+  'costRate',
+  'customFieldValues',
   'description',
   'hourlyRate',
   'id',
+  'isLocked',
   'projectId',
   'tagIds',
   'taskId',
@@ -26,7 +29,7 @@ const fields = [
   'workspaceId',
 ] as const satisfies ReadonlyArray<keyof TimeEntryWithRatesDtoV1>
 
-export type StoredClockifyTimeEntry = Pick<TimeEntryWithRatesDtoV1, (typeof fields)[number]>
+export type StoredClockifyTimeEntry = Pick<TimeEntryWithRatesDtoV1, (typeof fields)[number]> & { invoiced?: boolean }
 
 function normalizeStart(start: string | undefined) {
   const time = start ? Date.parse(start) : NaN
@@ -53,7 +56,7 @@ export function createClockifyEntryCache(database: DB) {
   }
 
   function rowFor(
-    entry: TimeEntryWithRatesDtoV1,
+    entry: StoredClockifyTimeEntry,
     scope: ClockifyScope,
     syncedAt: string,
     revision: number,
@@ -65,7 +68,7 @@ export function createClockifyEntryCache(database: DB) {
     )
       return null
     return {
-      entry: pick(entry, ...fields),
+      entry: { ...pick(entry, ...fields), invoiced: entry.invoiced },
       id: entry.id,
       startedAt: normalizeStart(entry.timeInterval?.start),
       syncedAt,
@@ -92,7 +95,7 @@ export function createClockifyEntryCache(database: DB) {
   }
 
   async function upsert(
-    entry: TimeEntryWithRatesDtoV1,
+    entry: StoredClockifyTimeEntry,
     scope: ClockifyScope,
     syncedAt = new Date().toISOString(),
     expectedLifecycle = lifecycle,
@@ -111,7 +114,7 @@ export function createClockifyEntryCache(database: DB) {
 
   async function reconcile(
     scope: ClockifyScope,
-    incoming: TimeEntryWithRatesDtoV1[],
+    incoming: StoredClockifyTimeEntry[],
     start: string,
     end: string,
     syncedAt: string,

@@ -1,9 +1,10 @@
 import type { TimeEntryWithRatesDtoV1 } from '../../../src/services/clockify/generated/clockify'
 
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { queryClient, queryKeys } from '../../../src/lib/query-client'
-import { clockify } from '../../../src/services/clockify/client'
+import { clockify, clockifyReports } from '../../../src/services/clockify/client'
+import { clockifyEntryCache } from '../../../src/services/clockify/entry-cache'
 import {
   cacheClockifyEntryResult,
   clearSyncedClockifyTimeEntries,
@@ -31,8 +32,13 @@ async function store(value: TimeEntryWithRatesDtoV1) {
   await cacheClockifyEntryResult(value)
 }
 
+beforeEach(() => {
+  vi.spyOn(clockifyReports, 'generateDetailedReport').mockImplementation(async () => ({ totals: [], timeentries: [] }))
+})
+
 afterEach(async () => {
   vi.restoreAllMocks()
+  vi.useRealTimers()
   queryClient.clear()
   await clearSyncedClockifyTimeEntries()
 })
@@ -118,6 +124,78 @@ test('lookback uses local calendar days across both daylight-saving transitions'
     if (previous === undefined) delete process.env.TZ
     else process.env.TZ = previous
   }
+})
+
+test('sync paginates invoiced IDs for the same user and local date range and retains collapse metadata', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-08T20:00:00Z'))
+  vi.spyOn(console, 'info').mockImplementation(() => {})
+  vi.spyOn(storage, 'get').mockImplementation(async key => storage.config[key].default)
+  const start = new Date('2026-11-01T07:00:00Z')
+  queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user', settings: { timeZone: 'America/Los_Angeles' } })
+  const completed = { start: '2026-11-02T18:00:00Z', end: '2026-11-02T18:00:05Z' }
+  vi.spyOn(clockify, 'getTimeEntries').mockResolvedValue([
+    entry('invoiced', { timeInterval: completed }),
+    entry('available', {
+      timeInterval: completed,
+      customFieldValues: [{ customFieldId: 'field', value: { selection: 'value' } }],
+      costRate: { amount: 300, currency: 'USD' },
+      isLocked: true,
+    }),
+    entry('running', { timeInterval: { start: completed.start } }),
+    entry('outside', { timeInterval: { start: '2026-10-01T00:00:00Z', end: '2026-10-01T00:00:05Z' } }),
+  ])
+  const reports = vi
+    .mocked(clockifyReports.generateDetailedReport)
+    .mockImplementationOnce(async () => ({
+      totals: [],
+      timeentries: Array.from({ length: 100 }, (_, i) => ({ _id: 'other-' + i })),
+    }))
+    .mockImplementationOnce(async () => ({ totals: [], timeentries: [{ _id: 'invoiced' }] }))
+  expect(await syncClockifyEntries({ ...scope, start })).toMatchObject({ invoiceStatusFailed: false })
+  expect(reports.mock.calls.map(([body]) => body.detailedFilter?.page)).toEqual([1, 2])
+  for (const [body, request] of reports.mock.calls) {
+    expect(body).toMatchObject({
+      dateRangeStart: '2026-11-01T00:00:00.000',
+      timeZone: 'America/Los_Angeles',
+      invoicingState: 'INVOICED',
+      rounding: false,
+      users: { ids: ['user'], contains: 'CONTAINS', status: 'ALL' },
+    })
+    expect(body.dateRangeEnd).not.toMatch(/Z$/)
+    expect(request.params).toEqual({ workspaceId: 'workspace' })
+  }
+  const cached = async (id: string) => (await db.clockifyEntries.get(['user', 'workspace', id]))?.entry
+  expect((await cached('invoiced'))?.invoiced).toBe(true)
+  expect(await cached('available')).toMatchObject({
+    invoiced: false,
+    customFieldValues: [{ customFieldId: 'field', value: { selection: 'value' } }],
+    costRate: { amount: 300, currency: 'USD' },
+    isLocked: true,
+  })
+  expect((await cached('running'))?.invoiced).toBeUndefined()
+  expect((await cached('outside'))?.invoiced).toBeUndefined()
+})
+
+test('failed or malformed invoice pages leave statuses unknown while completing the entry sync', async () => {
+  vi.spyOn(console, 'info').mockImplementation(() => {})
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  vi.spyOn(storage, 'get').mockImplementation(async key => storage.config[key].default)
+  const original = entry('original')
+  await clockifyEntryCache.upsert({ ...original, invoiced: false }, scope)
+  vi.spyOn(clockify, 'getTimeEntries').mockResolvedValue([original])
+  const reports = vi
+    .mocked(clockifyReports.generateDetailedReport)
+    .mockImplementationOnce(async () => ({
+      totals: [],
+      timeentries: Array.from({ length: 100 }, () => ({ _id: 'original' })),
+    }))
+    .mockRejectedValueOnce(new Error('Reports unavailable'))
+  expect(await syncClockifyEntries(scope)).toMatchObject({ invoiceStatusFailed: true, entriesStored: 1 })
+  expect((await db.clockifyEntries.get(['user', 'workspace', 'original']))?.entry.invoiced).toBeUndefined()
+  reports.mockResolvedValueOnce({ totals: [] })
+  expect(await syncClockifyEntries(scope)).toMatchObject({ invoiceStatusFailed: true, entriesStored: 1 })
+  expect((await db.clockifyEntries.get(['user', 'workspace', 'original']))?.entry.invoiced).toBeUndefined()
 })
 
 test('a direct edit made while a page is in flight is neither deleted nor overwritten', async () => {

@@ -1,5 +1,5 @@
 import type { StoredClockifyTimeEntry } from './entry-cache'
-import type { TimeEntryWithRatesDtoV1 } from './generated/clockify'
+import type { TimeEntryWithRatesDtoV1, UserDtoV1, WorkspaceDtoV1 } from './generated/clockify'
 import type { PropsWithChildren } from 'react'
 
 import { queryOptions, useQuery } from '@tanstack/react-query'
@@ -13,6 +13,8 @@ import { storage } from '../storage/config'
 import { useStorage } from '../storage/useStorage'
 import { clockify } from './client'
 import { clockifyEntryCache } from './entry-cache'
+import { getInvoicedClockifyEntryIds } from './invoicing'
+import { formatClockifyEntryFilterDate } from './ranges'
 import {
   type ClockifyEntrySyncDaysOption,
   type ClockifyEntrySyncIntervalOption,
@@ -33,9 +35,11 @@ export type SyncedClockifyTimeEntry = {
 type ClockifyEntrySyncOptions = {
   workspaceId: string
   userId: string
+  start?: Date
 }
 
 type ClockifyEntrySyncResult = {
+  invoiceStatusFailed: boolean
   entriesDeleted: number
   entriesFetched: number
   entriesStored: number
@@ -136,12 +140,15 @@ export async function clearSyncedClockifyTimeEntries() {
   return clockifyEntryCache.clear()
 }
 
-export async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOptions) {
+export async function syncClockifyEntries({ userId, workspaceId, start: requestedStart }: ClockifyEntrySyncOptions) {
   const generation = clockifyEntryCache.beginSync()
   const now = new Date()
   const initialRevision = await clockifyEntryCache.getRevision()
   const syncDays = await storage.get('clockifyEntrySyncDays')
-  const start = getClockifyEntrySyncStart(syncDays, now).toISOString()
+  const startDate = requestedStart ?? getClockifyEntrySyncStart(syncDays, now)
+  const start = startDate.toISOString()
+  const timeZone = queryClient.getQueryData<UserDtoV1>(queryKeys.clockify.loggedUser)?.settings?.timeZone
+  const queryStart = formatClockifyEntryFilterDate(startDate, timeZone)
   const syncedAt = new Date().toISOString()
   const refCounts = {
     github: 0,
@@ -172,7 +179,7 @@ export async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntry
           hydrated: true,
           page,
           'page-size': clockifyEntrySyncPageSize,
-          start,
+          start: queryStart,
         },
       })
       const pageRefCounts = getClockifyEntryRefCounts(entries)
@@ -198,10 +205,14 @@ export async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntry
       page += 1
     }
 
-    const currentUser = queryClient.getQueryData<{ id?: string; activeWorkspace?: string; defaultWorkspace?: string }>(
-      queryKeys.clockify.loggedUser,
-    )
-    const currentWorkspaces = queryClient.getQueryData<Array<{ id?: string }>>(queryKeys.clockify.workspaces)
+    let invoicedIds: Set<string> | undefined
+    try {
+      invoicedIds = await getInvoicedClockifyEntryIds({ userId, workspaceId }, startDate, now, timeZone)
+    } catch (error) {
+      console.warn('[clockify sync] Invoice status is unavailable:', error)
+    }
+    const currentUser = queryClient.getQueryData<UserDtoV1>(queryKeys.clockify.loggedUser)
+    const currentWorkspaces = queryClient.getQueryData<WorkspaceDtoV1[]>(queryKeys.clockify.workspaces)
     const currentWorkspace = selectClockifyWorkspace(currentUser, currentWorkspaces)
     if (
       (currentUser?.id && currentUser.id !== userId) ||
@@ -211,7 +222,16 @@ export async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntry
     }
     const upsertResult = await clockifyEntryCache.reconcile(
       { userId, workspaceId },
-      entriesToSync,
+      entriesToSync.map(entry => ({
+        ...entry,
+        invoiced:
+          invoicedIds &&
+          entry.id &&
+          Date.parse(entry.timeInterval?.start ?? '') >= startDate.getTime() &&
+          Date.parse(entry.timeInterval?.end ?? '') <= now.getTime()
+            ? invoicedIds.has(entry.id)
+            : undefined,
+      })),
       start,
       now.toISOString(),
       syncedAt,
@@ -226,6 +246,7 @@ export async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntry
 
     const result = {
       entriesDeleted,
+      invoiceStatusFailed: !invoicedIds,
       entriesFetched,
       entriesInserted,
       entriesStored,
@@ -264,7 +285,7 @@ export async function cacheClockifyEntryResult(
     ...response,
     timeInterval: { ...fallback.timeInterval, ...response.timeInterval },
   }
-  const currentUserId = queryClient.getQueryData<{ id?: string }>(queryKeys.clockify.loggedUser)?.id
+  const currentUserId = queryClient.getQueryData<UserDtoV1>(queryKeys.clockify.loggedUser)?.id
   const userId = entry.userId ?? currentUserId
   if (!entry.id || !userId || !entry.workspaceId) return false
   if (currentUserId && currentUserId !== userId) return false
@@ -281,6 +302,25 @@ export function getClockifyEntrySyncStart(days: ClockifyEntrySyncDaysOption, now
   const start = new Date(now)
   start.setDate(start.getDate() - days)
   return start
+}
+
+export async function refreshClockifyEntriesAfterChanges(scope: { userId: string; workspaceId: string }, start: Date) {
+  // A background retry must finish before it can supersede the post-write refresh.
+  await queryClient
+    .getQueryCache()
+    .find({
+      queryKey: queryKeys.clockify.entrySync({ params: scope }),
+      exact: true,
+    })
+    ?.promise?.catch(() => {})
+  const refreshed = await Promise.allSettled([
+    syncClockifyEntries({ ...scope, start }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() }, { throwOnError: true }),
+  ])
+  for (const refresh of refreshed) {
+    if (refresh.status === 'rejected') console.warn('[clockify sync] Could not refresh after changes:', refresh.reason)
+  }
+  return refreshed.some(refresh => refresh.status === 'rejected')
 }
 
 function getClockifyEntryRefCounts(entries: TimeEntryWithRatesDtoV1[]) {

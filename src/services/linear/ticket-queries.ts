@@ -1,6 +1,5 @@
 import type { ClockifyScope } from '../clockify/entry-cache'
 import type { TimeEntryWithRatesDtoV1 } from '../clockify/generated/clockify'
-import type { ClockifyWorkItemTimeSummaries } from '../clockify/work-item-summaries'
 import type { DB } from '../db'
 import type { LinearTicketSortOrderOption } from './ticket-settings'
 import type { LinearTicket } from './tickets'
@@ -28,7 +27,7 @@ function checkDeadline(deadlineAt = Infinity, signal?: AbortSignal) {
   if (signal?.aborted || Date.now() >= deadlineAt) throw new Error('Linear query timed out or cancelled')
 }
 
-export async function queryLinearSummaries(
+export function queryLinearSummaries(
   database: DB,
   viewerId: string,
   scope: ClockifyScope,
@@ -38,23 +37,20 @@ export async function queryLinearSummaries(
   deadlineAt = Infinity,
   signal?: AbortSignal,
 ) {
-  // Async owner resolution can otherwise let the read transaction commit during a live query.
-  return Dexie.waitFor(
-    queryClockifySummaries(
-      database,
-      scope,
-      tickets,
-      item => item.id,
-      getLinearTicketInternalRef,
-      running,
-      now,
-      deadlineAt,
-      signal,
-      async entries => {
-        checkDeadline(deadlineAt, signal)
-        return resolveLinearEntryOwners(database, viewerId, entries)
-      },
-    ),
+  return queryClockifySummaries(
+    database,
+    scope,
+    tickets,
+    item => item.id,
+    getLinearTicketInternalRef,
+    running,
+    now,
+    deadlineAt,
+    signal,
+    entries => {
+      checkDeadline(deadlineAt, signal)
+      return resolveLinearEntryOwners(database, viewerId, entries)
+    },
   )
 }
 
@@ -69,29 +65,18 @@ export async function resolveLinearEntryOwners(database: DB, viewerId: string, e
   return resolveClockifyEntryOwners(entries, 'linear', new Map(matches.map(row => [row.refKey, row.id])))
 }
 
-function withSummary(ticket: LinearTicket, summaries: ClockifyWorkItemTimeSummaries) {
-  return { ...ticket, ...summaries[ticket.id] }
-}
-
 export async function queryLinearTickets(database: DB, options: TicketQueryOptions) {
   const { viewerId, clockifyScope, runningEntries, sortOrder, showAll, now, deadlineAt, signal } = options
-  return database.transaction(
+  const tickets = await database.transaction(
     'r',
     database.linearTickets,
     database.linearCacheMeta,
-    database.clockifyEntries,
-    database.clockifyEntryRefs,
     database.clockifyCacheMeta,
     async () => {
       checkDeadline(deadlineAt, signal)
-      // Track updates across the async summary reads, whose dependencies can escape the live query.
+      // Track summary changes without holding a transaction open across async owner resolution.
       await database.linearCacheMeta.get('state')
       await database.clockifyCacheMeta.get('revision')
-      const activeId = runningEntries[0]?.id
-        ? (await Dexie.waitFor(resolveLinearEntryOwners(database, viewerId, [runningEntries[0]]))).get(
-            runningEntries[0].id,
-          )
-        : undefined
       const rows: LinearTicket[] = []
       let after: [number, string] | undefined
       while (true) {
@@ -107,30 +92,25 @@ export async function queryLinearTickets(database: DB, options: TicketQueryOptio
           .limit(128)
           .toArray()
         if (!batch.length) break
-        const candidates = batch
-          .map(row => toLinearTicket(row.ticket))
-          .filter(ticket => showAll || !isLinearTicketTerminal(ticket))
-        const summaries = clockifyScope
-          ? await queryLinearSummaries(
-              database,
-              viewerId,
-              clockifyScope,
-              candidates,
-              runningEntries,
-              now,
-              deadlineAt,
-              signal,
-            )
-          : {}
-        rows.push(...candidates.map(ticket => withSummary(ticket, summaries)))
+        rows.push(
+          ...batch.map(row => toLinearTicket(row.ticket)).filter(ticket => showAll || !isLinearTicketTerminal(ticket)),
+        )
         const last = batch[batch.length - 1]
         after = [last.sequence, last.id]
       }
-      checkDeadline(deadlineAt, signal)
-      rows.sort((a, b) => compareLinearTickets(a, b, { sortOrder, activeLinearIssueId: activeId }, now.getTime()))
-      return { rows, activeId }
+      return rows
     },
   )
+  const activeId = runningEntries[0]?.id
+    ? (await resolveLinearEntryOwners(database, viewerId, [runningEntries[0]])).get(runningEntries[0].id)
+    : undefined
+  const summaries = clockifyScope
+    ? await queryLinearSummaries(database, viewerId, clockifyScope, tickets, runningEntries, now, deadlineAt, signal)
+    : {}
+  checkDeadline(deadlineAt, signal)
+  const rows: LinearTicket[] = tickets.map(ticket => ({ ...ticket, ...summaries[ticket.id] }))
+  rows.sort((a, b) => compareLinearTickets(a, b, { sortOrder, activeLinearIssueId: activeId }, now.getTime()))
+  return { rows, activeId }
 }
 
 export async function queryLinearMcpRows(

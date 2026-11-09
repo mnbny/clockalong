@@ -4,7 +4,7 @@ Clockalong separates preferences, secrets, provider data, and image bytes by own
 
 - The native Tauri store holds small, versioned settings, including Quick Timer presets, SVG icons, and Paseo trigger definitions.
 - Stronghold holds Clockify and GitHub credentials, Linear tokens, and the Telegram session and private group reference.
-- Dexie manages IndexedDB for Clockify entries, Linear issues, GitHub work items, Telegram notifications, and Paseo execution records.
+- Dexie manages IndexedDB for Clockify entries, collapse progress, Linear issues, GitHub work items, Telegram notifications, and Paseo execution records.
 - TanStack Query holds remote request state and scoped memory caches.
 - A bounded native cache holds Telegram image bytes.
 
@@ -17,6 +17,8 @@ Export downloads the raw settings snapshot. Import applies only supported settin
 Reset first exports the same snapshot, then clears supported settings. It preserves credentials, provider caches, notification records, snooze state, and the active Quick Timer association.
 
 Quick Timer presets and saved form values can be restored. The raw export can contain temporary local state, but import does not restore that state. Secrets, notification records, and provider caches are outside settings backups.
+
+Collapse duration, chunk size, and invoice exclusion settings participate in settings transfer and reset. Operation progress remains outside settings backups.
 
 Paseo triggers import disabled, with fresh revisions and no active message boundary. Reset removes trigger definitions but preserves execution records. Execution records are outside settings backups.
 
@@ -36,7 +38,13 @@ A complete provider fetch commits its applicable updates and deletions in one tr
 
 Dexie owns schema upgrades and live subscriptions. Upgrade failure rolls back the upgrade transaction. Local read errors expose retry; retry reopens the database before repeating the read.
 
-Clockify rows belong to a user and workspace. Linear rows belong to a verified viewer. GitHub reads apply selected repositories and enabled types. Tracking-provider disconnect clears its data and invalidates in-flight writes.
+Clockify rows belong to a user and workspace. Linear rows belong to a verified viewer. GitHub reads apply selected repositories and enabled types. Tracking-provider disconnect clears its cached rows and invalidates in-flight writes.
+
+## Clockify collapse progress
+
+Collapse progress belongs to a user and workspace and persists independently of the entry cache. It records planned groups, replacement identities, and confirmed deletions. It survives disconnect so a returning account can resume an unfinished operation.
+
+An unconfirmed create remains pending until synced entries identify one replacement. Retries do not blindly repeat that create. After an uncertain bulk deletion response, a complete sync can confirm which originals are absent. Retries skip confirmed deletions. A completed operation is removed only after the final refresh succeeds. Separate installations and development origins do not share this progress.
 
 ## Telegram records
 

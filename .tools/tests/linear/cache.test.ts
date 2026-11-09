@@ -166,3 +166,54 @@ test('live relevance and summaries move with a tracked entry reference in the se
     subscription.unsubscribe()
   }
 })
+
+test('consecutive Clockify repairs finish while live Linear totals recompute', async () => {
+  const c = cache()
+  await c.replace('viewer', [issue('1')], c.beginSync(), 'now')
+  const clockify = createClockifyEntryCache(c.database)
+  const scope = { userId: 'user', workspaceId: 'workspace' }
+  const entries = Array.from({ length: 30 }, (_, index) => ({
+    id: `entry-${index}`,
+    ...scope,
+    description: 'ref:linear:acme:TASK-1',
+    timeInterval: { start: '2026-01-01T10:00:00Z', end: '2026-01-01T11:00:00Z' },
+  }))
+  await clockify.reconcile(
+    scope,
+    entries,
+    '2026-01-01T00:00:00Z',
+    '2026-01-03T00:00:00Z',
+    'now',
+    clockify.beginSync(),
+    await clockify.getRevision(),
+  )
+  const observed: Array<{ total: number | null; last: string | null }> = []
+  const errors: unknown[] = []
+  const subscription = liveQuery(() =>
+    queryLinearTickets(c.database, {
+      viewerId: 'viewer',
+      clockifyScope: scope,
+      runningEntries: [],
+      sortOrder: 'custom',
+      showAll: true,
+      now: new Date('2026-01-03'),
+    }),
+  ).subscribe({
+    next: result => observed.push({ total: result.rows[0].totalTrackedSeconds, last: result.rows[0].lastTrackedAt }),
+    error: error => errors.push(error),
+  })
+  try {
+    for (const entry of entries) {
+      await clockify.upsert(
+        { ...entry, timeInterval: { start: '2026-01-02T10:00:00Z', end: '2026-01-02T11:00:00Z' } },
+        scope,
+      )
+    }
+    await vi.waitFor(() =>
+      expect(observed[observed.length - 1]).toEqual({ total: 108000, last: '2026-01-02T11:00:00Z' }),
+    )
+    expect(errors).toEqual([])
+  } finally {
+    subscription.unsubscribe()
+  }
+})

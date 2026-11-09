@@ -1,4 +1,4 @@
-import type { TimeEntryWithRatesDtoV1 } from '../clockify/generated/clockify'
+import type { TimeEntryWithRatesDtoV1, UserDtoV1, WorkspaceDtoV1 } from '../clockify/generated/clockify'
 import type { ClockifyProject } from '../storage/config'
 import type {
   McpAddTimeEntryResult,
@@ -14,13 +14,16 @@ import { isTauri } from '@tauri-apps/api/core'
 import { getClockalongAuthState } from '../../hooks/useAppAuth'
 import { queryClient, queryKeys } from '../../lib/query-client'
 import { getErrorMessage } from '../../utils/errors'
+import { collapseClockifyMonthEntries } from '../clockify/collapse-entries'
 import { clockifyEntryCache } from '../clockify/entry-cache'
+import { fixClockifyMonthOverlaps } from '../clockify/overlap-repair'
 import { cacheClockifyEntryResult } from '../clockify/sync'
 import { stopClockifyTimeEntry } from '../clockify/time-entries'
 import {
   type ClockifyTimeEntryInterval,
   getClockifyTimeEntryIntervalFromMinutes,
 } from '../clockify/time-entry-interval'
+import { selectClockifyWorkspace } from '../clockify/workspaces'
 import { db } from '../db'
 import { createClockifyTimeEntryForGithubWorkItem, formatGithubWorkItemDescription } from '../github/timers'
 import { isGithubItemInScope } from '../github/work-item-cache'
@@ -98,6 +101,18 @@ export async function executeMcpCommand(
       case 'stop_timer': {
         const execution = await executeStopTimer(context, lifecycle)
         return execution
+      }
+      case 'fix_overlaps':
+      case 'collapse_entries': {
+        const user = queryClient.getQueryData<UserDtoV1>(queryKeys.clockify.loggedUser)
+        const workspaces = queryClient.getQueryData<WorkspaceDtoV1[]>(queryKeys.clockify.workspaces)
+        const workspace = selectClockifyWorkspace(user, workspaces)
+        if (!user?.id || !workspace?.id) {
+          return commandError('clockify_error', 'Clockify account or workspace is not ready. Refresh and try again.')
+        }
+        const operation = command.tool === 'fix_overlaps' ? fixClockifyMonthOverlaps : collapseClockifyMonthEntries
+        const result = await operation({ userId: user.id, workspaceId: workspace.id }, user.settings?.timeZone)
+        return { ok: true, result }
       }
       default:
         return commandError('unsupported_command', `Unsupported MCP command: ${String(command)}`)

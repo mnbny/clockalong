@@ -3,6 +3,7 @@ import type { TimeEntrySummaryReportDto } from '../services/clockify/generated/r
 
 import { formatCurrency } from '@automattic/format-currency'
 import {
+  IconArrowsJoin,
   IconCalendarDue,
   IconCalendarMonth,
   IconCalendarWeek,
@@ -16,20 +17,19 @@ import {
 } from '@tabler/icons-react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import humanizeDuration from 'humanize-duration'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStopwatch } from 'react-timer-hook'
 
 import { useDexieQuery } from '../hooks/useDexieQuery'
 import { queryKeys } from '../lib/query-client'
 import { clockify, clockifyReports } from '../services/clockify/client'
+import { getClockifyCollapseGroups } from '../services/clockify/collapse'
+import { clockifyCollapseOperationId, collapseClockifyMonthEntries } from '../services/clockify/collapse-entries'
 import { clockifyEntryCache } from '../services/clockify/entry-cache'
 import { clockifyEntriesInRange } from '../services/clockify/entry-queries'
-import {
-  type ClockifyTimeEntryOverlapFix,
-  fixClockifyTimeEntryOverlaps,
-  getCompletedClockifyTimeEntryOverlapFixes,
-} from '../services/clockify/overlaps'
-import { getClockifyEntryTableRange, getClockifyPeriodRange, getDayStart } from '../services/clockify/ranges'
+import { fixClockifyMonthOverlaps } from '../services/clockify/overlap-repair'
+import { hasCompletedClockifyTimeEntryOverlap } from '../services/clockify/overlaps'
+import { getClockifyEntryTableRange, getClockifyMonthRange, getDayStart } from '../services/clockify/ranges'
 import { cacheClockifyEntryResult, type SyncedClockifyTimeEntry } from '../services/clockify/sync'
 import {
   createClockifyTimeEntryFromEntry,
@@ -45,13 +45,6 @@ import { appToast } from './AppToaster'
 import { ClockifyEntryTimeDialog } from './ClockifyEntryTimeDialog'
 import { ClockifyIcon } from './icons/ClockifyIcon'
 
-type ClockifyPeriodStat = {
-  amount: string
-  id: ClockifyReportPeriodId
-  label: string
-  time: string
-}
-
 const clockifyReportPeriods = [
   { id: 'today', label: 'Today' },
   { id: 'week', label: 'Week' },
@@ -61,10 +54,6 @@ type ClockifyReportPeriodId = (typeof clockifyReportPeriods)[number]['id']
 const emptyClockifyEntries: SyncedClockifyTimeEntry[] = []
 const clockifyEntryTableDayRanges = [1, 3, 7] as const
 type ClockifyEntryTableDayRange = (typeof clockifyEntryTableDayRanges)[number]
-type ClockifyOverlapDialogState = {
-  fixes: ClockifyTimeEntryOverlapFix[]
-  label: string
-}
 const formatShortDuration = humanizeDuration.humanizer({
   delimiter: ' ',
   language: 'shortEn',
@@ -87,10 +76,11 @@ export function ClockifyWidget() {
   const [clockifyOverrideProject, setClockifyOverrideProject] = useStorage('clockifyOverrideProject')
   const [clockifyOverrideProjectVisibility] = useStorage('clockifyOverrideProjectVisibility')
   const [, setQuickTimersActiveEntry] = useStorage('quickTimersActiveEntry')
-  const fixOverlapDialogRef = useRef<HTMLDialogElement>(null)
+  const [collapseThresholdMinutes] = useStorage('clockifyCollapseThresholdMinutes')
+  const [collapseChunkMinutes] = useStorage('clockifyCollapseChunkMinutes')
+  const [collapseExcludeInvoiced] = useStorage('clockifyCollapseExcludeInvoiced')
   const [entriesVisible, setEntriesVisible] = useState(false)
   const [entryTableDayRange, setEntryTableDayRange] = useState<ClockifyEntryTableDayRange>(1)
-  const [overlapDialogState, setOverlapDialogState] = useState<ClockifyOverlapDialogState | null>(null)
   const [editingEntry, setEditingEntry] = useState<TimeEntryWithRatesDtoV1 | null>(null)
   const [manualEntry, setManualEntry] = useState<TimeEntryWithRatesDtoV1 | null>(null)
   const userQuery = useQuery({
@@ -216,10 +206,6 @@ export function ClockifyWidget() {
       staleTime: 60_000,
     })),
   })
-  const todayEntriesQuery = useSyncedClockifyEntriesForRange(getClockifyPeriodRange('today', new Date()), {
-    userId: userQuery.data?.id,
-    workspaceId: selectedWorkspace?.id,
-  })
   const entryTableEntriesQuery = useSyncedClockifyEntriesForRange(
     getClockifyEntryTableRange(entryTableDayRange, new Date()),
     {
@@ -227,28 +213,43 @@ export function ClockifyWidget() {
       workspaceId: selectedWorkspace?.id,
     },
   )
-  const weekEntriesQuery = useSyncedClockifyEntriesForRange(getClockifyPeriodRange('week', new Date()), {
-    userId: userQuery.data?.id,
-    workspaceId: selectedWorkspace?.id,
-  })
-  const monthEntriesQuery = useSyncedClockifyEntriesForRange(getClockifyPeriodRange('month', new Date()), {
-    userId: userQuery.data?.id,
-    workspaceId: selectedWorkspace?.id,
-  })
-  const todaySyncedEntries = todayEntriesQuery.data ?? emptyClockifyEntries
-  const weekSyncedEntries = weekEntriesQuery.data ?? emptyClockifyEntries
+  const monthEntriesQuery = useSyncedClockifyEntriesForRange(
+    { start: getClockifyMonthRange(new Date(), userQuery.data?.settings?.timeZone).start },
+    { userId: userQuery.data?.id, workspaceId: selectedWorkspace?.id },
+  )
   const monthSyncedEntries = monthEntriesQuery.data ?? emptyClockifyEntries
   const entryTableSyncedEntries = entryTableEntriesQuery.data ?? emptyClockifyEntries
-  const entryQueries = [todayEntriesQuery, weekEntriesQuery, monthEntriesQuery, entryTableEntriesQuery]
+  const readPendingCollapse = useCallback(
+    () =>
+      userQuery.data?.id && selectedWorkspace?.id
+        ? db.clockifyCollapses.get(
+            clockifyCollapseOperationId({ userId: userQuery.data.id, workspaceId: selectedWorkspace.id }),
+          )
+        : Promise.resolve(undefined),
+    [userQuery.data?.id, selectedWorkspace?.id],
+  )
+  const pendingCollapseQuery = useDexieQuery(
+    readPendingCollapse,
+    JSON.stringify([userQuery.data?.id, selectedWorkspace?.id]),
+  )
+  const entryQueries = [monthEntriesQuery, entryTableEntriesQuery, pendingCollapseQuery]
   const entryReadError = entryQueries.find(query => query.error)?.error
-  const todayOverlapFixes = useClockifyOverlapFixes(todaySyncedEntries)
-  const weekOverlapFixes = useClockifyOverlapFixes(weekSyncedEntries)
-  const monthOverlapFixes = useClockifyOverlapFixes(monthSyncedEntries)
-  const periodOverlapFixes = {
-    month: monthOverlapFixes,
-    today: todayOverlapFixes,
-    week: weekOverlapFixes,
-  } satisfies Record<ClockifyReportPeriodId, ClockifyTimeEntryOverlapFix[]>
+  const hasMonthOverlap = useMemo(
+    () => hasCompletedClockifyTimeEntryOverlap(monthSyncedEntries.map(row => row.entry)),
+    [monthSyncedEntries],
+  )
+  const collapseGroups = useMemo(
+    () =>
+      getClockifyCollapseGroups(
+        monthSyncedEntries.map(row => row.entry),
+        {
+          thresholdMinutes: collapseThresholdMinutes,
+          chunkMinutes: collapseChunkMinutes,
+          excludeInvoiced: collapseExcludeInvoiced,
+        },
+      ),
+    [monthSyncedEntries, collapseThresholdMinutes, collapseChunkMinutes, collapseExcludeInvoiced],
+  )
   const runningEntry = useMemo(() => {
     const runningEntries = runningEntryQuery.data ?? []
     return runningEntries.find(entry => entry.userId === userQuery.data?.id) ?? runningEntries[0] ?? null
@@ -266,54 +267,53 @@ export function ClockifyWidget() {
   useEffect(() => {
     clockifyWidgetLog('synced entries live query', {
       month: summarizeSyncedEntryLog(monthSyncedEntries),
-      today: summarizeSyncedEntryLog(todaySyncedEntries),
       userId: userQuery.data?.id,
-      week: summarizeSyncedEntryLog(weekSyncedEntries),
       workspaceId: selectedWorkspace?.id,
     })
-  }, [monthSyncedEntries, selectedWorkspace?.id, todaySyncedEntries, userQuery.data?.id, weekSyncedEntries])
-  const overlapFixes = overlapDialogState?.fixes ?? []
+  }, [monthSyncedEntries, selectedWorkspace?.id, userQuery.data?.id])
   const fixOverlapMutation = useMutation({
     mutationFn: () => {
-      const lifecycle = clockifyEntryCache.getLifecycle()
-      return fixClockifyTimeEntryOverlaps(overlapFixes, async (entries, fixes) => {
-        try {
-          for (const fixed of fixes) {
-            const response = entries.find(entry => entry.id === fixed.entry.id) ?? {}
-            await cacheClockifyEntryResult(
-              response,
-              {
-                ...fixed.entry,
-                timeInterval: {
-                  ...fixed.entry.timeInterval,
-                  start: fixed.start.toISOString(),
-                  end: fixed.end.toISOString(),
-                },
-              },
-              lifecycle,
-            )
-          }
-        } catch (error) {
-          console.warn('[clockify sync] Could not cache repaired entries:', error)
-          appToast.warning('Entries were repaired in Clockify, but the local cache could not be updated.')
-        }
-      })
+      if (!userQuery.data?.id || !selectedWorkspace?.id) throw new Error('Clockify is not ready.')
+      return fixClockifyMonthOverlaps(
+        { userId: userQuery.data.id, workspaceId: selectedWorkspace.id },
+        userQuery.data.settings?.timeZone,
+      )
     },
     onError: error => {
-      appToast.error('Could not fix Clockify overlap', {
+      appToast.error('Could not fix Clockify overlaps', {
         description: getErrorMessage(error),
       })
     },
-    onSuccess: count => {
-      appToast.success(count === 1 ? 'Fixed 1 Clockify entry' : `Fixed ${count} Clockify entries`)
+    onSuccess: ({ updatedCount, refreshFailed }) => {
+      appToast.success(
+        updatedCount === 0
+          ? 'No Clockify overlaps this month'
+          : updatedCount === 1
+            ? 'Fixed 1 Clockify entry'
+            : `Fixed ${updatedCount} Clockify entries`,
+      )
+      if (refreshFailed) appToast.warning('Could not refresh Clockify after the repair. Sync to update the display.')
     },
-    onSettled: async () => {
-      fixOverlapDialogRef.current?.close()
-      setOverlapDialogState(null)
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.clockify.entrySync() }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() }),
-      ])
+  })
+  const collapseMutation = useMutation({
+    mutationFn: () => {
+      if (!userQuery.data?.id || !selectedWorkspace?.id) throw new Error('Clockify is not ready.')
+      return collapseClockifyMonthEntries(
+        { userId: userQuery.data.id, workspaceId: selectedWorkspace.id },
+        userQuery.data.settings?.timeZone,
+      )
+    },
+    onError: error => {
+      appToast.error('Could not collapse Clockify entries', { description: getErrorMessage(error) })
+    },
+    onSuccess: ({ createdCount, deletedCount, refreshFailed }) => {
+      appToast.success(
+        createdCount
+          ? 'Collapsed ' + deletedCount + ' entries into ' + createdCount
+          : 'No Clockify entries to collapse this month',
+      )
+      if (refreshFailed)
+        appToast.warning('Could not refresh Clockify after collapsing entries. Sync to update the display.')
     },
   })
   const resumeClockifyEntryMutation = useMutation({
@@ -416,7 +416,7 @@ export function ClockifyWidget() {
                 onClick={() => {
                   clockifyWidgetLog('entries visibility toggled', {
                     nextVisible: !entriesVisible,
-                    today: summarizeSyncedEntryLog(todaySyncedEntries),
+                    entries: summarizeSyncedEntryLog(entryTableSyncedEntries),
                     userId: userQuery.data?.id,
                     workspaceId: selectedWorkspace?.id,
                   })
@@ -424,6 +424,38 @@ export function ClockifyWidget() {
                 }}>
                 {entriesVisible ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
               </button>
+              {(!!collapseGroups.length || !!pendingCollapseQuery.data) && (
+                <button
+                  className="badge badge-primary badge-sm cursor-pointer gap-1 border-0 tracking-normal normal-case disabled:cursor-not-allowed"
+                  type="button"
+                  aria-label="Collapse entries this month"
+                  title="Collapse entries this month"
+                  disabled={collapseMutation.isPending || !userQuery.data?.id || !selectedWorkspace?.id}
+                  onClick={() => collapseMutation.mutate()}>
+                  {collapseMutation.isPending ? (
+                    <span className="loading loading-spinner loading-xs" />
+                  ) : (
+                    <IconArrowsJoin className="size-3" />
+                  )}
+                  {pendingCollapseQuery.data && !collapseMutation.isPending ? 'Resume collapse' : 'Collapse entries'}
+                </button>
+              )}
+              {hasMonthOverlap && (
+                <button
+                  className="badge badge-error badge-sm cursor-pointer gap-1 border-0 tracking-normal normal-case disabled:cursor-not-allowed"
+                  type="button"
+                  aria-label="Fix overlaps this month"
+                  title="Fix overlaps this month"
+                  disabled={fixOverlapMutation.isPending || !userQuery.data?.id || !selectedWorkspace?.id}
+                  onClick={() => fixOverlapMutation.mutate()}>
+                  {fixOverlapMutation.isPending ? (
+                    <span className="loading loading-spinner loading-xs" />
+                  ) : (
+                    <IconWand className="size-3" />
+                  )}
+                  Fix overlaps
+                </button>
+              )}
               <ClockifyStatusBadge running={Boolean(runningEntry)} />
             </div>
           </header>
@@ -458,27 +490,6 @@ export function ClockifyWidget() {
                   </div>
                   <div className="text-xl leading-7 font-semibold tabular-nums">{stat.time}</div>
                   <div className="text-base-content/60 text-sm tabular-nums">{stat.amount}</div>
-                  {!!periodOverlapFixes[stat.id].length && (
-                    <div>
-                      <button
-                        className="badge badge-error badge-sm cursor-pointer gap-1 border-0 tracking-normal normal-case disabled:cursor-not-allowed"
-                        type="button"
-                        aria-label="Fix Clockify overlap"
-                        title="Fix Clockify overlap"
-                        disabled={fixOverlapMutation.isPending}
-                        onClick={() => {
-                          setOverlapDialogState({ fixes: periodOverlapFixes[stat.id], label: stat.label })
-                          fixOverlapDialogRef.current?.showModal()
-                        }}>
-                        {fixOverlapMutation.isPending ? (
-                          <span className="loading loading-spinner loading-xs" />
-                        ) : (
-                          <IconWand className="size-3" />
-                        )}
-                        Overlap detected
-                      </button>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -540,68 +551,6 @@ export function ClockifyWidget() {
           onSave={interval => createClockifyTimeEntryFromEntry(manualEntry, clockifyTimerProject, interval)}
         />
       )}
-
-      <dialog ref={fixOverlapDialogRef} className="modal">
-        <div className="modal-box max-w-4xl rounded-lg">
-          <form
-            className="grid gap-5"
-            onSubmit={event => {
-              event.preventDefault()
-              fixOverlapMutation.mutate()
-            }}>
-            <div className="grid gap-1">
-              <h3 className="text-lg leading-7 font-semibold">Fix {overlapDialogState?.label ?? 'Clockify'} overlap</h3>
-              <p className="text-base-content/60 text-sm">Review the time-entry changes before updating Clockify.</p>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="table-zebra table-sm table">
-                <thead>
-                  <tr>
-                    <th>Entry</th>
-                    <th>Before</th>
-                    <th>After</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {overlapFixes.map(fix => (
-                    <tr key={fix.entry.id ?? `${fix.start.toISOString()}-${fix.end.toISOString()}`}>
-                      <td className="max-w-80 truncate">{getClockifyTimeEntryTitle(fix.entry)}</td>
-                      <td className="whitespace-nowrap tabular-nums">
-                        {formatDatedTimeRange(fix.entry.timeInterval?.start, fix.entry.timeInterval?.end)}
-                      </td>
-                      <td className="whitespace-nowrap tabular-nums">
-                        {formatDatedTimeRange(fix.start.toISOString(), fix.end.toISOString())}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="modal-action mt-0">
-              <button
-                className="btn btn-ghost"
-                type="button"
-                disabled={fixOverlapMutation.isPending}
-                onClick={() => fixOverlapDialogRef.current?.close()}>
-                Cancel
-              </button>
-              <button
-                className="btn btn-error"
-                type="submit"
-                disabled={fixOverlapMutation.isPending || !overlapFixes.length}>
-                {!!fixOverlapMutation.isPending && <span className="loading loading-spinner loading-sm" />}
-                Fix
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <form className="modal-backdrop" method="dialog">
-          <button type="submit">close</button>
-        </form>
-      </dialog>
     </>
   )
 }
@@ -628,15 +577,15 @@ function PeriodStatIcon({ label }: { label: string }) {
 }
 
 function useSyncedClockifyEntriesForRange(
-  range: { start: Date; end: Date },
+  range: { start: Date; end?: Date },
   { userId, workspaceId }: { userId: string | undefined; workspaceId: string | undefined },
 ) {
   const rangeStart = range.start.toISOString()
-  const rangeEnd = range.end.toISOString()
+  const rangeEnd = range.end?.toISOString()
   const read = useCallback(
     () =>
       userId && workspaceId
-        ? clockifyEntriesInRange(db, { userId, workspaceId }, rangeStart, rangeEnd)
+        ? clockifyEntriesInRange(db, { userId, workspaceId }, rangeStart, rangeEnd ?? new Date().toISOString())
         : Promise.resolve([]),
     [userId, workspaceId, rangeStart, rangeEnd],
   )
@@ -664,16 +613,6 @@ function truncateLogText(value: string | undefined, maxLength = 140) {
   }
 
   return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
-}
-
-function useClockifyOverlapFixes(entries: SyncedClockifyTimeEntry[]) {
-  return useMemo(
-    () =>
-      getCompletedClockifyTimeEntryOverlapFixes(entries.map(syncedEntry => syncedEntry.entry)).filter(
-        fix => fix.entry.id && fix.entry.workspaceId,
-      ),
-    [entries],
-  )
 }
 
 function ClockifyEntriesTable({
@@ -921,7 +860,7 @@ function getStopwatchOffsetTimestamp(startValue: string | undefined) {
 function formatReportPeriodStat(
   period: (typeof clockifyReportPeriods)[number],
   report: TimeEntrySummaryReportDto | undefined,
-): ClockifyPeriodStat {
+) {
   const totals = report?.totals ?? []
   const seconds = totals.reduce((total, entryTotal) => total + (entryTotal.totalTime ?? 0), 0)
   const amount = totals.reduce((total, entryTotal) => {
@@ -931,7 +870,6 @@ function formatReportPeriodStat(
 
   return {
     amount: formatCurrency(amount, 'USD'),
-    id: period.id,
     label: period.label,
     time: formatShortDuration(seconds * 1000),
   }

@@ -9,7 +9,7 @@ import {
   getCompletedClockifyTimeEntryOverlapFixes,
   hasCompletedClockifyTimeEntryOverlap,
 } from '../../../src/services/clockify/overlaps'
-import { getClockifyEntryTableRange, getClockifyPeriodRange } from '../../../src/services/clockify/ranges'
+import { getClockifyEntryTableRange, getClockifyMonthRange } from '../../../src/services/clockify/ranges'
 import { DB } from '../../../src/services/db'
 import { buildMcpSnapshot } from '../../../src/services/mcp/snapshot'
 
@@ -31,7 +31,7 @@ function row(
   }
 }
 
-test('table ranges and disjoint overlap buckets use local calendar boundaries across DST', () => {
+test('table ranges use local calendar boundaries across DST', () => {
   const previous = process.env.TZ
   process.env.TZ = 'America/Los_Angeles'
   try {
@@ -40,18 +40,22 @@ test('table ranges and disjoint overlap buckets use local calendar boundaries ac
     expect(iso(getClockifyEntryTableRange(1, now))).toEqual(['2025-03-10T07:00:00.000Z', '2025-03-11T07:00:00.000Z'])
     expect(iso(getClockifyEntryTableRange(3, now))).toEqual(['2025-03-08T08:00:00.000Z', '2025-03-11T07:00:00.000Z'])
     expect(iso(getClockifyEntryTableRange(7, now))).toEqual(['2025-03-04T08:00:00.000Z', '2025-03-11T07:00:00.000Z'])
-    const today = getClockifyPeriodRange('today', now)
-    const week = getClockifyPeriodRange('week', now)
-    const month = getClockifyPeriodRange('month', now)
-    expect(iso(today)).toEqual(['2025-03-10T07:00:00.000Z', '2025-03-11T07:00:00.000Z'])
-    expect(iso(week)).toEqual(['2025-03-04T08:00:00.000Z', '2025-03-10T07:00:00.000Z'])
-    expect(iso(month)).toEqual(['2025-02-11T08:00:00.000Z', '2025-03-04T08:00:00.000Z'])
-    expect(month.end.getTime()).toBe(week.start.getTime())
-    expect(week.end.getTime()).toBe(today.start.getTime())
   } finally {
     if (previous === undefined) delete process.env.TZ
     else process.env.TZ = previous
   }
+})
+
+test.each([
+  ['2026-03-31T20:00:00Z', 'America/Los_Angeles', '2026-03-01T08:00:00.000Z'],
+  ['2026-11-08T20:00:00Z', 'America/Los_Angeles', '2026-11-01T07:00:00.000Z'],
+  ['2026-01-01T00:30:00Z', 'America/Los_Angeles', '2025-12-01T08:00:00.000Z'],
+  ['2026-01-31T20:30:00Z', 'Asia/Kolkata', '2026-01-31T18:30:00.000Z'],
+])('month repairs use the profile timezone at %s (%s)', (instant, timeZone, start) => {
+  const now = new Date(instant)
+  const range = getClockifyMonthRange(now, timeZone)
+  expect(range.start.toISOString()).toBe(start)
+  expect(range.end.getTime()).toBe(now.getTime())
 })
 
 test('overlap detection excludes running and adjacent entries but repairs overlapping completed entries', () => {

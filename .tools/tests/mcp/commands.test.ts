@@ -4,6 +4,8 @@ import { afterEach, expect, test, vi } from 'vitest'
 
 import { queryClient, queryKeys } from '../../../src/lib/query-client'
 import { clockify } from '../../../src/services/clockify/client'
+import * as collapseEntries from '../../../src/services/clockify/collapse-entries'
+import * as overlapRepair from '../../../src/services/clockify/overlap-repair'
 import { clearSyncedClockifyTimeEntries } from '../../../src/services/clockify/sync'
 import { db } from '../../../src/services/db'
 import { githubWorkItemCache } from '../../../src/services/github/work-item-cache'
@@ -23,6 +25,78 @@ const context = {
   linearViewerId: null,
   runningEntry: { id: 'running-entry', timeInterval: { start: '2026-10-12T20:00:00Z' } },
 } satisfies ExecuteMcpCommandContext
+
+test('overlap repair uses the active workspace and profile timezone without requiring a timer project', async () => {
+  queryClient.setQueryData(queryKeys.clockify.loggedUser, {
+    id: 'user',
+    activeWorkspace: 'active-workspace',
+    settings: { timeZone: 'America/Los_Angeles' },
+  })
+  queryClient.setQueryData(queryKeys.clockify.workspaces, [{ id: 'workspace' }, { id: 'active-workspace' }])
+  const repair = vi.spyOn(overlapRepair, 'fixClockifyMonthOverlaps').mockResolvedValue({
+    updatedCount: 4,
+    refreshFailed: true,
+  })
+  const command = { tool: 'fix_overlaps', requestId: 'repair', arguments: {} } as const
+  for (const clockifyTimerProject of [context.clockifyTimerProject, null]) {
+    expect(await executeMcpCommand(command, { ...context, clockifyTimerProject, runningEntry: null })).toEqual({
+      ok: true,
+      result: { updatedCount: 4, refreshFailed: true },
+    })
+  }
+  expect(repair).toHaveBeenCalledTimes(2)
+  for (const args of repair.mock.calls) {
+    expect(args).toEqual([{ userId: 'user', workspaceId: 'active-workspace' }, 'America/Los_Angeles'])
+  }
+})
+
+test('overlap repair rejects unavailable accounts and propagates repair failures', async () => {
+  const repair = vi.spyOn(overlapRepair, 'fixClockifyMonthOverlaps')
+  const command = { tool: 'fix_overlaps', requestId: 'repair', arguments: {} } as const
+  expect(await executeMcpCommand(command, { ...context, clockifyConnected: false })).toMatchObject({
+    ok: false,
+    error: { code: 'clockify_disconnected' },
+  })
+  expect((await executeMcpCommand(command, context)).ok).toBe(false)
+  queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user' })
+  expect((await executeMcpCommand(command, context)).ok).toBe(false)
+  expect(repair).not.toHaveBeenCalled()
+
+  queryClient.setQueryData(queryKeys.clockify.workspaces, [{ id: 'workspace' }])
+  repair.mockRejectedValue(new Error('Clockify is limiting requests.'))
+  expect(await executeMcpCommand(command, context)).toEqual({
+    ok: false,
+    error: { code: 'clockify_error', message: 'Clockify is limiting requests.' },
+  })
+})
+
+test('MCP collapse uses the shared operation, active workspace and timezone without a selected timer project', async () => {
+  queryClient.setQueryData(queryKeys.clockify.loggedUser, {
+    id: 'user',
+    activeWorkspace: 'active-workspace',
+    settings: { timeZone: 'America/Los_Angeles' },
+  })
+  queryClient.setQueryData(queryKeys.clockify.workspaces, [{ id: 'workspace' }, { id: 'active-workspace' }])
+  const collapse = vi.spyOn(collapseEntries, 'collapseClockifyMonthEntries').mockResolvedValue({
+    createdCount: 2,
+    deletedCount: 8,
+    refreshFailed: false,
+  })
+  const command = { tool: 'collapse_entries', requestId: 'collapse', arguments: {} } as const
+  expect(await executeMcpCommand(command, { ...context, clockifyTimerProject: null })).toEqual({
+    ok: true,
+    result: { createdCount: 2, deletedCount: 8, refreshFailed: false },
+  })
+  expect(collapse).toHaveBeenCalledExactlyOnceWith(
+    { userId: 'user', workspaceId: 'active-workspace' },
+    'America/Los_Angeles',
+  )
+  collapse.mockRejectedValue(new Error('Delete failed'))
+  expect(await executeMcpCommand(command, context)).toEqual({
+    ok: false,
+    error: { code: 'clockify_error', message: 'Delete failed' },
+  })
+})
 
 test('adding Quick Timer time preserves the running association and resolves template values', async () => {
   queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user' })

@@ -1,26 +1,23 @@
+import dayjs from 'dayjs'
+import timezone from 'dayjs/plugin/timezone'
+import utc from 'dayjs/plugin/utc'
+
+dayjs.extend(utc)
+dayjs.extend(timezone)
+
 export function getDayStart(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
 
-export function getClockifyPeriodRange(period: 'today' | 'week' | 'month', now: Date) {
-  const todayStart = getDayStart(now)
-  const start = new Date(todayStart)
-  const end = new Date(todayStart)
+export function getClockifyMonthRange(now: Date, timeZone?: string) {
+  const current = timeZone ? dayjs(now).tz(timeZone) : dayjs(now)
+  return { start: current.startOf('month').toDate(), end: now }
+}
 
-  switch (period) {
-    case 'month':
-      start.setDate(start.getDate() - 27)
-      end.setDate(end.getDate() - 6)
-      break
-    case 'today':
-      end.setDate(end.getDate() + 1)
-      break
-    case 'week':
-      start.setDate(start.getDate() - 6)
-      break
-  }
-
-  return { end, start }
+export function formatClockifyEntryFilterDate(date: Date, timeZone?: string) {
+  const local = timeZone ? dayjs(date).tz(timeZone) : dayjs(date)
+  // Clockify's entry-list filters use profile-local time despite requiring a literal Z suffix.
+  return local.format('YYYY-MM-DDTHH:mm:ss.SSS[Z]')
 }
 
 export function getClockifyEntryTableRange(days: 1 | 3 | 7, now: Date) {
