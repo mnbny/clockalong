@@ -3,7 +3,7 @@ import type { TimeEntryDtoV1 } from '../../../src/services/clockify/generated/cl
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { queryClient, queryKeys } from '../../../src/lib/query-client'
-import { clockify } from '../../../src/services/clockify/client'
+import { clockify, clockifyReports } from '../../../src/services/clockify/client'
 import { clockifyEntryCache } from '../../../src/services/clockify/entry-cache'
 import { fixClockifyMonthOverlaps } from '../../../src/services/clockify/overlap-repair'
 import { hasCompletedClockifyTimeEntryOverlap } from '../../../src/services/clockify/overlaps'
@@ -30,7 +30,8 @@ function entry(id: string, start = '2026-10-02T12:00:00Z', end = '2026-10-02T13:
   }
 }
 
-function server(initial: TimeEntryDtoV1[]) {
+async function server(initial: TimeEntryDtoV1[]) {
+  for (const value of initial) await clockifyEntryCache.upsert(value, scope)
   const entries = new Map(initial.map(value => [value.id, value]))
   const read = vi.spyOn(clockify, 'getTimeEntries').mockImplementation(async () => [...entries.values()])
   const replace = (body: Parameters<typeof clockify.replaceMany>[0]) =>
@@ -47,6 +48,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-10-31T18:00:00Z'))
   vi.spyOn(console, 'info').mockImplementation(() => {})
+  vi.spyOn(clockifyReports, 'generateDetailedReport').mockImplementation(async () => ({ totals: [], timeentries: [] }))
   vi.spyOn(storage, 'get').mockImplementation(async key =>
     key === 'clockifyEntrySyncDays' ? 5 : storage.config[key].default,
   )
@@ -65,10 +67,9 @@ afterEach(async () => {
   await clockifyEntryCache.clear()
 })
 
-test('repair refreshes the whole calendar month despite a five-day cache and preserves unrelated entries', async () => {
-  await clockifyEntryCache.upsert(entry('deleted'), scope)
+test('repair plans from cache, then refreshes the whole month despite a five-day sync window', async () => {
   await clockifyEntryCache.upsert(entry('prior-month', '2026-09-30T10:00:00Z', '2026-09-30T11:00:00Z'), scope)
-  const fixture = server([
+  const fixture = await server([
     entry('first'),
     entry('overlap'),
     entry('later', '2026-10-31T10:00:00Z', '2026-10-31T11:00:00Z'),
@@ -77,9 +78,17 @@ test('repair refreshes the whole calendar month despite a five-day cache and pre
     entry('future-overlap', '2026-11-01T12:00:00Z', '2026-11-01T13:00:00Z'),
   ])
   const reports = vi.spyOn(queryClient, 'invalidateQueries')
+  const cacheWrite = vi.spyOn(clockifyEntryCache, 'upsert')
+  fixture.write.mockImplementation(async body => {
+    expect(fixture.read).not.toHaveBeenCalled()
+    expect((await db.clockifyEntries.get(['user', 'workspace', 'overlap']))?.entry.timeInterval?.start).toBe(
+      '2026-10-02T12:00:00Z',
+    )
+    return fixture.replace(body)
+  })
 
   await expect(fixClockifyMonthOverlaps(scope, 'UTC')).resolves.toEqual({ updatedCount: 1, refreshFailed: false })
-  expect(fixture.read).toHaveBeenCalledTimes(2)
+  expect(fixture.read).toHaveBeenCalledTimes(1)
   for (const [request] of fixture.read.mock.calls) {
     expect(request.params).toEqual(scope)
     expect(request.queries?.start).toBe('2026-10-01T00:00:00.000Z')
@@ -88,13 +97,13 @@ test('repair refreshes the whole calendar month despite a five-day cache and pre
     [expect.objectContaining({ id: 'overlap', start: '2026-10-02T13:00:00.000Z', end: '2026-10-02T14:00:00.000Z' })],
     { params: scope },
   )
-  expect(await db.clockifyEntries.get(['user', 'workspace', 'deleted'])).toBeUndefined()
   expect(await db.clockifyEntries.get(['user', 'workspace', 'prior-month'])).toBeDefined()
+  expect(cacheWrite).not.toHaveBeenCalled()
   expect(reports).toHaveBeenCalledWith({ queryKey: queryKeys.clockify.summaryReport() }, { throwOnError: true })
 })
 
 test('an uncertain bulk failure refreshes the entire month after earlier batches succeeded', async () => {
-  const fixture = server(Array.from({ length: 27 }, (_, index) => entry(`entry-${index}`)))
+  const fixture = await server(Array.from({ length: 27 }, (_, index) => entry(`entry-${index}`)))
   fixture.write
     .mockImplementationOnce(async body => fixture.replace(body))
     .mockImplementationOnce(async body => {
@@ -104,7 +113,7 @@ test('an uncertain bulk failure refreshes the entire month after earlier batches
 
   await expect(fixClockifyMonthOverlaps(scope, 'UTC')).rejects.toThrow('Connection lost after submission')
   expect(fixture.write.mock.calls.map(([body]) => body.length)).toEqual([25, 1])
-  expect(fixture.read).toHaveBeenCalledTimes(2)
+  expect(fixture.read).toHaveBeenCalledTimes(1)
   const cached = await db.clockifyEntries.toArray()
   expect(cached).toHaveLength(27)
   expect(hasCompletedClockifyTimeEntryOverlap(cached.map(row => row.entry))).toBe(false)
@@ -126,7 +135,7 @@ test.each([
     const boundary = Date.parse(start)
     const at = (seconds: number) => new Date(boundary + seconds * 1000).toISOString()
     await clockifyEntryCache.upsert(entry('prior-month', at(-30), at(-20)), scope)
-    const fixture = server([
+    const fixture = await server([
       entry('anchor', at(120), at(130)),
       entry('overlap-one', at(125), at(135)),
       entry('overlap-two', at(130), at(140)),
@@ -154,21 +163,17 @@ test.each([
   },
 )
 
-test('a failed fetch cannot repair stale cached overlaps', async () => {
-  await clockifyEntryCache.upsert(entry('first'), scope)
-  await clockifyEntryCache.upsert(entry('overlap'), scope)
-  const fixture = server([])
-  fixture.read.mockRejectedValue(new Error('Offline'))
-
-  await expect(fixClockifyMonthOverlaps(scope, 'UTC')).rejects.toThrow('Offline')
-  expect(fixture.write).not.toHaveBeenCalled()
-  fixture.read.mockResolvedValue([entry('only')])
+test('remote-only overlaps are not fetched or repaired until they reach the cache', async () => {
+  const read = vi.spyOn(clockify, 'getTimeEntries').mockResolvedValue([entry('first'), entry('overlap')])
+  const write = vi.spyOn(clockify, 'replaceMany')
   await expect(fixClockifyMonthOverlaps(scope, 'UTC')).resolves.toEqual({ updatedCount: 0, refreshFailed: false })
+  expect(read).not.toHaveBeenCalled()
+  expect(write).not.toHaveBeenCalled()
 })
 
-test('concurrent repairs wait for background sync, share one operation and reject a different account', async () => {
+test('concurrent repairs share one operation and wait for background sync only before refreshing', async () => {
   const entries = [entry('first'), entry('overlap')]
-  const fixture = server(entries)
+  const fixture = await server(entries)
   let release!: (entries: TimeEntryDtoV1[]) => void
   fixture.read.mockImplementationOnce(() => new Promise(resolve => (release = resolve)))
   const background = queryClient.fetchQuery({
@@ -180,31 +185,39 @@ test('concurrent repairs wait for background sync, share one operation and rejec
   const second = fixClockifyMonthOverlaps(scope, 'UTC')
   expect(second).toBe(first)
   await expect(fixClockifyMonthOverlaps({ ...scope, userId: 'other' }, 'UTC')).rejects.toThrow('in progress')
+  await vi.waitFor(() => expect(fixture.write).toHaveBeenCalledOnce())
   release(entries)
   await expect(background).resolves.toMatchObject({ entriesFetched: 2 })
   await expect(first).resolves.toEqual({ updatedCount: 1, refreshFailed: false })
   expect(fixture.write).toHaveBeenCalledOnce()
-  expect(fixture.read).toHaveBeenCalledTimes(3)
+  expect(fixture.read).toHaveBeenCalledTimes(2)
 
   await expect(fixClockifyMonthOverlaps(scope, 'UTC')).resolves.toEqual({ updatedCount: 0, refreshFailed: false })
   expect(fixture.write).toHaveBeenCalledOnce()
 })
 
 test('a month without overlaps succeeds without writing', async () => {
-  const fixture = server([entry('only')])
+  const fixture = await server([entry('only')])
   await expect(fixClockifyMonthOverlaps(scope, 'UTC')).resolves.toEqual({ updatedCount: 0, refreshFailed: false })
   expect(fixture.write).not.toHaveBeenCalled()
 })
 
 test('a refresh failure preserves the confirmed repair count and reports stale display data', async () => {
   vi.spyOn(console, 'warn').mockImplementation(() => {})
-  const fixture = server([entry('first'), entry('overlap')])
-  fixture.read.mockResolvedValueOnce([entry('first'), entry('overlap')]).mockRejectedValue(new Error('Offline'))
+  const fixture = await server([entry('first'), entry('overlap')])
+  fixture.read.mockRejectedValue(new Error('Offline'))
 
   await expect(fixClockifyMonthOverlaps(scope, 'UTC')).resolves.toEqual({ updatedCount: 1, refreshFailed: true })
   expect(fixture.write).toHaveBeenCalledOnce()
   expect((await db.clockifyEntries.get(['user', 'workspace', 'overlap']))?.entry.timeInterval).toMatchObject({
-    start: '2026-10-02T13:00:00.000Z',
-    end: '2026-10-02T14:00:00.000Z',
+    start: '2026-10-02T12:00:00Z',
+    end: '2026-10-02T13:00:00Z',
   })
+})
+
+test('invoiced entries are still eligible for overlap repair', async () => {
+  const fixture = await server([entry('first'), entry('overlap')])
+  await clockifyEntryCache.upsert({ ...entry('overlap'), invoiced: true }, scope)
+  await expect(fixClockifyMonthOverlaps(scope, 'UTC')).resolves.toEqual({ updatedCount: 1, refreshFailed: false })
+  expect(fixture.write).toHaveBeenCalledOnce()
 })
