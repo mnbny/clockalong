@@ -54,7 +54,7 @@ export type McpCommandPayload =
   | {
       arguments: Record<string, never>
       requestId: string
-      tool: 'stop_timer'
+      tool: 'stop_timer' | 'fix_overlaps'
     }
   | {
       arguments: Record<string, never>
@@ -89,6 +89,11 @@ export type McpRefreshResult = {
   synced: string[]
 }
 
+export type McpFixOverlapsResult = {
+  updatedCount: number
+  refreshFailed: boolean
+}
+
 export type McpListWorkResult = { capturedAt: string; truncated: boolean; rows: unknown[] }
 
 export type McpCommandResult =
@@ -97,6 +102,7 @@ export type McpCommandResult =
   | McpStopTimerResult
   | McpAddTimeEntryResult
   | McpRefreshResult
+  | McpFixOverlapsResult
   | McpTelegramDestinations
   | McpTelegramMessageResult
 

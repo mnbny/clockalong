@@ -352,7 +352,7 @@ async function handleMcpCommand(
     return
   }
 
-  if (tool !== 'start_timer' && tool !== 'stop_timer' && tool !== 'add_time_entry') {
+  if (tool !== 'start_timer' && tool !== 'stop_timer' && tool !== 'add_time_entry' && tool !== 'fix_overlaps') {
     await completeMcpCommand({
       error: `Unsupported MCP command: ${tool}`,
       requestId,
@@ -367,6 +367,14 @@ async function handleMcpCommand(
     tool,
   } as McpCommandPayload
   const execution = await executeMcpCommand(command, contextRef.current)
+  if (execution.ok && tool === 'fix_overlaps' && 'refreshFailed' in execution.result) {
+    try {
+      await publishMcpSnapshot(snapshotInputRef.current)
+    } catch {
+      execution.result = { ...execution.result, refreshFailed: true }
+      mcpBridgeLog('snapshot publish failed after overlap repair')
+    }
+  }
 
   await completeMcpCommand(
     execution.ok ? { requestId, result: execution.result, tool } : { error: execution.error.message, requestId, tool },

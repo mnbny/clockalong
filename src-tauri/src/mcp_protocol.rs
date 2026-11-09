@@ -5,7 +5,7 @@ use tauri::{AppHandle, Runtime};
 
 const CURRENT_PROTOCOL_VERSION: &str = "2025-06-18";
 const PREVIOUS_PROTOCOL_VERSION: &str = "2025-03-26";
-const SERVER_INSTRUCTIONS: &str = "Clockalong tracks time in Clockify against Linear tickets, GitHub issues and pull requests, and local Quick Timer presets. Call `list_trackable_work` to sync all connected providers and see what can be tracked; pass refresh: false for cached results. Use `refresh` to sync without listing work, including before reading tracking status or recent entries. Use `start_timer` to begin billing against a listed item and `stop_timer` to end it. Clockify runs one timer at a time, so starting a new timer stops the one already running. Use `add_time_entry` to add completed time in minutes for a listed item without changing the running timer. Overlaps are allowed. Use `list_telegram_destinations` and `send_telegram_message` for the selected Telegram group only. No other Telegram groups are exposed. A send with unconfirmed delivery must not be automatically retried.";
+const SERVER_INSTRUCTIONS: &str = "Clockalong tracks time in Clockify against Linear tickets, GitHub issues and pull requests, and local Quick Timer presets. Call `list_trackable_work` to sync all connected providers and see what can be tracked; pass refresh: false for cached results. Use `refresh` to sync without listing work, including before reading tracking status or recent entries. Use `start_timer` to begin billing against a listed item and `stop_timer` to end it. Clockify runs one timer at a time, so starting a new timer stops the one already running. Use `add_time_entry` to add completed time in minutes for a listed item without changing the running timer. Overlaps are allowed. Use `fix_overlaps` with no arguments to repair completed-entry overlaps from the start of this calendar month through now, using the Clockify profile timezone and the same operation as the dashboard badge. Use `list_telegram_destinations` and `send_telegram_message` for the selected Telegram group only. No other Telegram groups are exposed. A send with unconfirmed delivery must not be automatically retried.";
 const STARTUP_ERROR: &str = "Clockalong is still starting up. Try again in a moment.";
 const TIMEOUT_ERROR: &str = "Clockalong did not respond in time.";
 const CLOCKIFY_ERROR: &str =
@@ -182,7 +182,7 @@ async fn call_tool<R: Runtime>(
             validate_add_time_entry(&arguments)?;
             write_tool(app, state, name, arguments).await
         }
-        "stop_timer" => {
+        "stop_timer" | "fix_overlaps" => {
             validate_empty_arguments(&arguments)?;
             write_tool(app, state, name, arguments).await
         }
@@ -272,7 +272,7 @@ async fn write_tool<R: Runtime>(
     if status.get("clockifyConnected").and_then(Value::as_bool) != Some(true) {
         return Err(CLOCKIFY_ERROR.to_string());
     }
-    if name != "stop_timer" {
+    if matches!(name, "start_timer" | "add_time_entry") {
         if status.get("projectName").is_none_or(Value::is_null) {
             return Err(PROJECT_ERROR.to_string());
         }
@@ -287,7 +287,7 @@ async fn write_tool<R: Runtime>(
         if !work_target_allowed(&snapshot, source, id) {
             return Err(TARGET_ERROR.to_string());
         }
-    } else if status.get("running").is_none_or(Value::is_null) {
+    } else if name == "stop_timer" && status.get("running").is_none_or(Value::is_null) {
         return Err(STOP_ERROR.to_string());
     }
 
@@ -747,6 +747,8 @@ fn bridge_error_message(error: McpBridgeError) -> String {
         McpBridgeError::NotReady => STARTUP_ERROR.to_string(),
         McpBridgeError::Timeout { tool, .. } if tool == "send_telegram_message" =>
             "Delivery could not be confirmed. The message may have been sent; check Telegram before retrying. Do not automatically resend.".to_string(),
+        McpBridgeError::Timeout { tool, .. } if tool == "fix_overlaps" =>
+            "Overlap repair did not finish in time. Some changes may already be saved and repair may still be running. Refresh before trying again.".to_string(),
         McpBridgeError::Timeout { .. } => TIMEOUT_ERROR.to_string(),
         McpBridgeError::Webview(message) | McpBridgeError::Internal(message) => message,
     }
@@ -987,6 +989,11 @@ fn tool_catalog() -> Vec<Value> {
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
         }),
         json!({
+            "name": "fix_overlaps",
+            "description": "Runs the dashboard's overlap repair for the current Clockify user and workspace, across all projects. Refreshes the full calendar month, then moves overlapping completed entries forward while preserving durations. The range is the first day of this month at midnight through now in the Clockify profile timezone, with the device timezone as fallback. Leaves running timers unchanged. Returns updatedCount (zero when there are no overlaps) and refreshFailed (whether the final display refresh failed). No project selection or prior work listing is required.",
+            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+        }),
+        json!({
             "name": "get_tracking_status",
             "description": "Returns the current TrackingStatus.",
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
@@ -1210,6 +1217,26 @@ mod tests {
     fn keeps_tool_arguments_strict() {
         assert!(validate_empty_arguments(&json!({})).is_ok());
         assert!(validate_empty_arguments(&json!({ "_meta": {} })).is_err());
+    }
+
+    #[test]
+    fn overlap_repair_has_no_range_arguments_and_timeout_does_not_imply_rollback() {
+        let catalog = tool_catalog();
+        let tool = catalog
+            .iter()
+            .find(|tool| tool["name"] == "fix_overlaps")
+            .unwrap();
+        assert_eq!(tool["inputSchema"]["properties"], json!({}));
+        assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+        assert!(validate_empty_arguments(&json!({ "range": "month" })).is_err());
+        assert!(validate_empty_arguments(&json!({ "workspaceId": "other" })).is_err());
+        assert!(SERVER_INSTRUCTIONS.contains("fix_overlaps"));
+        let timeout = bridge_error_message(McpBridgeError::Timeout {
+            request_id: "repair".to_string(),
+            tool: "fix_overlaps".to_string(),
+        });
+        assert!(timeout.contains("may already be saved"));
+        assert!(timeout.contains("may still be running"));
     }
 
     #[test]

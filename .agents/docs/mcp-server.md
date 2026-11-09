@@ -1,6 +1,6 @@
 # MCP server
 
-Clockalong exposes local agent tools for tracking context, Clockify timer control, completed time entry, and Telegram sends. The server is disabled by default and runs only while enabled in App settings and the app process remains alive.
+Clockalong exposes local agent tools for tracking context, Clockify timer control, completed time entry, overlap repair, and Telegram sends. The server is disabled by default and runs only while enabled in App settings and the app process remains alive.
 
 ## Public capabilities
 
@@ -9,14 +9,17 @@ Clockalong exposes local agent tools for tracking context, Clockify timer contro
 - Tracking status, recent completed entries, and project listings provide cached Clockify context.
 - Timer actions start work from a listed item or stop the running timer.
 - Completed-time entry adds time for a listed item without changing the running timer.
+- Overlap repair uses the dashboard's current-month operation for the active Clockify workspace, across all projects.
 - Telegram discovery lists the selected group and visible topics.
 - Telegram send delivers plain text, one local file, or a file with a caption to a discovered destination.
 
 Public tool names and arguments are a consumer contract. Protocol schemas, validation, and frontend command handling must agree.
 
-The server does not expose credentials, raw provider APIs, arbitrary-description timers, entry editing or resuming, Telegram history, resources, or prompts.
+The server does not expose credentials, raw provider APIs, arbitrary-description timers, manual entry editing or resuming, Telegram history, resources, or prompts.
 
 Completed entries use a positive duration, including fractional minutes, and an optional end time with an explicit timezone. Overlaps are allowed. Source templates preserve internal references, selected projects, billable preferences, and Quick Timer values.
+
+Overlap repair takes no arguments and needs no selected timer project. It returns the number of changed entries and whether the final display refresh failed. A month without overlaps succeeds with zero changes. Matching concurrent requests share the active repair.
 
 ## Read and refresh ownership
 
@@ -30,6 +33,8 @@ Provider failures, offline pauses, and publication failures return errors rather
 
 Repository choices, provider fetch limits, and list filters continue to apply. The snapshot capture time records assembly, not the last successful provider fetch. List reads check data revisions and scope to avoid combining incompatible results.
 
+Refresh, overlap repair, and Telegram sends have two-minute native deadlines. Other bridged commands use 30 seconds. A repair timeout can leave saved changes and an operation that is still active.
+
 ## Telegram and files
 
 Telegram tools require a connected account and verified group, independently of Clockify authentication. Unavailable connections fail immediately rather than waiting for reconnection.
@@ -38,7 +43,7 @@ Discovery excludes hidden topics and never reads history or marks messages read.
 
 Attachments use an absolute local path on the machine running Clockalong. The native reader accepts one nonempty regular file up to 20 MiB. The webview claims its bytes once through the pending request; it does not receive arbitrary filesystem access.
 
-Refresh and sends have two-minute native deadlines. Other bridged commands use 30 seconds. Cancellation or timeout can leave Telegram delivery unconfirmed, so callers must check before retrying. There is no automatic resend or persistent outbox.
+Cancellation or timeout can leave Telegram delivery unconfirmed, so callers must check before retrying. There is no automatic resend or persistent outbox.
 
 ## Local trust boundary
 
