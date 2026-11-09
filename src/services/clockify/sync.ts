@@ -13,6 +13,7 @@ import { storage } from '../storage/config'
 import { useStorage } from '../storage/useStorage'
 import { clockify } from './client'
 import { clockifyEntryCache } from './entry-cache'
+import { getInvoicedClockifyEntryIds } from './invoicing'
 import { formatClockifyEntryFilterDate } from './ranges'
 import {
   type ClockifyEntrySyncDaysOption,
@@ -38,6 +39,7 @@ type ClockifyEntrySyncOptions = {
 }
 
 type ClockifyEntrySyncResult = {
+  invoiceStatusFailed: boolean
   entriesDeleted: number
   entriesFetched: number
   entriesStored: number
@@ -203,6 +205,12 @@ export async function syncClockifyEntries({ userId, workspaceId, start: requeste
       page += 1
     }
 
+    let invoicedIds: Set<string> | undefined
+    try {
+      invoicedIds = await getInvoicedClockifyEntryIds({ userId, workspaceId }, startDate, now, timeZone)
+    } catch (error) {
+      console.warn('[clockify sync] Invoice status is unavailable:', error)
+    }
     const currentUser = queryClient.getQueryData<UserDtoV1>(queryKeys.clockify.loggedUser)
     const currentWorkspaces = queryClient.getQueryData<WorkspaceDtoV1[]>(queryKeys.clockify.workspaces)
     const currentWorkspace = selectClockifyWorkspace(currentUser, currentWorkspaces)
@@ -214,7 +222,16 @@ export async function syncClockifyEntries({ userId, workspaceId, start: requeste
     }
     const upsertResult = await clockifyEntryCache.reconcile(
       { userId, workspaceId },
-      entriesToSync,
+      entriesToSync.map(entry => ({
+        ...entry,
+        invoiced:
+          invoicedIds &&
+          entry.id &&
+          Date.parse(entry.timeInterval?.start ?? '') >= startDate.getTime() &&
+          Date.parse(entry.timeInterval?.end ?? '') <= now.getTime()
+            ? invoicedIds.has(entry.id)
+            : undefined,
+      })),
       start,
       now.toISOString(),
       syncedAt,
@@ -229,6 +246,7 @@ export async function syncClockifyEntries({ userId, workspaceId, start: requeste
 
     const result = {
       entriesDeleted,
+      invoiceStatusFailed: !invoicedIds,
       entriesFetched,
       entriesInserted,
       entriesStored,
@@ -284,6 +302,25 @@ export function getClockifyEntrySyncStart(days: ClockifyEntrySyncDaysOption, now
   const start = new Date(now)
   start.setDate(start.getDate() - days)
   return start
+}
+
+export async function refreshClockifyEntriesAfterChanges(scope: { userId: string; workspaceId: string }, start: Date) {
+  // A background retry must finish before it can supersede the post-write refresh.
+  await queryClient
+    .getQueryCache()
+    .find({
+      queryKey: queryKeys.clockify.entrySync({ params: scope }),
+      exact: true,
+    })
+    ?.promise?.catch(() => {})
+  const refreshed = await Promise.allSettled([
+    syncClockifyEntries({ ...scope, start }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() }, { throwOnError: true }),
+  ])
+  for (const refresh of refreshed) {
+    if (refresh.status === 'rejected') console.warn('[clockify sync] Could not refresh after changes:', refresh.reason)
+  }
+  return refreshed.some(refresh => refresh.status === 'rejected')
 }
 
 function getClockifyEntryRefCounts(entries: TimeEntryWithRatesDtoV1[]) {

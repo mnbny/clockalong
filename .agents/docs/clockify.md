@@ -10,7 +10,7 @@ The read workspace follows the user's active workspace, then the default workspa
 
 Provider services create both running and completed entries. Completed intervals require valid dates and positive duration. They do not replace a running timer, and overlaps are allowed.
 
-Resuming an entry preserves its trackable fields in a new entry. Editing and overlap repair update Clockify-owned records. Clockalong does not create a separate authoritative time ledger.
+Resuming an entry preserves its trackable fields in a new entry. Editing, overlap repair, and entry collapse change Clockify-owned records. Clockalong does not create a separate authoritative time ledger.
 
 ## Synchronization and reports
 
@@ -18,9 +18,13 @@ Entry sync fetches the configured recent window before changing the local cache.
 
 Clockify entry-list date filters use the profile's local clock, while entry timestamps use UTC. Sync converts the request boundary and keeps cache reconciliation in UTC.
 
+Normal entry sync also reads all pages of the detailed report filtered to invoiced entries for the same user and date range. Cached completed entries within that range receive an invoice status only after the report completes. A failed or malformed report leaves status unknown but does not prevent entry sync. Collapse excludes unknown statuses when invoice protection is enabled.
+
 The cache is scoped by user and workspace. Direct writes and newer syncs take precedence over older in-flight results. Disconnect prevents stale results from restoring a previous session.
 
 The lookback and background interval are performance settings. Manual interval mode still permits the initial fetch and explicit refresh. Small direct reads retrieve the running timer; completed-entry views read the local cache.
+
+Overlap repair and entry collapse use cached entries without fetching originals first. After writes, each action refreshes its affected date range and summary reports. These actions leave cache updates to sync.
 
 Today, week, and month totals come from Clockify summary reports. Work-item totals instead combine retained matching entries with the current running response. These totals can cover different periods.
 

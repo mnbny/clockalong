@@ -99,5 +99,12 @@ function getClockifyTimeEntryCopyBody(
     body.tagIds = entry.tagIds
   }
 
+  if (entry.customFieldValues?.length) {
+    body.customFields = entry.customFieldValues.map(field => {
+      if (!field.customFieldId) throw new Error('Clockify custom field is missing its identifier.')
+      return { customFieldId: field.customFieldId, value: field.value }
+    })
+  }
+
   return body
 }
