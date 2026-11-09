@@ -16,6 +16,8 @@ Resuming an entry preserves its trackable fields in a new entry. Editing and ove
 
 Entry sync fetches the configured recent window before changing the local cache. Only a complete fetch reconciles entries and missing records within that window. Entries outside it remain as last-known data; their edits and deletions remain unknown until fetched.
 
+Clockify entry-list date filters use the profile's local clock, while entry timestamps use UTC. Sync converts the request boundary and keeps cache reconciliation in UTC.
+
 The cache is scoped by user and workspace. Direct writes and newer syncs take precedence over older in-flight results. Disconnect prevents stale results from restoring a previous session.
 
 The lookback and background interval are performance settings. Manual interval mode still permits the initial fetch and explicit refresh. Small direct reads retrieve the running timer; completed-entry views read the local cache.

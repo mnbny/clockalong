@@ -1,5 +1,5 @@
 import type { StoredClockifyTimeEntry } from './entry-cache'
-import type { TimeEntryWithRatesDtoV1 } from './generated/clockify'
+import type { TimeEntryWithRatesDtoV1, UserDtoV1, WorkspaceDtoV1 } from './generated/clockify'
 import type { PropsWithChildren } from 'react'
 
 import { queryOptions, useQuery } from '@tanstack/react-query'
@@ -13,6 +13,7 @@ import { storage } from '../storage/config'
 import { useStorage } from '../storage/useStorage'
 import { clockify } from './client'
 import { clockifyEntryCache } from './entry-cache'
+import { formatClockifyEntryFilterDate } from './ranges'
 import {
   type ClockifyEntrySyncDaysOption,
   type ClockifyEntrySyncIntervalOption,
@@ -33,6 +34,7 @@ export type SyncedClockifyTimeEntry = {
 type ClockifyEntrySyncOptions = {
   workspaceId: string
   userId: string
+  start?: Date
 }
 
 type ClockifyEntrySyncResult = {
@@ -136,12 +138,15 @@ export async function clearSyncedClockifyTimeEntries() {
   return clockifyEntryCache.clear()
 }
 
-export async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntrySyncOptions) {
+export async function syncClockifyEntries({ userId, workspaceId, start: requestedStart }: ClockifyEntrySyncOptions) {
   const generation = clockifyEntryCache.beginSync()
   const now = new Date()
   const initialRevision = await clockifyEntryCache.getRevision()
   const syncDays = await storage.get('clockifyEntrySyncDays')
-  const start = getClockifyEntrySyncStart(syncDays, now).toISOString()
+  const startDate = requestedStart ?? getClockifyEntrySyncStart(syncDays, now)
+  const start = startDate.toISOString()
+  const timeZone = queryClient.getQueryData<UserDtoV1>(queryKeys.clockify.loggedUser)?.settings?.timeZone
+  const queryStart = formatClockifyEntryFilterDate(startDate, timeZone)
   const syncedAt = new Date().toISOString()
   const refCounts = {
     github: 0,
@@ -172,7 +177,7 @@ export async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntry
           hydrated: true,
           page,
           'page-size': clockifyEntrySyncPageSize,
-          start,
+          start: queryStart,
         },
       })
       const pageRefCounts = getClockifyEntryRefCounts(entries)
@@ -198,10 +203,8 @@ export async function syncClockifyEntries({ userId, workspaceId }: ClockifyEntry
       page += 1
     }
 
-    const currentUser = queryClient.getQueryData<{ id?: string; activeWorkspace?: string; defaultWorkspace?: string }>(
-      queryKeys.clockify.loggedUser,
-    )
-    const currentWorkspaces = queryClient.getQueryData<Array<{ id?: string }>>(queryKeys.clockify.workspaces)
+    const currentUser = queryClient.getQueryData<UserDtoV1>(queryKeys.clockify.loggedUser)
+    const currentWorkspaces = queryClient.getQueryData<WorkspaceDtoV1[]>(queryKeys.clockify.workspaces)
     const currentWorkspace = selectClockifyWorkspace(currentUser, currentWorkspaces)
     if (
       (currentUser?.id && currentUser.id !== userId) ||
@@ -264,7 +267,7 @@ export async function cacheClockifyEntryResult(
     ...response,
     timeInterval: { ...fallback.timeInterval, ...response.timeInterval },
   }
-  const currentUserId = queryClient.getQueryData<{ id?: string }>(queryKeys.clockify.loggedUser)?.id
+  const currentUserId = queryClient.getQueryData<UserDtoV1>(queryKeys.clockify.loggedUser)?.id
   const userId = entry.userId ?? currentUserId
   if (!entry.id || !userId || !entry.workspaceId) return false
   if (currentUserId && currentUserId !== userId) return false
