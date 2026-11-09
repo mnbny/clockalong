@@ -8,6 +8,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 
 import { ClockifyWidget } from '../../../src/components/ClockifyWidget'
 import { clockifyEntryCache } from '../../../src/services/clockify/entry-cache'
+import * as overlapRepair from '../../../src/services/clockify/overlap-repair'
 import { db } from '../../../src/services/db'
 
 vi.mock('../../../src/services/clockify/client', () => ({
@@ -62,6 +63,7 @@ afterEach(async () => {
   client.clear()
   entryCommits = []
   vi.restoreAllMocks()
+  vi.useRealTimers()
   await clockifyEntryCache.clear()
 })
 
@@ -114,4 +116,58 @@ test('widget reads current date ranges live and recovers from a local read failu
   await act(async () => retry.click())
   await vi.waitFor(() => expect(container!.textContent).toContain('Today entry'))
   expect(container!.textContent).not.toContain('Local read failed')
+})
+
+test('the header only shows a red repair badge for monthly overlaps and prevents repeat submissions', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-08T20:00:00Z'))
+  vi.spyOn(console, 'info').mockImplementation(() => {})
+  let finish!: (result: { updatedCount: number; refreshFailed: boolean }) => void
+  const repair = vi.spyOn(overlapRepair, 'fixClockifyMonthOverlaps').mockReturnValue(
+    new Promise(resolve => {
+      finish = resolve
+    }),
+  )
+  await mount()
+  const getButton = () => container!.querySelector<HTMLButtonElement>('button[aria-label="Fix overlaps this month"]')
+  expect(getButton()).toBeNull()
+
+  await act(async () => {
+    for (const id of ['first', 'overlap']) {
+      await clockifyEntryCache.upsert(
+        {
+          id,
+          userId: 'user',
+          workspaceId: 'workspace',
+          timeInterval: { start: '2026-11-02T12:00:00Z', end: '2026-11-02T13:00:00Z' },
+        },
+        { userId: 'user', workspaceId: 'workspace' },
+      )
+    }
+  })
+  await vi.waitFor(() => expect(getButton()?.disabled).toBe(false))
+  const button = getButton()!
+  expect(button.closest('header')).not.toBeNull()
+  expect(button.textContent?.trim()).toBe('Fix overlaps')
+  expect(button.nextElementSibling?.textContent).toBe('Not Running')
+  expect(button.classList.contains('badge-error')).toBe(true)
+
+  await act(async () => button.click())
+  await vi.waitFor(() => expect(button.disabled).toBe(true))
+  await act(async () => button.click())
+  expect(repair).toHaveBeenCalledExactlyOnceWith({ userId: 'user', workspaceId: 'workspace' }, undefined)
+  expect(container!.querySelector('dialog')).toBeNull()
+  await act(async () => {
+    await clockifyEntryCache.upsert(
+      {
+        id: 'overlap',
+        userId: 'user',
+        workspaceId: 'workspace',
+        timeInterval: { start: '2026-11-02T13:00:00Z', end: '2026-11-02T14:00:00Z' },
+      },
+      { userId: 'user', workspaceId: 'workspace' },
+    )
+    finish({ updatedCount: 1, refreshFailed: false })
+  })
+  await vi.waitFor(() => expect(getButton()).toBeNull())
 })

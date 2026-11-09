@@ -22,15 +22,17 @@ Completed entry creation leaves the running timer unchanged. Overlaps are permit
 
 Successful writes update the local cache when the response identifies the entry, then refresh entries and reports. Stopping a timer makes its completed activity available for source summaries and ordering.
 
-## Overlap review
+## Overlap repair
 
-Overlap detection uses completed cached entries and ignores running timers. Its review buckets are today, the preceding six days, and days seven through twenty-seven ago. These buckets are separate from calendar report periods.
+The Clockify header and MCP share one overlap repair operation. It repairs completed entries from the current calendar month and ignores running timers. The header action sits beside the timer status.
 
-An overlap badge opens a preview of dated before-and-after ranges. Repair preserves durations and moves overlapping entries forward while retaining entries that need no adjustment.
+The range starts at midnight on the first day of the month and ends when repair starts. It uses the Clockify profile timezone, with the device timezone as a fallback.
 
-Repairs use sequential bounded batches for one Clockify user and workspace. Rate-limit retries retain the previewed timestamps. Each response must confirm the batch before the next one proceeds.
+The header action appears as a red badge only when cached entries show overlaps. It disappears when no overlaps remain. A click starts repair immediately. Each repair first refreshes the full month, regardless of the configured sync window. A failed refresh prevents repair from using stale entries.
 
-Partial success remains saved. A failed request is not proof that no entries changed. After either success or failure, the app refreshes entries and reports before another review.
+Repair preserves durations and moves overlapping entries forward while retaining entries that need no adjustment. Repairs use sequential bounded batches for one Clockify user and workspace. Rate-limit retries retain the calculated timestamps. Each response must confirm the batch before the next one proceeds.
+
+Partial success remains saved. A failed request is not proof that no entries changed. After a repair attempt, the app refreshes the full month and reports. A month without overlaps succeeds without changes.
 
 ## Local list behavior
 
