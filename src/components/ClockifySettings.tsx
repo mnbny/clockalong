@@ -23,6 +23,9 @@ export function ClockifySettings() {
   )
   const [clockifyEntrySyncDays, setClockifyEntrySyncDays] = useStorage('clockifyEntrySyncDays')
   const [clockifyEntrySyncInterval, setClockifyEntrySyncInterval] = useStorage('clockifyEntrySyncInterval')
+  const [collapseThreshold, setCollapseThreshold] = useStorage('clockifyCollapseThresholdMinutes')
+  const [collapseChunk, setCollapseChunk] = useStorage('clockifyCollapseChunkMinutes')
+  const [collapseExcludeInvoiced, setCollapseExcludeInvoiced] = useStorage('clockifyCollapseExcludeInvoiced')
   const clockifyUserQuery = useQuery({
     queryKey: queryKeys.clockify.loggedUser,
     queryFn: () => clockify.getLoggedUser(),
@@ -133,6 +136,50 @@ export function ClockifySettings() {
             </option>
           ))}
         </select>
+      </SettingsRow>
+
+      <SettingsRow
+        label="Collapse: Maximum entry duration"
+        description="Include entries at or below this many minutes.">
+        <input
+          aria-label="Collapse maximum entry duration in minutes"
+          className="input input-primary w-full max-w-56"
+          type="number"
+          min="0.1"
+          step="0.1"
+          value={collapseThreshold}
+          onChange={event => {
+            const value = event.currentTarget.valueAsNumber
+            if (Number.isFinite(value) && value > 0) void setCollapseThreshold(value)
+          }}
+        />
+      </SettingsRow>
+      <SettingsRow
+        label="Collapse: Chunk size"
+        description="Minutes from the first eligible entry. Later entries do not extend the window.">
+        <input
+          aria-label="Collapse chunk size in minutes"
+          className="input input-primary w-full max-w-56"
+          type="number"
+          min="1"
+          step="1"
+          value={collapseChunk}
+          onChange={event => {
+            const value = event.currentTarget.valueAsNumber
+            if (Number.isFinite(value) && value > 0) void setCollapseChunk(value)
+          }}
+        />
+      </SettingsRow>
+      <SettingsRow
+        label="Collapse: Exclude invoiced entries"
+        description="Skip invoiced entries and entries whose invoice status has not synced.">
+        <input
+          aria-label="Exclude invoiced entries from collapse"
+          checked={collapseExcludeInvoiced}
+          className="toggle toggle-primary"
+          type="checkbox"
+          onChange={event => void setCollapseExcludeInvoiced(event.currentTarget.checked)}
+        />
       </SettingsRow>
 
       <SettingsRow label="Project" description="Clockify project used for new timers.">

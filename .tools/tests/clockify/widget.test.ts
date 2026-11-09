@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { ClockifyWidget } from '../../../src/components/ClockifyWidget'
+import * as collapseEntries from '../../../src/services/clockify/collapse-entries'
 import { clockifyEntryCache } from '../../../src/services/clockify/entry-cache'
 import * as overlapRepair from '../../../src/services/clockify/overlap-repair'
 import { db } from '../../../src/services/db'
@@ -22,6 +23,9 @@ vi.mock('../../../src/services/clockify/client', () => ({
 vi.mock('../../../src/services/storage/useStorage', () => ({
   useStorage: (key: string) => {
     const defaults: Record<string, unknown> = {
+      clockifyCollapseThresholdMinutes: 5,
+      clockifyCollapseChunkMinutes: 60,
+      clockifyCollapseExcludeInvoiced: true,
       clockifyDefaultProject: null,
       clockifyOverrideProject: null,
       clockifyOverrideProjectVisibility: false,
@@ -65,6 +69,7 @@ afterEach(async () => {
   vi.restoreAllMocks()
   vi.useRealTimers()
   await clockifyEntryCache.clear()
+  await db.clockifyCollapses.clear()
 })
 
 test('widget reads current date ranges live and recovers from a local read failure', async () => {
@@ -168,6 +173,53 @@ test('the header only shows a red repair badge for monthly overlaps and prevents
       { userId: 'user', workspaceId: 'workspace' },
     )
     finish({ updatedCount: 1, refreshFailed: false })
+  })
+  await vi.waitFor(() => expect(getButton()).toBeNull())
+})
+
+test('the collapse badge follows cached eligibility and disables repeated clicks until resync completes', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-08T20:00:00Z'))
+  vi.spyOn(console, 'info').mockImplementation(() => {})
+  let finish!: (result: { createdCount: number; deletedCount: number; refreshFailed: boolean }) => void
+  const collapse = vi.spyOn(collapseEntries, 'collapseClockifyMonthEntries').mockReturnValue(
+    new Promise(resolve => {
+      finish = resolve
+    }),
+  )
+  const scope = { userId: 'user', workspaceId: 'workspace' }
+  const first = {
+    ...scope,
+    id: 'first',
+    description: 'Same task',
+    invoiced: false,
+    timeInterval: { start: '2026-11-02T10:17:00Z', end: '2026-11-02T10:17:05Z' },
+  }
+  const second = {
+    ...first,
+    id: 'second',
+    timeInterval: { start: '2026-11-02T10:50:00Z', end: '2026-11-02T10:50:17Z' },
+  }
+  await clockifyEntryCache.upsert(first, scope)
+  await clockifyEntryCache.upsert({ ...second, invoiced: true }, scope)
+  await mount()
+  const getButton = () =>
+    container!.querySelector<HTMLButtonElement>('button[aria-label="Collapse entries this month"]')
+  expect(getButton()).toBeNull()
+  await act(async () => {
+    await clockifyEntryCache.upsert(second, scope)
+  })
+  await vi.waitFor(() => expect(getButton()?.disabled).toBe(false))
+  const button = getButton()!
+  expect(button.closest('header')).not.toBeNull()
+  expect(button.textContent?.trim()).toBe('Collapse entries')
+  await act(async () => button.click())
+  await vi.waitFor(() => expect(button.disabled).toBe(true))
+  await act(async () => button.click())
+  expect(collapse).toHaveBeenCalledExactlyOnceWith(scope, undefined)
+  await act(async () => {
+    await clockifyEntryCache.clear()
+    finish({ createdCount: 1, deletedCount: 2, refreshFailed: false })
   })
   await vi.waitFor(() => expect(getButton()).toBeNull())
 })

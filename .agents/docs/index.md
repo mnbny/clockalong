@@ -33,8 +33,8 @@ Add each document using this format:
 
 #### [time-tracking.md](./time-tracking.md)
 
-- Description: Dashboard timer workflows, completed entries, and overlap repair.
-- Tags: `time-tracking`, `dashboard`, `overlap`
+- Description: Dashboard timers, completed entries, overlap repair, and entry collapse.
+- Tags: `time-tracking`, `dashboard`, `overlap`, `collapse`
 
 #### [quick-timers.md](./quick-timers.md)
 

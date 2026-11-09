@@ -3,6 +3,7 @@ import type { TimeEntrySummaryReportDto } from '../services/clockify/generated/r
 
 import { formatCurrency } from '@automattic/format-currency'
 import {
+  IconArrowsJoin,
   IconCalendarDue,
   IconCalendarMonth,
   IconCalendarWeek,
@@ -22,6 +23,8 @@ import { useStopwatch } from 'react-timer-hook'
 import { useDexieQuery } from '../hooks/useDexieQuery'
 import { queryKeys } from '../lib/query-client'
 import { clockify, clockifyReports } from '../services/clockify/client'
+import { getClockifyCollapseGroups } from '../services/clockify/collapse'
+import { clockifyCollapseOperationId, collapseClockifyMonthEntries } from '../services/clockify/collapse-entries'
 import { clockifyEntryCache } from '../services/clockify/entry-cache'
 import { clockifyEntriesInRange } from '../services/clockify/entry-queries'
 import { fixClockifyMonthOverlaps } from '../services/clockify/overlap-repair'
@@ -73,6 +76,9 @@ export function ClockifyWidget() {
   const [clockifyOverrideProject, setClockifyOverrideProject] = useStorage('clockifyOverrideProject')
   const [clockifyOverrideProjectVisibility] = useStorage('clockifyOverrideProjectVisibility')
   const [, setQuickTimersActiveEntry] = useStorage('quickTimersActiveEntry')
+  const [collapseThresholdMinutes] = useStorage('clockifyCollapseThresholdMinutes')
+  const [collapseChunkMinutes] = useStorage('clockifyCollapseChunkMinutes')
+  const [collapseExcludeInvoiced] = useStorage('clockifyCollapseExcludeInvoiced')
   const [entriesVisible, setEntriesVisible] = useState(false)
   const [entryTableDayRange, setEntryTableDayRange] = useState<ClockifyEntryTableDayRange>(1)
   const [editingEntry, setEditingEntry] = useState<TimeEntryWithRatesDtoV1 | null>(null)
@@ -213,11 +219,36 @@ export function ClockifyWidget() {
   )
   const monthSyncedEntries = monthEntriesQuery.data ?? emptyClockifyEntries
   const entryTableSyncedEntries = entryTableEntriesQuery.data ?? emptyClockifyEntries
-  const entryQueries = [monthEntriesQuery, entryTableEntriesQuery]
+  const readPendingCollapse = useCallback(
+    () =>
+      userQuery.data?.id && selectedWorkspace?.id
+        ? db.clockifyCollapses.get(
+            clockifyCollapseOperationId({ userId: userQuery.data.id, workspaceId: selectedWorkspace.id }),
+          )
+        : Promise.resolve(undefined),
+    [userQuery.data?.id, selectedWorkspace?.id],
+  )
+  const pendingCollapseQuery = useDexieQuery(
+    readPendingCollapse,
+    JSON.stringify([userQuery.data?.id, selectedWorkspace?.id]),
+  )
+  const entryQueries = [monthEntriesQuery, entryTableEntriesQuery, pendingCollapseQuery]
   const entryReadError = entryQueries.find(query => query.error)?.error
   const hasMonthOverlap = useMemo(
     () => hasCompletedClockifyTimeEntryOverlap(monthSyncedEntries.map(row => row.entry)),
     [monthSyncedEntries],
+  )
+  const collapseGroups = useMemo(
+    () =>
+      getClockifyCollapseGroups(
+        monthSyncedEntries.map(row => row.entry),
+        {
+          thresholdMinutes: collapseThresholdMinutes,
+          chunkMinutes: collapseChunkMinutes,
+          excludeInvoiced: collapseExcludeInvoiced,
+        },
+      ),
+    [monthSyncedEntries, collapseThresholdMinutes, collapseChunkMinutes, collapseExcludeInvoiced],
   )
   const runningEntry = useMemo(() => {
     const runningEntries = runningEntryQuery.data ?? []
@@ -262,6 +293,27 @@ export function ClockifyWidget() {
             : `Fixed ${updatedCount} Clockify entries`,
       )
       if (refreshFailed) appToast.warning('Could not refresh Clockify after the repair. Sync to update the display.')
+    },
+  })
+  const collapseMutation = useMutation({
+    mutationFn: () => {
+      if (!userQuery.data?.id || !selectedWorkspace?.id) throw new Error('Clockify is not ready.')
+      return collapseClockifyMonthEntries(
+        { userId: userQuery.data.id, workspaceId: selectedWorkspace.id },
+        userQuery.data.settings?.timeZone,
+      )
+    },
+    onError: error => {
+      appToast.error('Could not collapse Clockify entries', { description: getErrorMessage(error) })
+    },
+    onSuccess: ({ createdCount, deletedCount, refreshFailed }) => {
+      appToast.success(
+        createdCount
+          ? 'Collapsed ' + deletedCount + ' entries into ' + createdCount
+          : 'No Clockify entries to collapse this month',
+      )
+      if (refreshFailed)
+        appToast.warning('Could not refresh Clockify after collapsing entries. Sync to update the display.')
     },
   })
   const resumeClockifyEntryMutation = useMutation({
@@ -372,6 +424,22 @@ export function ClockifyWidget() {
                 }}>
                 {entriesVisible ? <IconEyeOff className="size-4" /> : <IconEye className="size-4" />}
               </button>
+              {(!!collapseGroups.length || !!pendingCollapseQuery.data) && (
+                <button
+                  className="badge badge-primary badge-sm cursor-pointer gap-1 border-0 tracking-normal normal-case disabled:cursor-not-allowed"
+                  type="button"
+                  aria-label="Collapse entries this month"
+                  title="Collapse entries this month"
+                  disabled={collapseMutation.isPending || !userQuery.data?.id || !selectedWorkspace?.id}
+                  onClick={() => collapseMutation.mutate()}>
+                  {collapseMutation.isPending ? (
+                    <span className="loading loading-spinner loading-xs" />
+                  ) : (
+                    <IconArrowsJoin className="size-3" />
+                  )}
+                  {pendingCollapseQuery.data && !collapseMutation.isPending ? 'Resume collapse' : 'Collapse entries'}
+                </button>
+              )}
               {hasMonthOverlap && (
                 <button
                   className="badge badge-error badge-sm cursor-pointer gap-1 border-0 tracking-normal normal-case disabled:cursor-not-allowed"
