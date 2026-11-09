@@ -14,6 +14,7 @@ import { isTauri } from '@tauri-apps/api/core'
 import { getClockalongAuthState } from '../../hooks/useAppAuth'
 import { queryClient, queryKeys } from '../../lib/query-client'
 import { getErrorMessage } from '../../utils/errors'
+import { collapseClockifyMonthEntries } from '../clockify/collapse-entries'
 import { clockifyEntryCache } from '../clockify/entry-cache'
 import { fixClockifyMonthOverlaps } from '../clockify/overlap-repair'
 import { cacheClockifyEntryResult } from '../clockify/sync'
@@ -101,17 +102,16 @@ export async function executeMcpCommand(
         const execution = await executeStopTimer(context, lifecycle)
         return execution
       }
-      case 'fix_overlaps': {
+      case 'fix_overlaps':
+      case 'collapse_entries': {
         const user = queryClient.getQueryData<UserDtoV1>(queryKeys.clockify.loggedUser)
         const workspaces = queryClient.getQueryData<WorkspaceDtoV1[]>(queryKeys.clockify.workspaces)
         const workspace = selectClockifyWorkspace(user, workspaces)
         if (!user?.id || !workspace?.id) {
           return commandError('clockify_error', 'Clockify account or workspace is not ready. Refresh and try again.')
         }
-        const result = await fixClockifyMonthOverlaps(
-          { userId: user.id, workspaceId: workspace.id },
-          user.settings?.timeZone,
-        )
+        const operation = command.tool === 'fix_overlaps' ? fixClockifyMonthOverlaps : collapseClockifyMonthEntries
+        const result = await operation({ userId: user.id, workspaceId: workspace.id }, user.settings?.timeZone)
         return { ok: true, result }
       }
       default:

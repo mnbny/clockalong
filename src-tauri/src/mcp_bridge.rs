@@ -136,7 +136,7 @@ impl McpBridgeState {
         let (sender, receiver) = oneshot::channel();
         let timeout = if matches!(
             tool.as_str(),
-            "refresh" | "send_telegram_message" | "fix_overlaps"
+            "refresh" | "send_telegram_message" | "fix_overlaps" | "collapse_entries"
         ) {
             REFRESH_TIMEOUT
         } else {

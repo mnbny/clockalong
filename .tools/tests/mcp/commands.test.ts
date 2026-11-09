@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 
 import { queryClient, queryKeys } from '../../../src/lib/query-client'
 import { clockify } from '../../../src/services/clockify/client'
+import * as collapseEntries from '../../../src/services/clockify/collapse-entries'
 import * as overlapRepair from '../../../src/services/clockify/overlap-repair'
 import { clearSyncedClockifyTimeEntries } from '../../../src/services/clockify/sync'
 import { db } from '../../../src/services/db'
@@ -66,6 +67,34 @@ test('overlap repair rejects unavailable accounts and propagates repair failures
   expect(await executeMcpCommand(command, context)).toEqual({
     ok: false,
     error: { code: 'clockify_error', message: 'Clockify is limiting requests.' },
+  })
+})
+
+test('MCP collapse uses the shared operation, active workspace and timezone without a selected timer project', async () => {
+  queryClient.setQueryData(queryKeys.clockify.loggedUser, {
+    id: 'user',
+    activeWorkspace: 'active-workspace',
+    settings: { timeZone: 'America/Los_Angeles' },
+  })
+  queryClient.setQueryData(queryKeys.clockify.workspaces, [{ id: 'workspace' }, { id: 'active-workspace' }])
+  const collapse = vi.spyOn(collapseEntries, 'collapseClockifyMonthEntries').mockResolvedValue({
+    createdCount: 2,
+    deletedCount: 8,
+    refreshFailed: false,
+  })
+  const command = { tool: 'collapse_entries', requestId: 'collapse', arguments: {} } as const
+  expect(await executeMcpCommand(command, { ...context, clockifyTimerProject: null })).toEqual({
+    ok: true,
+    result: { createdCount: 2, deletedCount: 8, refreshFailed: false },
+  })
+  expect(collapse).toHaveBeenCalledExactlyOnceWith(
+    { userId: 'user', workspaceId: 'active-workspace' },
+    'America/Los_Angeles',
+  )
+  collapse.mockRejectedValue(new Error('Delete failed'))
+  expect(await executeMcpCommand(command, context)).toEqual({
+    ok: false,
+    error: { code: 'clockify_error', message: 'Delete failed' },
   })
 })
 
