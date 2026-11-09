@@ -1,3 +1,4 @@
+import type { ClockifyCollapseOperation } from './clockify/collapse-entries'
 import type { ClockifyEntryRef, StoredClockifyEntry } from './clockify/entry-cache'
 import type { SyncedGithubWorkItem } from './github/sync'
 import type { GithubAuthorIndex, GithubWorkItemIndex, StoredGithubWorkItem } from './github/work-item-index'
@@ -18,6 +19,7 @@ export class DB extends Dexie {
   declare clockifyEntries: Table<StoredClockifyEntry, [string, string, string]>
   declare clockifyEntryRefs: Table<ClockifyEntryRef, [string, string, string, string]>
   declare clockifyCacheMeta: Table<{ key: string; revision: number }, string>
+  declare clockifyCollapses: Table<ClockifyCollapseOperation, string>
   declare linearTickets: Table<StoredLinearTicket, [string, string]>
   declare linearCacheMeta: Table<{ key: string; revision: number; sequence: number }, string>
   declare telegramNotifications: Table<TelegramNotification, [string, number]>
@@ -79,6 +81,7 @@ export class DB extends Dexie {
             }
           })
       })
+    this.version(8).stores({ clockifyCollapses: 'id,[userId+workspaceId]' })
   }
 }
 

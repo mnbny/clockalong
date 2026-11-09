@@ -1,5 +1,6 @@
 import type { PaseoTriggerSchema } from '../paseo/triggers'
 
+import { defaultClockifyCollapseOptions } from '../clockify/collapse'
 import {
   defaultClockifyDescriptionTemplate,
   defaultClockifyDescriptionTemplateFallback,
@@ -150,6 +151,21 @@ const storageConfig = {
   clockifyEntrySyncInterval: {
     type: 'string',
     default: defaultClockifyEntrySyncInterval,
+    version: 1,
+  },
+  clockifyCollapseThresholdMinutes: {
+    type: 'number',
+    default: defaultClockifyCollapseOptions.thresholdMinutes,
+    version: 1,
+  },
+  clockifyCollapseChunkMinutes: {
+    type: 'number',
+    default: defaultClockifyCollapseOptions.chunkMinutes,
+    version: 1,
+  },
+  clockifyCollapseExcludeInvoiced: {
+    type: 'boolean',
+    default: defaultClockifyCollapseOptions.excludeInvoiced,
     version: 1,
   },
   quickTimersEnabled: {
