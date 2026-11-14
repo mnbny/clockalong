@@ -22,7 +22,7 @@ export function getClockifyCollapseGroups(entries: StoredClockifyTimeEntry[], op
       !entry.workspaceId ||
       !Number.isFinite(start) ||
       !Number.isFinite(end) ||
-      duration <= 0 ||
+      duration < 0 ||
       duration > options.thresholdMinutes * 60_000 ||
       (entry.type && entry.type !== 'REGULAR' && entry.type !== 'BREAK') ||
       (options.excludeInvoiced && entry.invoiced !== false)
