@@ -16,7 +16,13 @@ Clockalong exposes local agent tools for tracking context, Clockify timer contro
 
 Public tool names and arguments are a consumer contract. Protocol schemas, validation, and frontend command handling must agree.
 
-The server does not expose credentials, raw provider APIs, arbitrary-description timers, manual entry editing or resuming, Telegram history, resources, or prompts.
+The server does not expose:
+
+- Credentials or raw provider APIs.
+- Arbitrary-description timers.
+- Manual entry editing or resuming, or individual entry deletion.
+- Telegram history.
+- MCP resources or prompts.
 
 Completed entries use a positive duration, including fractional minutes, and an optional end time with an explicit timezone. Overlaps are allowed. Source templates preserve internal references, selected projects, billable preferences, and Quick Timer values.
 
@@ -31,6 +37,8 @@ Both actions plan from the local cache and sync afterward. Collapse permits over
 Rust owns the loopback listener, protocol validation, cached snapshots, and pending commands. The webview publishes normalized tracking context and performs provider operations through existing services.
 
 Snapshots contain bounded recent entries and tracking state, not entire work-item archives. Linear and GitHub listings read bounded database results in the active webview. A hidden window remains available.
+
+Recent-entry reads use calendar-day windows that are independent of the dashboard's period selection and pagination.
 
 Work discovery refreshes by default and can explicitly use cached data. Refresh shares the header's synchronization action, including requests already in progress. It publishes updated context before reporting success.
 
