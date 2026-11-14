@@ -21,7 +21,6 @@ test('invalid durations and incomplete or reversed intervals cannot create timer
   for (const interval of [
     { start: '', end: '' },
     { start: '2026-10-12T12:00:00Z', end: '' },
-    { start: '2026-10-12T12:00:00Z', end: '2026-10-12T12:00:00Z' },
     { start: '2026-10-12T12:00:00Z', end: '2026-10-12T11:00:00Z' },
   ]) {
     expect(() => getClockifyTimeEntryTiming(interval)).toThrow()

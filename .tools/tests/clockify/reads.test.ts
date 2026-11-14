@@ -9,7 +9,11 @@ import {
   getCompletedClockifyTimeEntryOverlapFixes,
   hasCompletedClockifyTimeEntryOverlap,
 } from '../../../src/services/clockify/overlaps'
-import { getClockifyEntryTableRange, getClockifyMonthRange } from '../../../src/services/clockify/ranges'
+import {
+  getClockifyEntryTableRange,
+  getClockifyMonthRange,
+  getClockifyPeriodRange,
+} from '../../../src/services/clockify/ranges'
 import { DB } from '../../../src/services/db'
 import { buildMcpSnapshot } from '../../../src/services/mcp/snapshot'
 
@@ -45,6 +49,21 @@ test('table ranges use local calendar boundaries across DST', () => {
     else process.env.TZ = previous
   }
 })
+
+test.each([
+  ['today', '2026-03-08T20:00:00Z', 'MONDAY', '2026-03-08T08:00:00.000Z', '2026-03-09T07:00:00.000Z'],
+  ['week', '2026-03-11T20:00:00Z', 'SUNDAY', '2026-03-08T08:00:00.000Z', '2026-03-15T07:00:00.000Z'],
+  ['week', '2026-03-11T20:00:00Z', 'MONDAY', '2026-03-09T07:00:00.000Z', '2026-03-16T07:00:00.000Z'],
+  ['week', '2026-11-04T20:00:00Z', 'SUNDAY', '2026-11-01T07:00:00.000Z', '2026-11-08T08:00:00.000Z'],
+  ['month', '2026-03-11T20:00:00Z', 'MONDAY', '2026-03-01T08:00:00.000Z', '2026-04-01T07:00:00.000Z'],
+  ['month', '2026-01-01T00:30:00Z', 'MONDAY', '2025-12-01T08:00:00.000Z', '2026-01-01T08:00:00.000Z'],
+] as const)(
+  'calendar %s ranges follow the profile timezone and week start at %s (%s)',
+  (period, instant, weekStart, start, end) => {
+    const range = getClockifyPeriodRange(period, new Date(instant), 'America/Los_Angeles', weekStart)
+    expect([range.start.toISOString(), range.end.toISOString()]).toEqual([start, end])
+  },
+)
 
 test.each([
   ['2026-03-31T20:00:00Z', 'America/Los_Angeles', '2026-03-01T08:00:00.000Z'],

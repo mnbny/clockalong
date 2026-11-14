@@ -62,6 +62,38 @@ test('window boundaries are inclusive and dates outside remain unchanged', async
   expect((await c.database.clockifyEntries.toArray()).map(row => row.id).sort()).toEqual(['after', 'before'])
 })
 
+test('deletion removes scoped rows and references without letting an older sync restore them', async () => {
+  const c = cache()
+  const removed = entry('removed', 'ref:linear:acme:TEST-1')
+  const otherScope = { ...scope, workspaceId: 'other-workspace' }
+  await c.upsert(removed, scope)
+  await c.upsert({ ...removed, workspaceId: otherScope.workspaceId }, otherScope)
+  await c.upsert(entry('kept'), scope)
+  const pendingSync = c.beginSync()
+  const revision = await c.getRevision()
+
+  await expect(c.remove(removed.id!, scope)).resolves.toBe(true)
+  await expect(c.reconcile(scope, [removed], start, end, end, pendingSync, revision)).rejects.toThrow('superseded')
+  expect(await c.database.clockifyEntries.get([scope.userId, scope.workspaceId, removed.id!])).toBeUndefined()
+  expect(await c.database.clockifyEntries.get([scope.userId, scope.workspaceId, 'kept'])).toBeDefined()
+  expect(await c.database.clockifyEntryRefs.toArray()).toMatchObject([{ ...otherScope, entryId: removed.id }])
+  expect(await c.database.clockifyEntries.get([otherScope.userId, otherScope.workspaceId, removed.id!])).toBeDefined()
+  expect(await c.getRevision()).toBeGreaterThan(revision)
+})
+
+test('a deletion response from an old session cannot remove a new session entry', async () => {
+  const c = cache()
+  const lifecycle = c.getLifecycle()
+  await c.clear()
+  await c.upsert(entry('same-id', 'ref:linear:acme:TEST-1'), scope)
+  const revision = await c.getRevision()
+
+  await expect(c.remove('same-id', scope, lifecycle)).resolves.toBe(false)
+  expect(await c.database.clockifyEntries.get([scope.userId, scope.workspaceId, 'same-id'])).toBeDefined()
+  expect(await c.database.clockifyEntryRefs.count()).toBe(1)
+  expect(await c.getRevision()).toBe(revision)
+})
+
 test('indexed summaries include retained history, deduplicate running entries and isolate scopes', async () => {
   const c = cache()
   const ref = 'ref:github:owner/repo:issue:1'

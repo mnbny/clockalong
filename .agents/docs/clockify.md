@@ -8,9 +8,9 @@ Generated Zodios clients cover the regular API and the separate reports host. Ge
 
 The read workspace follows the user's active workspace, then the default workspace, then the first available workspace. New source entries use the selected dashboard project override or default project and the saved billable preference.
 
-Provider services create both running and completed entries. Completed intervals require valid dates and positive duration. They do not replace a running timer, and overlaps are allowed.
+Provider services create both running and completed entries. Completed intervals require valid dates and cannot end before they start. Manual additions require a positive duration. Completed entries do not replace a running timer, and overlaps are allowed.
 
-Resuming an entry preserves its trackable fields in a new entry. Editing, overlap repair, and entry collapse change Clockify-owned records. Clockalong does not create a separate authoritative time ledger.
+When the app resumes an entry, it preserves that entry's trackable fields in a new entry. Editing, deletion, overlap repair, and entry collapse change Clockify-owned records. Clockalong does not create a separate authoritative time ledger.
 
 ## Synchronization and reports
 

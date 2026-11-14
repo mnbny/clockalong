@@ -13,8 +13,8 @@ export function getClockifyTimeEntryTiming(interval?: ClockifyTimeEntryInterval)
   const start = new Date(interval.start)
   const end = new Date(interval.end)
 
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
-    throw new Error('Use a valid start and end time with a positive duration.')
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end < start) {
+    throw new Error('Use valid start and end times, with the end at or after the start.')
   }
 
   return { start: start.toISOString(), end: end.toISOString() } satisfies CreateTimeEntryRequest

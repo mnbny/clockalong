@@ -8,11 +8,13 @@ Users start timers from Linear issues, GitHub work items, or Quick Timer presets
 
 New source entries use the dashboard project override when present, otherwise the default project, plus the saved billable preference. Resuming an existing entry creates a new running entry from its trackable fields.
 
-The Clockify widget shows the running timer and summary time and value for today, this week, and this month. Its recent-entry table offers one-, three-, and seven-day calendar ranges. Tracked value comes from Clockify rates; it is not an invoice or billing approval.
+The Clockify widget shows the running timer and summary time and value for today, this week, and this month. Its entry table offers the same calendar periods, using the Clockify profile timezone and week-start setting. Without those settings, it uses the device timezone and Monday as the week start. Tracked value comes from Clockify rates; it is not an invoice or billing approval.
+
+Entries appear newest first by start time. Today shows the full cached list. Week and Month use pagination. When the user changes periods or pages, the app uses the local cache and does not refresh Clockify. Cached entries can cover less history than the summary reports.
 
 The app header owns manual tracking sync and its activity indicator. Individual widgets do not provide separate refresh buttons.
 
-## Manual entry and editing
+## Entry management
 
 Right-clicking a source play control or Quick Timer card opens completed-time entry. Keyboard context-menu actions provide the same access. Left-click retains the normal timer action.
 
@@ -21,6 +23,8 @@ The manual form accepts fractional minutes and editable start and end times. New
 Completed entry creation leaves the running timer unchanged. Overlaps are permitted. Provider entries keep their configured descriptions and internal references; copies of existing entries retain their trackable fields.
 
 Successful writes update the local cache when the response identifies the entry, then refresh entries and reports. Stopping a timer makes its completed activity available for source summaries and ordering.
+
+Users can delete individual entries from the Clockify table after confirmation. After Clockify confirms deletion, the app updates its local cache and refreshes entries, reports, and running timer state.
 
 ## Overlap repair
 
@@ -38,7 +42,9 @@ Partial success remains saved. A failed request is not proof that no entries cha
 
 The Clockify header and MCP share an entry collapse operation. It combines short completed entries from the cached current month across the active workspace. Its date range follows the same calendar and timezone rules as overlap repair.
 
-The maximum entry duration defaults to five minutes, inclusive. The chunk size defaults to one hour. Each group starts at its first eligible entry. Later entries must start before that window ends and do not extend it. Groups require at least two entries with matching project, task, description, billable state, tags, rates, type, and custom fields.
+The maximum entry duration defaults to five minutes, inclusive. Entries with zero duration are eligible. A group can also have a total duration of zero.
+
+The chunk size defaults to one hour. Each group starts at its first eligible entry. Later entries must start before that window ends and do not extend it. Groups require at least two entries with matching project, task, description, billable state, tags, rates, type, and custom fields.
 
 Collapse creates one replacement at the first original entry's start, with the exact sum of the grouped durations. After it confirms the replacement, collapse deletes that group's originals in bounded bulk requests. There is no option to zero the originals. A separate setting excludes invoiced entries and entries with unknown invoice status; this setting defaults to enabled.
 

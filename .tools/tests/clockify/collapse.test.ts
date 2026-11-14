@@ -115,11 +115,11 @@ test('chunks start at the first eligible entry, do not slide, and preserve the e
   ).toEqual(['a', 'b'])
 })
 
-test('invoice protection excludes invoiced and unknown entries and can be disabled', () => {
+test.each([0, 5])('invoice protection also applies to %i-second entries and can be disabled', seconds => {
   const entries = [
     entry('a'),
-    entry('b', '10:20', 5, { invoiced: true }),
-    entry('c', '10:30', 5, { invoiced: undefined }),
+    entry('b', '10:20', seconds, { invoiced: true }),
+    entry('c', '10:30', seconds, { invoiced: undefined }),
   ]
   expect(getClockifyCollapseGroups(entries, defaultClockifyCollapseOptions)).toEqual([])
   expect(
@@ -130,11 +130,42 @@ test('invoice protection excludes invoiced and unknown entries and can be disabl
       [
         entry('a'),
         entry('running', '10:20', 5, { timeInterval: { start: '2026-11-02T10:20:00Z' } }),
-        entry('zero', '10:30', 0),
+        entry('negative', '10:30', -1),
       ],
       { ...defaultClockifyCollapseOptions, excludeInvoiced: false },
     ),
   ).toEqual([])
+})
+
+test.each([
+  [0, 240],
+  [240, 0],
+  [0, 0],
+])('collapse combines %i + %i seconds into one entry without adding time', async (firstSeconds, secondSeconds) => {
+  const fixture = await server([entry('a', '10:17', firstSeconds), entry('b', '10:40', secondSeconds)])
+  const start = '2026-11-02T10:17:00.000Z'
+  const end = new Date(Date.parse(start) + (firstSeconds + secondSeconds) * 1000).toISOString()
+  const remove = fixture.remove.getMockImplementation()!
+  fixture.remove.mockImplementation(async (body, request) => {
+    expect(fixture.entries.get('replacement')?.timeInterval).toEqual({ start, end })
+    return remove(body, request)
+  })
+
+  await expect(collapseClockifyMonthEntries(scope, 'UTC')).resolves.toEqual({
+    createdCount: 1,
+    deletedCount: 2,
+    refreshFailed: false,
+  })
+  expect(fixture.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ start, end }), {
+    params: { workspaceId: 'workspace' },
+  })
+  expect(fixture.remove).toHaveBeenCalledExactlyOnceWith(undefined, {
+    params: scope,
+    queries: { 'time-entry-ids': ['a', 'b'] },
+  })
+  expect([...fixture.entries.keys()]).toEqual(['replacement'])
+  expect((await db.clockifyEntries.toArray()).map(row => row.entry.timeInterval)).toEqual([{ start, end }])
+  expect(await db.clockifyCollapses.count()).toBe(0)
 })
 
 test.each([
@@ -404,22 +435,25 @@ test('disconnect after creating a replacement stops deletion and prevents an old
   expect(await db.clockifyEntries.count()).toBe(0)
 })
 
-test('a lost create response is reconciled from the post-write sync before deleting originals', async () => {
-  const fixture = await server()
-  const create = fixture.create.getMockImplementation()!
-  fixture.create.mockImplementationOnce(async (body, request) => {
-    await create(body, request)
-    throw new Error('Response lost')
-  })
-  await expect(collapseClockifyMonthEntries(scope, 'UTC')).rejects.toThrow('Response lost')
-  expect(fixture.remove).not.toHaveBeenCalled()
-  await expect(collapseClockifyMonthEntries(scope, 'UTC')).resolves.toEqual({
-    createdCount: 1,
-    deletedCount: 2,
-    refreshFailed: false,
-  })
-  expect(fixture.create).toHaveBeenCalledOnce()
-})
+test.each([0, 5])(
+  'a lost create response for %i-second entries is reconciled before deleting originals',
+  async seconds => {
+    const fixture = await server([entry('a', '10:17', seconds), entry('b', '10:40', seconds)])
+    const create = fixture.create.getMockImplementation()!
+    fixture.create.mockImplementationOnce(async (body, request) => {
+      await create(body, request)
+      throw new Error('Response lost')
+    })
+    await expect(collapseClockifyMonthEntries(scope, 'UTC')).rejects.toThrow('Response lost')
+    expect(fixture.remove).not.toHaveBeenCalled()
+    await expect(collapseClockifyMonthEntries(scope, 'UTC')).resolves.toEqual({
+      createdCount: 1,
+      deletedCount: 2,
+      refreshFailed: false,
+    })
+    expect(fixture.create).toHaveBeenCalledOnce()
+  },
+)
 
 test('an unconfirmed create is not blindly retried when no replacement can be identified', async () => {
   const fixture = await server()
