@@ -1,5 +1,4 @@
 import type { TimeEntryWithRatesDtoV1 } from '../services/clockify/generated/clockify'
-import type { TimeEntrySummaryReportDto } from '../services/clockify/generated/reports'
 
 import { formatCurrency } from '@automattic/format-currency'
 import {
@@ -13,11 +12,12 @@ import {
   IconPencil,
   IconPlayerPlay,
   IconPlayerStop,
+  IconTrash,
   IconWand,
 } from '@tabler/icons-react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import humanizeDuration from 'humanize-duration'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useStopwatch } from 'react-timer-hook'
 
 import { useDexieQuery } from '../hooks/useDexieQuery'
@@ -29,7 +29,7 @@ import { clockifyEntryCache } from '../services/clockify/entry-cache'
 import { clockifyEntriesInRange } from '../services/clockify/entry-queries'
 import { fixClockifyMonthOverlaps } from '../services/clockify/overlap-repair'
 import { hasCompletedClockifyTimeEntryOverlap } from '../services/clockify/overlaps'
-import { getClockifyEntryTableRange, getClockifyMonthRange, getDayStart } from '../services/clockify/ranges'
+import { type ClockifyPeriod, getClockifyMonthRange, getClockifyPeriodRange } from '../services/clockify/ranges'
 import { cacheClockifyEntryResult, type SyncedClockifyTimeEntry } from '../services/clockify/sync'
 import {
   createClockifyTimeEntryFromEntry,
@@ -46,14 +46,12 @@ import { ClockifyEntryTimeDialog } from './ClockifyEntryTimeDialog'
 import { ClockifyIcon } from './icons/ClockifyIcon'
 
 const clockifyReportPeriods = [
-  { id: 'today', label: 'Today' },
-  { id: 'week', label: 'Week' },
-  { id: 'month', label: 'Month' },
+  { id: 'today', label: 'Today', dateRangeType: 'TODAY' },
+  { id: 'week', label: 'Week', dateRangeType: 'THIS_WEEK' },
+  { id: 'month', label: 'Month', dateRangeType: 'THIS_MONTH' },
 ] as const
-type ClockifyReportPeriodId = (typeof clockifyReportPeriods)[number]['id']
 const emptyClockifyEntries: SyncedClockifyTimeEntry[] = []
-const clockifyEntryTableDayRanges = [1, 3, 7] as const
-type ClockifyEntryTableDayRange = (typeof clockifyEntryTableDayRanges)[number]
+const clockifyEntryPageSize = 15
 const formatShortDuration = humanizeDuration.humanizer({
   delimiter: ' ',
   language: 'shortEn',
@@ -75,13 +73,14 @@ export function ClockifyWidget() {
   const [clockifyDefaultProject] = useStorage('clockifyDefaultProject')
   const [clockifyOverrideProject, setClockifyOverrideProject] = useStorage('clockifyOverrideProject')
   const [clockifyOverrideProjectVisibility] = useStorage('clockifyOverrideProjectVisibility')
-  const [, setQuickTimersActiveEntry] = useStorage('quickTimersActiveEntry')
+  const [quickTimersActiveEntry, setQuickTimersActiveEntry] = useStorage('quickTimersActiveEntry')
   const [collapseThresholdMinutes] = useStorage('clockifyCollapseThresholdMinutes')
   const [collapseChunkMinutes] = useStorage('clockifyCollapseChunkMinutes')
   const [collapseExcludeInvoiced] = useStorage('clockifyCollapseExcludeInvoiced')
   const [entriesVisible, setEntriesVisible] = useState(false)
-  const [entryTableDayRange, setEntryTableDayRange] = useState<ClockifyEntryTableDayRange>(1)
+  const [entryTablePeriod, setEntryTablePeriod] = useState<ClockifyPeriod>('today')
   const [editingEntry, setEditingEntry] = useState<TimeEntryWithRatesDtoV1 | null>(null)
+  const [deletingEntry, setDeletingEntry] = useState<SyncedClockifyTimeEntry | null>(null)
   const [manualEntry, setManualEntry] = useState<TimeEntryWithRatesDtoV1 | null>(null)
   const userQuery = useQuery({
     queryKey: queryKeys.clockify.loggedUser,
@@ -176,14 +175,15 @@ export function ClockifyWidget() {
       queryFn: () => {
         const now = new Date()
         const settings = userQuery.data?.settings
+        const range = getClockifyPeriodRange(period.id, now, settings?.timeZone, settings?.weekStart)
 
         return clockifyReports.generateSummaryReport(
           {
             amountShown: 'EARNED',
             amounts: ['EARNED'],
-            dateRangeEnd: toClockifyReportDate(now),
-            dateRangeStart: toClockifyReportDate(getDayStart(now)),
-            dateRangeType: getClockifyReportDateRangeType(period.id),
+            dateRangeEnd: toClockifyReportDate(new Date(range.end.getTime() - 1)),
+            dateRangeStart: toClockifyReportDate(range.start),
+            dateRangeType: period.dateRangeType,
             exportType: 'JSON',
             rounding: false,
             summaryFilter: {
@@ -197,7 +197,7 @@ export function ClockifyWidget() {
               ids: [userQuery.data!.id!],
               status: 'ACTIVE',
             },
-            ...(settings?.weekStart ? { weekStart: settings.weekStart } : {}),
+            weekStart: settings?.weekStart ?? 'MONDAY',
           },
           { params: { workspaceId: selectedWorkspace!.id! } },
         )
@@ -206,19 +206,25 @@ export function ClockifyWidget() {
       staleTime: 60_000,
     })),
   })
-  const entryTableEntriesQuery = useSyncedClockifyEntriesForRange(
-    getClockifyEntryTableRange(entryTableDayRange, new Date()),
-    {
-      userId: userQuery.data?.id,
-      workspaceId: selectedWorkspace?.id,
-    },
+  const entryTableRange = getClockifyPeriodRange(
+    entryTablePeriod,
+    new Date(),
+    userQuery.data?.settings?.timeZone,
+    userQuery.data?.settings?.weekStart,
   )
+  const entryTableEntriesQuery = useSyncedClockifyEntriesForRange(entryTableRange, {
+    userId: userQuery.data?.id,
+    workspaceId: selectedWorkspace?.id,
+  })
   const monthEntriesQuery = useSyncedClockifyEntriesForRange(
     { start: getClockifyMonthRange(new Date(), userQuery.data?.settings?.timeZone).start },
     { userId: userQuery.data?.id, workspaceId: selectedWorkspace?.id },
   )
   const monthSyncedEntries = monthEntriesQuery.data ?? emptyClockifyEntries
-  const entryTableSyncedEntries = entryTableEntriesQuery.data ?? emptyClockifyEntries
+  const entryTableSyncedEntries = useMemo(
+    () => entryTableEntriesQuery.data?.slice().reverse() ?? emptyClockifyEntries,
+    [entryTableEntriesQuery.data],
+  )
   const readPendingCollapse = useCallback(
     () =>
       userQuery.data?.id && selectedWorkspace?.id
@@ -259,9 +265,20 @@ export function ClockifyWidget() {
   const monthReport = reportQueries[2]?.data
   const periodStats = useMemo(
     () =>
-      clockifyReportPeriods.map((period, index) =>
-        formatReportPeriodStat(period, [todayReport, weekReport, monthReport][index]),
-      ),
+      clockifyReportPeriods.map((period, index) => {
+        const totals = [todayReport, weekReport, monthReport][index]?.totals ?? []
+        const seconds = totals.reduce((total, entryTotal) => total + (entryTotal.totalTime ?? 0), 0)
+        const amount = totals.reduce((total, entryTotal) => {
+          const earned = entryTotal.amounts?.find(entryAmount => entryAmount.type === 'EARNED')
+          return total + (earned?.value ?? 0) / 100
+        }, 0)
+
+        return {
+          amount: formatCurrency(amount, 'USD'),
+          label: period.label,
+          time: formatShortDuration(seconds * 1000),
+        }
+      }),
     [monthReport, todayReport, weekReport],
   )
   useEffect(() => {
@@ -347,6 +364,31 @@ export function ClockifyWidget() {
       }
       void setQuickTimersActiveEntry(null)
       appToast.success('Stopped Clockify timer')
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.entrySync() })
+    },
+  })
+  const deleteEntryMutation = useMutation({
+    mutationFn: (entry: SyncedClockifyTimeEntry) =>
+      clockify.deleteTimeEntry(undefined, { params: { id: entry.id, workspaceId: entry.workspaceId } }),
+    onMutate: () => clockifyEntryCache.getLifecycle(),
+    onError: error => {
+      appToast.error('Could not delete Clockify entry', { description: getErrorMessage(error) })
+    },
+    onSuccess: async (_, entry, lifecycle) => {
+      try {
+        await clockifyEntryCache.remove(entry.id, entry, lifecycle)
+      } catch (error) {
+        console.warn('[clockify sync] Could not remove deleted entry from cache:', error)
+        appToast.warning('Entry deleted, but the local cache could not be updated. Sync to update the display.')
+      }
+      setDeletingEntry(null)
+      if (lifecycle !== clockifyEntryCache.getLifecycle()) return
+      if (quickTimersActiveEntry?.entryId === entry.id) {
+        void setQuickTimersActiveEntry(current => (current?.entryId === entry.id ? null : current))
+      }
+      appToast.success('Clockify entry deleted')
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.entrySync() })
@@ -507,12 +549,16 @@ export function ClockifyWidget() {
             !entryReadError &&
             (entryTableEntriesQuery.data ? (
               <ClockifyEntriesTable
+                key={JSON.stringify([userQuery.data?.id, selectedWorkspace?.id, entryTablePeriod, entryTableRange])}
                 activeEntryId={runningEntry?.id ?? null}
                 entries={entryTableSyncedEntries}
-                entryTableDayRange={entryTableDayRange}
+                period={entryTablePeriod}
+                pending={entryTableEntriesQuery.isPending}
+                timeZone={userQuery.data?.settings?.timeZone}
                 onEdit={setEditingEntry}
+                onDelete={setDeletingEntry}
                 onAddTime={setManualEntry}
-                onEntryTableDayRangeChange={setEntryTableDayRange}
+                onPeriodChange={setEntryTablePeriod}
                 onResume={entry => resumeClockifyEntryMutation.mutate(entry)}
                 onStop={entry => stopRunningEntryMutation.mutate(entry)}
                 resumingEntryId={
@@ -549,6 +595,17 @@ export function ClockifyWidget() {
           workspaceId={clockifyTimerProject?.workspaceId ?? manualEntry.workspaceId}
           onCancel={() => setManualEntry(null)}
           onSave={interval => createClockifyTimeEntryFromEntry(manualEntry, clockifyTimerProject, interval)}
+        />
+      )}
+      {!!deletingEntry && (
+        <ClockifyEntryDeleteDialog
+          entry={deletingEntry.entry}
+          timeZone={userQuery.data?.settings?.timeZone}
+          pending={deleteEntryMutation.isPending}
+          onCancel={() => setDeletingEntry(null)}
+          onConfirm={() => {
+            if (!deleteEntryMutation.isPending) deleteEntryMutation.mutate(deletingEntry)
+          }}
         />
       )}
     </>
@@ -618,9 +675,12 @@ function truncateLogText(value: string | undefined, maxLength = 140) {
 function ClockifyEntriesTable({
   activeEntryId,
   entries,
-  entryTableDayRange,
+  period,
+  pending,
+  timeZone,
   onEdit,
-  onEntryTableDayRangeChange,
+  onDelete,
+  onPeriodChange,
   onAddTime,
   onResume,
   onStop,
@@ -629,27 +689,41 @@ function ClockifyEntriesTable({
 }: {
   activeEntryId: string | null
   entries: SyncedClockifyTimeEntry[]
-  entryTableDayRange: ClockifyEntryTableDayRange
+  period: ClockifyPeriod
+  pending: boolean
+  timeZone?: string
   onEdit: (entry: TimeEntryWithRatesDtoV1) => void
-  onEntryTableDayRangeChange: (days: ClockifyEntryTableDayRange) => void
+  onDelete: (entry: SyncedClockifyTimeEntry) => void
+  onPeriodChange: (period: ClockifyPeriod) => void
   onAddTime: (entry: TimeEntryWithRatesDtoV1) => void
   onResume: (entry: TimeEntryWithRatesDtoV1) => void
   onStop: (entry: TimeEntryWithRatesDtoV1) => void
   resumingEntryId: string | null | undefined
   stoppingEntryId: string | null | undefined
 }) {
+  const [page, setPage] = useState(0)
+  const paginated = period !== 'today'
+  const lastPage = paginated ? Math.max(0, Math.ceil(entries.length / clockifyEntryPageSize) - 1) : 0
+  const currentPage = Math.min(page, lastPage)
+  const visibleEntries = paginated
+    ? entries.slice(currentPage * clockifyEntryPageSize, (currentPage + 1) * clockifyEntryPageSize)
+    : entries
+  useEffect(() => {
+    if (page > lastPage) setPage(lastPage)
+  }, [page, lastPage])
+
   return (
     <div className="border-base-content/5 grid gap-3 border-t px-4 py-3">
       <div className="flex justify-end">
         <div className="join" role="group" aria-label="Clockify entry date range">
-          {clockifyEntryTableDayRanges.map(days => (
+          {clockifyReportPeriods.map(option => (
             <button
-              key={days}
-              className={entryTableDayRange === days ? 'btn btn-primary btn-sm join-item' : 'btn btn-sm join-item'}
+              key={option.id}
+              className={period === option.id ? 'btn btn-primary btn-sm join-item' : 'btn btn-sm join-item'}
               type="button"
-              aria-pressed={entryTableDayRange === days}
-              onClick={() => onEntryTableDayRangeChange(days)}>
-              {days} day{days === 1 ? '' : 's'}
+              aria-pressed={period === option.id}
+              onClick={() => onPeriodChange(option.id)}>
+              {option.label}
             </button>
           ))}
         </div>
@@ -662,7 +736,7 @@ function ClockifyEntriesTable({
             <col className="w-full" />
             <col className="w-48" />
             <col className="w-24" />
-            <col className="w-12" />
+            <col className="w-20" />
           </colgroup>
           <thead>
             <tr>
@@ -670,16 +744,16 @@ function ClockifyEntriesTable({
                 <span className="sr-only">Track time</span>
               </th>
               <th className="w-full min-w-0">Entry</th>
-              <th className="whitespace-nowrap">{entryTableDayRange === 1 ? 'Time' : 'Date & time'}</th>
+              <th className="whitespace-nowrap">{period === 'today' ? 'Time' : 'Date & time'}</th>
               <th className="whitespace-nowrap">Duration</th>
-              <th className="w-12 min-w-12 text-center">
-                <span className="sr-only">Edit</span>
+              <th className="w-20 min-w-20 text-center">
+                <span className="sr-only">Actions</span>
               </th>
             </tr>
           </thead>
           <tbody>
-            {entries.length ? (
-              entries.map(syncedEntry => (
+            {visibleEntries.length ? (
+              visibleEntries.map(syncedEntry => (
                 <tr key={syncedEntry.id}>
                   <td className="w-12 min-w-12 text-center">
                     <ClockifyEntryTrackingButton
@@ -699,20 +773,31 @@ function ClockifyEntriesTable({
                     {formatEntryTimeRange(
                       syncedEntry.entry.timeInterval?.start,
                       syncedEntry.entry.timeInterval?.end,
-                      entryTableDayRange > 1,
+                      period !== 'today',
+                      timeZone,
                     )}
                   </td>
                   <td className="whitespace-nowrap tabular-nums">{formatEntryDuration(syncedEntry.entry)}</td>
-                  <td className="w-12 min-w-12 text-center">
-                    <button
-                      className="btn btn-square btn-ghost text-primary hover:bg-primary/10 btn-xs"
-                      type="button"
-                      aria-label={`Edit ${getClockifyTimeEntryTitle(syncedEntry.entry)}`}
-                      title="Edit entry"
-                      disabled={!syncedEntry.entry.id || !syncedEntry.entry.workspaceId}
-                      onClick={() => onEdit(syncedEntry.entry)}>
-                      <IconPencil className="size-3.5" />
-                    </button>
+                  <td className="w-20 min-w-20 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        className="btn btn-square btn-ghost text-primary hover:bg-primary/10 btn-xs"
+                        type="button"
+                        aria-label={`Edit ${getClockifyTimeEntryTitle(syncedEntry.entry)}`}
+                        title="Edit entry"
+                        disabled={!syncedEntry.entry.id || !syncedEntry.entry.workspaceId}
+                        onClick={() => onEdit(syncedEntry.entry)}>
+                        <IconPencil className="size-3.5" />
+                      </button>
+                      <button
+                        className="btn btn-square btn-ghost text-error hover:bg-error/10 btn-xs"
+                        type="button"
+                        aria-label={`Delete ${getClockifyTimeEntryTitle(syncedEntry.entry)}`}
+                        title="Delete entry"
+                        onClick={() => onDelete(syncedEntry)}>
+                        <IconTrash className="size-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -726,7 +811,88 @@ function ClockifyEntriesTable({
           </tbody>
         </table>
       </div>
+      {paginated && lastPage > 0 && (
+        <div className="flex justify-end gap-2">
+          <button
+            className="btn btn-sm"
+            type="button"
+            disabled={pending || currentPage === 0}
+            onClick={() => setPage(currentPage - 1)}>
+            Previous
+          </button>
+          <button
+            className="btn btn-sm"
+            type="button"
+            disabled={pending || currentPage === lastPage}
+            onClick={() => setPage(currentPage + 1)}>
+            Next
+          </button>
+        </div>
+      )}
     </div>
+  )
+}
+
+function ClockifyEntryDeleteDialog({
+  entry,
+  timeZone,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  entry: TimeEntryWithRatesDtoV1
+  timeZone?: string
+  pending: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const titleId = useId()
+  useEffect(() => {
+    dialogRef.current?.showModal()
+  }, [])
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="modal"
+      aria-labelledby={titleId}
+      onClose={onCancel}
+      onCancel={event => {
+        if (pending) event.preventDefault()
+      }}>
+      <div className="modal-box grid max-w-lg gap-5 rounded-lg">
+        <div className="grid gap-1">
+          <h3 id={titleId} className="text-lg leading-7 font-semibold">
+            Delete Clockify entry?
+          </h3>
+          <p className="text-base-content/60 text-sm">This permanently deletes the entry from Clockify.</p>
+        </div>
+        <div className="grid gap-1">
+          <p className="text-sm wrap-anywhere">{getClockifyTimeEntryTitle(entry)}</p>
+          <p className="text-base-content/60 text-xs tabular-nums">
+            {formatEntryTimeRange(entry.timeInterval?.start, entry.timeInterval?.end, true, timeZone)} ·{' '}
+            {formatEntryDuration(entry)}
+          </p>
+        </div>
+        <div className="modal-action mt-0">
+          <button className="btn btn-ghost" type="button" autoFocus disabled={pending} onClick={onCancel}>
+            Cancel
+          </button>
+          <button className="btn btn-error" type="button" disabled={pending} onClick={onConfirm}>
+            {pending && <span className="loading loading-spinner loading-xs" />}
+            {pending ? 'Deleting…' : 'Delete entry'}
+          </button>
+        </div>
+      </div>
+      <button
+        className="modal-backdrop"
+        type="button"
+        aria-label="Cancel deletion"
+        disabled={pending}
+        onClick={onCancel}
+      />
+    </dialog>
   )
 }
 
@@ -857,24 +1023,6 @@ function getStopwatchOffsetTimestamp(startValue: string | undefined) {
   return new Date(Date.now() + elapsedMilliseconds)
 }
 
-function formatReportPeriodStat(
-  period: (typeof clockifyReportPeriods)[number],
-  report: TimeEntrySummaryReportDto | undefined,
-) {
-  const totals = report?.totals ?? []
-  const seconds = totals.reduce((total, entryTotal) => total + (entryTotal.totalTime ?? 0), 0)
-  const amount = totals.reduce((total, entryTotal) => {
-    const earned = entryTotal.amounts?.find(entryAmount => entryAmount.type === 'EARNED')
-    return total + (earned?.value ?? 0) / 100
-  }, 0)
-
-  return {
-    amount: formatCurrency(amount, 'USD'),
-    label: period.label,
-    time: formatShortDuration(seconds * 1000),
-  }
-}
-
 function parseDate(value: string | undefined) {
   if (!value) {
     return null
@@ -888,16 +1036,25 @@ function toClockifyReportDate(date: Date) {
   return date.toISOString().replace(/Z$/, '')
 }
 
-function formatTimeRange(startValue: string | undefined, endValue: string | undefined) {
-  return `${formatTime(startValue)} - ${formatTime(endValue)}`
-}
-
-function formatEntryTimeRange(startValue: string | undefined, endValue: string | undefined, includeDate: boolean) {
-  return includeDate ? formatDatedTimeRange(startValue, endValue) : formatTimeRange(startValue, endValue)
-}
-
-function formatDatedTimeRange(startValue: string | undefined, endValue: string | undefined) {
-  return `${formatDatedTime(startValue)} - ${formatDatedTime(endValue)}`
+function formatEntryTimeRange(
+  startValue: string | undefined,
+  endValue: string | undefined,
+  includeDate: boolean,
+  timeZone?: string,
+) {
+  const formatter = new Intl.DateTimeFormat(undefined, {
+    day: includeDate ? '2-digit' : undefined,
+    month: includeDate ? '2-digit' : undefined,
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone,
+  })
+  return [startValue, endValue]
+    .map(value => {
+      const date = parseDate(value)
+      return date ? formatter.format(date) : 'n/a'
+    })
+    .join(' - ')
 }
 
 function formatEntryDuration(entry: TimeEntryWithRatesDtoV1) {
@@ -909,45 +1066,6 @@ function formatEntryDuration(entry: TimeEntryWithRatesDtoV1) {
   }
 
   return formatShortDuration(Math.max(0, (end?.getTime() ?? Date.now()) - start.getTime()))
-}
-
-function formatDatedTime(value: string | undefined) {
-  const date = parseDate(value)
-
-  if (!date) {
-    return 'n/a'
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    day: '2-digit',
-    hour: 'numeric',
-    minute: '2-digit',
-    month: '2-digit',
-  }).format(date)
-}
-
-function formatTime(value: string | undefined) {
-  const date = parseDate(value)
-
-  if (!date) {
-    return 'n/a'
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date)
-}
-
-function getClockifyReportDateRangeType(period: ClockifyReportPeriodId): 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' {
-  switch (period) {
-    case 'today':
-      return 'TODAY'
-    case 'week':
-      return 'THIS_WEEK'
-    case 'month':
-      return 'THIS_MONTH'
-  }
 }
 
 function clockifyWidgetLog(message: string, details?: unknown) {
