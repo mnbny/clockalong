@@ -162,6 +162,19 @@ export function createClockifyEntryCache(database: DB) {
     })
   }
 
+  async function remove(id: string, scope: ClockifyScope, expectedLifecycle = lifecycle) {
+    return database.transaction('rw', entries, refs, meta, async () => {
+      if (lifecycle !== expectedLifecycle) return false
+      // A sync that started before deletion must not restore the removed row.
+      ++generation
+      await refs.where('[userId+workspaceId+entryId]').equals([scope.userId, scope.workspaceId, id]).delete()
+      await entries.delete([scope.userId, scope.workspaceId, id])
+      await bumpRevision()
+      if (lifecycle !== expectedLifecycle) throw new Error('Clockify account changed during cache write')
+      return true
+    })
+  }
+
   async function clear() {
     ++generation
     ++lifecycle
@@ -174,7 +187,7 @@ export function createClockifyEntryCache(database: DB) {
     })
   }
 
-  return { beginSync, getRevision, getLifecycle: () => lifecycle, reconcile, upsert, clear, database }
+  return { beginSync, getRevision, getLifecycle: () => lifecycle, reconcile, upsert, remove, clear, database }
 }
 
 export const clockifyEntryCache = createClockifyEntryCache(db)
