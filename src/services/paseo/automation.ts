@@ -67,6 +67,7 @@ export async function preparePaseoRuns(items: NotificationMessage[], scope: stri
 
 let recovery: Promise<unknown> | undefined
 let draining = false
+let nextLaunchAt = 0
 
 export async function dispatchPaseoRuns(scope: string, active: () => boolean) {
   if (draining || !active()) return
@@ -95,6 +96,8 @@ export async function dispatchPaseoRuns(scope: string, active: () => boolean) {
     if (!pending.length || !active()) return
     const status = await paseo.detect()
     for (const run of pending) {
+      const delay = nextLaunchAt - Date.now()
+      if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay))
       if (!active()) return
       const trigger = readPaseoTriggers(await storage.get('paseoTriggers')).find(item => item.id === run.triggerId)
       if (
@@ -128,7 +131,9 @@ export async function dispatchPaseoRuns(scope: string, active: () => boolean) {
           continue
         }
         console.info(`[paseo] Trigger ${run.triggerId}: launching.`)
-        const result = await paseo.execute(run.request!)
+        const result = await paseo.execute(run.request!).finally(() => {
+          nextLaunchAt = Date.now() + 3000
+        })
         const summary = `[paseo] Trigger ${run.triggerId}: ${result.status}.${result.agentId ? ` Agent: ${result.agentId}.` : ''}${result.detail ? ` ${result.detail}` : ''}`
         if (result.status === 'failed' || result.status === 'unconfirmed') console.warn(summary)
         else console.info(summary)
