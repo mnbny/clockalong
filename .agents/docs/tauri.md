@@ -18,6 +18,8 @@ Available Paseo installations need no global enable toggle. Individual triggers 
 
 The native bridge discovers registered Git projects, enabled providers, models, thinking efforts, and permission modes. Provider discovery uses the installed Paseo client and runtime to retain mode identifiers and labels. It checks saved selections before execution and generates one command for a fresh worktree from the remote main branch. The user’s prompt controls subsequent checkout and task actions. The bridge passes the complete prompt as one argument and does not evaluate shell scripts.
 
+When runtime details are missing, provider discovery retries the status read a limited number of times before agent creation.
+
 The command targets the default local Paseo home, independently of inherited agent, workspace, and host selection. Explicit permission modes are validated against the selected provider and passed to Paseo for each launch. Without an explicit mode, Paseo supplies its default permissions.
 
 For automatic requests, the bridge rechecks trigger enable state and revision after discovery. Confirmed sample runs use the draft independently of saved trigger state. Both paths share selection checks and agent launch behavior. Execution has bounded output and a two-minute deadline.
@@ -31,6 +33,8 @@ The saved theme is applied before React renders. The window remains hidden until
 The header and App settings share the theme selection. Bundled daisyUI themes are grouped by appearance, with Halloween as the fallback.
 
 On macOS, closing the main window hides it rather than ending the process. The Dock restores it. The native Quit action exits the app.
+
+On macOS 14 and later, the main webview disables background throttling so hidden windows can continue Telegram collection and trigger dispatch.
 
 The optional menu-bar item shows timer state and provides timer actions. Recent choices come from completed cached entries, with one entry per displayed title. Hiding the window keeps background services available.
 

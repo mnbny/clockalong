@@ -160,7 +160,7 @@ pub struct PaseoProvider {
 #[serde(rename_all = "camelCase")]
 struct PaseoRuntime {
     home: PathBuf,
-    daemon_node: PathBuf,
+    daemon_node: Option<PathBuf>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -241,8 +241,21 @@ fn provider_client_path() -> Result<PathBuf, String> {
 #[tauri::command]
 pub async fn paseo_providers() -> Result<Vec<PaseoProvider>, String> {
     let client = provider_client_path()?;
-    let runtime = read_cli::<PaseoRuntime>(vec!["status".into(), "--json".into()]).await?;
-    let mut command = process(&runtime.daemon_node);
+    let mut runtime = read_cli::<PaseoRuntime>(vec!["status".into(), "--json".into()]).await?;
+    // Paseo can exit successfully with partial status when its internal probe times out.
+    for attempt in 1..=2 {
+        if runtime.daemon_node.is_some() {
+            break;
+        }
+        log::warn!("[paseo] Status response missing runtime details; retrying ({attempt}/2).");
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        runtime = read_cli::<PaseoRuntime>(vec!["status".into(), "--json".into()]).await?;
+    }
+    let node = runtime
+        .daemon_node
+        .as_ref()
+        .ok_or("Paseo status details are unavailable. Try again shortly.")?;
+    let mut command = process(node);
     command
         .env("ELECTRON_RUN_AS_NODE", "1")
         .args([
@@ -433,5 +446,29 @@ async fn execute_paseo(request: PaseoLaunch, app: Option<tauri::AppHandle>) -> P
         }
         Err(false) => result("failed", "Could not start the Paseo CLI. Check the installation."),
         Err(true) => result("unconfirmed", "No confirmed result within the command limits. Check Paseo before sending this request again."),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_status_accepts_partial_probe_responses() {
+        let mut status = serde_json::json!({
+            "home": "/tmp/paseo",
+            "connectedDaemon": "reachable",
+            "note": "Status details unavailable (DAEMON_REQUEST_TIMEOUT)"
+        });
+        let partial: PaseoRuntime = serde_json::from_value(status.clone()).unwrap();
+        assert_eq!(partial.home, PathBuf::from("/tmp/paseo"));
+        assert!(partial.daemon_node.is_none());
+
+        status["daemonNode"] = serde_json::json!("/usr/local/bin/node");
+        let complete: PaseoRuntime = serde_json::from_value(status).unwrap();
+        assert_eq!(
+            complete.daemon_node,
+            Some(PathBuf::from("/usr/local/bin/node"))
+        );
     }
 }
