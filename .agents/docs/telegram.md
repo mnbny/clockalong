@@ -50,6 +50,8 @@ Users select a registered Paseo project, an enabled provider, a model, a support
 
 Each match starts an agent in a fresh worktree from main. The user’s prompt controls PR checkout and task instructions. Save validates required fields and available selections. New triggers default to enabled; incomplete saved triggers remain disabled.
 
+Automatic launch attempts run one at a time, with a short pause between attempts to reduce startup pressure.
+
 Pattern evaluation has a deadline and runs outside the UI thread. Paseo owns the resulting workspaces, agents, permissions, and task progress. Clockalong supplies no review instructions or automatic timer actions.
 
 Only new eligible messages after trigger activation can create executions. Discovery messages, edits, existing records, and development replay do not create executions. Recovery can collect eligible messages received while the app was unavailable.
