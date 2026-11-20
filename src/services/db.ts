@@ -5,12 +5,14 @@ import type { GithubAuthorIndex, GithubWorkItemIndex, StoredGithubWorkItem } fro
 import type { StoredLinearTicket } from './linear/ticket-cache'
 import type { PaseoRun } from './paseo/triggers'
 import type { TelegramNotification, TelegramNotificationCheckpoint } from './telegram/notification-store'
+import type { TrackedTimer } from './tracking/store'
 
 import Dexie, { type Table } from 'dexie'
 
 import { getGithubAuthorEntry, getGithubIndexEntries, withGithubRefKey } from './github/work-item-index'
 
 export class DB extends Dexie {
+  declare trackedTimers: Table<TrackedTimer, string>
   declare paseoRuns: Table<PaseoRun, string>
   declare githubWorkItems: Table<StoredGithubWorkItem, string, SyncedGithubWorkItem>
   declare githubWorkItemIndex: Table<GithubWorkItemIndex, [string, string, string]>
@@ -82,6 +84,7 @@ export class DB extends Dexie {
           })
       })
     this.version(8).stores({ clockifyCollapses: 'id,[userId+workspaceId]' })
+    this.version(9).stores({ trackedTimers: 'timerId,userId,[userId+workspaceId]' })
   }
 }
 

@@ -1,6 +1,6 @@
 import { formatTemplate, parseTemplateTokens } from '../../utils/templates'
-import { clockify } from '../clockify/client'
-import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../clockify/generated/clockify'
+import { type CreateTimeEntryRequest } from '../clockify/generated/clockify'
+import { createClockifyTimeEntry } from '../clockify/time-entries'
 import { type ClockifyTimeEntryInterval, getClockifyTimeEntryTiming } from '../clockify/time-entry-interval'
 import {
   type ClockifyProject,
@@ -14,7 +14,7 @@ type QuickTimerValues = Record<string, string>
 
 type QuickTimerCacheEntry = QuickTimersCacheEntry & Record<string, unknown>
 
-export async function createQuickTimerTimeEntry({
+export function getQuickTimerTimeEntryBody({
   interval,
   billable,
   preset,
@@ -26,7 +26,7 @@ export async function createQuickTimerTimeEntry({
   preset: QuickTimerPreset
   project: ClockifyProject
   values: QuickTimerValues
-}): Promise<TimeEntryDtoImplV1> {
+}) {
   const templateTokens = parseTemplateTokens(preset.descriptionTemplate)
   const body = {
     billable,
@@ -39,7 +39,7 @@ export async function createQuickTimerTimeEntry({
     type: 'REGULAR',
   } satisfies CreateTimeEntryRequest
 
-  return clockify.createTimeEntry(body, { params: { workspaceId: project.workspaceId } })
+  return body
 }
 
 export async function persistQuickTimerValues({
@@ -86,4 +86,8 @@ export function resolveQuickTimerValues({
 function getQuickTimerCachedValue(cachedValues: QuickTimerCacheEntry | undefined, token: string) {
   const value = cachedValues?.values?.[token] ?? cachedValues?.[token]
   return typeof value === 'string' ? value : ''
+}
+
+export function createQuickTimerTimeEntry(input: Parameters<typeof getQuickTimerTimeEntryBody>[0]) {
+  return createClockifyTimeEntry(getQuickTimerTimeEntryBody(input), input.project.workspaceId)
 }

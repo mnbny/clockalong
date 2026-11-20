@@ -7,7 +7,7 @@ import type {
 } from '../clockify/generated/clockify'
 import type { TimeEntrySummaryReportDto } from '../clockify/generated/reports'
 import type { McpRefreshResult } from '../tauri/mcp-client'
-import type { BuildMcpSnapshotInput, McpTrackableWorkRow } from './snapshot'
+import type { BuildMcpSnapshotInput, McpTrackableWorkRow, McpTrackingStatus } from './snapshot'
 
 import { queryClient, queryKeys } from '../../lib/query-client'
 import { getInternalRefKeys } from '../../utils/templates'
@@ -20,6 +20,7 @@ import { linearTicketCache } from '../linear/ticket-cache'
 import { storage } from '../storage/config'
 import { syncProviders } from '../sync'
 import { mcp } from '../tauri/mcp-client'
+import { readTrackedTimers } from '../tracking/store'
 import { buildMcpSnapshot } from './snapshot'
 
 type McpCapture = {
@@ -30,6 +31,7 @@ type McpCapture = {
   linearRevision: number
   linearLifecycle: number
   clockifyConnected: boolean
+  activeSources: McpTrackingStatus['timers']
   runningSource: { source: string | null; sourceId: string | null } | null
   scope: ClockifyScope | null
   revision: number
@@ -129,6 +131,7 @@ async function captureAndPublish(input: BuildMcpSnapshotInput, deadlineAt: numbe
   const githubScope = { repositories: repositories.map(repository => repository.fullName), visibleWorkItemTypes }
   const snapshot = buildMcpSnapshot({
     ...input,
+    trackedTimers: input.clockifyConnected && user?.id ? await readTrackedTimers(user.id) : [],
     now,
     clockifyProjects: queryClient.getQueryData<ProjectDtoImplV1[]>(
       queryKeys.clockify.projects({ params: { workspaceId: workspace?.id } }),
@@ -171,6 +174,7 @@ async function captureAndPublish(input: BuildMcpSnapshotInput, deadlineAt: numbe
     runningSource: snapshot.trackingStatus.running
       ? { source: snapshot.trackingStatus.running.source, sourceId: snapshot.trackingStatus.running.sourceId }
       : null,
+    activeSources: snapshot.trackingStatus.timers.filter(timer => timer.state === 'active' && !timer.endedAt),
     scope,
     revision,
     runningEntry: runningEntry

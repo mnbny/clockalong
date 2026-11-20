@@ -181,7 +181,12 @@ export async function listMcpWork(
     return {
       capturedAt,
       truncated: Boolean(githubPage?.hasMore) || rows.length > arguments_.limit,
-      rows: rows.slice(0, arguments_.limit).map(({ isClosed: _isClosed, ...row }) => row),
+      rows: rows.slice(0, arguments_.limit).map(({ isClosed: _isClosed, ...row }) => ({
+        ...row,
+        isRunning:
+          row.isRunning ||
+          capture.activeSources.some(timer => timer.source === row.source && timer.sourceId === row.id),
+      })),
     }
   }
   throw new Error('Tracking data changed during capture; retry the request')

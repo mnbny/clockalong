@@ -18,6 +18,7 @@ import { getClockifyEntryLinearTicket, getLinearTicketInternalRef } from '../clo
 import { getClockifyEntryGithubWorkItem, getGithubWorkItemInternalRef } from '../github/work-item-summaries'
 import { toLinearTicket } from '../linear/tickets'
 import { isLinearTicketTerminal } from '../linear/tickets-sorting'
+import { describeTrackedTimer, type TrackedTimer } from '../tracking/store'
 
 export type McpWorkSource = 'github' | 'linear' | 'quick_timer'
 
@@ -67,6 +68,7 @@ export type McpTrackingStatus = {
   month: McpPeriodTotals
   projectName: string | null
   running: McpRunningEntry | null
+  timers: ReturnType<typeof describeTrackedTimer>[]
   today: McpPeriodTotals
   week: McpPeriodTotals
   workspaceName: string | null
@@ -108,6 +110,7 @@ export type McpSnapshot = {
 }
 
 export type BuildMcpSnapshotInput = {
+  trackedTimers?: TrackedTimer[]
   clockifyConnected?: boolean
   clockifyProjects?: ProjectDtoImplV1[]
   clockifyReports?: {
@@ -141,6 +144,7 @@ const emptyTimeSummary = {
 }
 
 export function buildMcpSnapshot({
+  trackedTimers = [],
   clockifyConnected = false,
   clockifyProjects = [],
   clockifyReports = {},
@@ -211,6 +215,11 @@ export function buildMcpSnapshot({
     ),
   ]
   const trackingStatus = {
+    timers: clockifyConnected
+      ? trackedTimers
+          .filter(timer => timer.userId === clockifyUserId)
+          .map(timer => describeTrackedTimer(timer, now.getTime()))
+      : [],
     capturedAt,
     clockifyConnected,
     githubConnected,
@@ -270,7 +279,15 @@ export function buildMcpSnapshot({
       }),
     },
     trackingStatus,
-    trackableWork,
+    trackableWork: trackableWork.map(row => ({
+      ...row,
+      isRunning:
+        row.isRunning ||
+        trackingStatus.timers.some(
+          timer =>
+            timer.state === 'active' && !timer.endedAt && timer.source === row.source && timer.sourceId === row.id,
+        ),
+    })),
   }
 }
 

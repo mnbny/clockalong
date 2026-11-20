@@ -14,6 +14,20 @@ Entries appear newest first by start time. Today shows the full cached list. Wee
 
 The app header owns manual tracking sync and its activity indicator. Individual widgets do not provide separate refresh buttons.
 
+## Concurrent agent timers
+
+Manual starts and resumes represent sequential work. They use Clockify and replace its current timer. MCP starts represent concurrent agent work and preserve the existing timer.
+
+A fresh check of the destination workspace determines whether an MCP start can use Clockify. An occupied workspace or an unconfirmed earlier Clockify start requires internal tracking. Internal timers keep their mode when Clockify becomes idle.
+
+Each MCP start has a separate timer identity, even for the same work item or caller. Caller labels help agents recognize their timers without merging them or enforcing ownership.
+
+Stopping an internal timer creates a completed Clockify entry from its saved interval and billing details. A real timer stop targets its original Clockify entry. If that entry already ended, Clockalong returns its actual interval without changing a replacement timer.
+
+The Clockify widget lists internal timers below its main stopwatch. A stop hides its row while the frozen interval saves. Failed saves return as compact rows with red elapsed time and an icon-only retry control. Retries use the original interval; retrying an unconfirmed save can duplicate time.
+
+One frontend coordinator owns timer state and orders Clockify timer operations across UI and MCP callers. Callers refresh display caches after a confirmed stop. A failed display refresh does not reopen a completed timer. Other app instances and external Clockify clients remain outside this coordination.
+
 ## Entry management
 
 Right-clicking a source play control or Quick Timer card opens completed-time entry. Keyboard context-menu actions provide the same access. Left-click retains the normal timer action.

@@ -1,8 +1,10 @@
 import type { AssignedIssueNode } from '../../../src/services/linear/tickets'
 
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
-import { queryClient } from '../../../src/lib/query-client'
+import { queryClient, queryKeys } from '../../../src/lib/query-client'
+import * as clockifyAuth from '../../../src/services/clockify/auth'
+import * as clockifyClient from '../../../src/services/clockify/client'
 import { clockify } from '../../../src/services/clockify/client'
 import { db } from '../../../src/services/db'
 import { clearSyncedLinearTickets } from '../../../src/services/linear/sync'
@@ -39,10 +41,12 @@ const context: ExecuteMcpCommandContext = {
 afterEach(async () => {
   vi.restoreAllMocks()
   queryClient.clear()
+  await db.trackedTimers.clear()
   await clearSyncedLinearTickets()
 })
 
 test('Linear timer commands resolve only IDs owned by the current viewer', async () => {
+  queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user' })
   await linearTicketCache.replace('viewer', [ticket('1')], linearTicketCache.beginSync(), 'now')
   const other = createLinearTicketCache(db)
   await other.replace('other', [ticket('2')], other.beginSync(), 'now')
@@ -99,4 +103,10 @@ test('a disconnect and reconnect during command preparation rejects the old view
   release()
   expect(await pending).toMatchObject({ ok: false, error: { code: 'unknown_target' } })
   expect(create).not.toHaveBeenCalled()
+})
+
+beforeEach(() => {
+  vi.spyOn(clockifyAuth, 'getTauriClockifyApiKey').mockResolvedValue({ apiKey: 'test-key' })
+  vi.spyOn(clockifyClient, 'createClockifyClient').mockReturnValue(clockify)
+  vi.spyOn(clockify, 'getTimeEntries').mockResolvedValue([])
 })

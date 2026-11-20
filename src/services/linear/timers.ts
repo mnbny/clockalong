@@ -1,20 +1,16 @@
 import type { LinearTicket } from './tickets'
 
 import { internalRefTemplateToken, parseTemplateTokens } from '../../utils/templates'
-import { clockify } from '../clockify/client'
 import {
   type ClockifyDescriptionTemplateValues,
   formatClockifyDescriptionTemplate,
 } from '../clockify/description-template'
-import {
-  type CreateTimeEntryRequest,
-  type TimeEntryDtoImplV1,
-  type TimeEntryWithRatesDtoV1,
-} from '../clockify/generated/clockify'
+import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../clockify/generated/clockify'
 import { getLinearTicketInternalRef } from '../clockify/ticket-summaries'
+import { createClockifyTimeEntry, stopClockifyTimeEntry } from '../clockify/time-entries'
 import { type ClockifyTimeEntryInterval, getClockifyTimeEntryTiming } from '../clockify/time-entry-interval'
 
-export async function createClockifyTimeEntryForTicket({
+export function getTicketTimeEntryBody({
   interval,
   billable,
   descriptionTemplate,
@@ -30,7 +26,7 @@ export async function createClockifyTimeEntryForTicket({
   projectId: string
   ticket: LinearTicket
   workspaceId: string
-}): Promise<TimeEntryDtoImplV1> {
+}) {
   const descriptionValues = {
     assigneeName: ticket.assignee?.displayName ?? ticket.assignee?.name,
     identifier: ticket.identifier,
@@ -67,7 +63,7 @@ export async function createClockifyTimeEntryForTicket({
     workspaceId,
   })
 
-  return clockify.createTimeEntry(body, { params: { workspaceId } })
+  return body
 }
 
 export async function stopClockifyTimerForEntry({
@@ -76,7 +72,7 @@ export async function stopClockifyTimerForEntry({
 }: {
   entry: TimeEntryDtoImplV1
   ticket: LinearTicket
-}): Promise<TimeEntryWithRatesDtoV1> {
+}) {
   if (!entry.userId || !entry.workspaceId) {
     throw new Error('Running Clockify timer is missing user or workspace information.')
   }
@@ -88,21 +84,7 @@ export async function stopClockifyTimerForEntry({
     workspaceId: entry.workspaceId,
   })
 
-  const end = new Date().toISOString()
-  const stoppedEntry = await clockify.stopRunningTimeEntry(
-    { end },
-    { params: { userId: entry.userId, workspaceId: entry.workspaceId } },
-  )
-
-  return {
-    ...entry,
-    ...stoppedEntry,
-    timeInterval: {
-      ...entry.timeInterval,
-      ...stoppedEntry.timeInterval,
-      end: stoppedEntry.timeInterval?.end ?? end,
-    },
-  }
+  return stopClockifyTimeEntry(entry)
 }
 
 function getLinearTicketNumber(identifier: string) {
@@ -123,4 +105,8 @@ function clockifyTimerLog(message: string, details?: unknown) {
   }
 
   console.info(`[clockify api] timer ${message}`, details)
+}
+
+export function createClockifyTimeEntryForTicket(input: Parameters<typeof getTicketTimeEntryBody>[0]) {
+  return createClockifyTimeEntry(getTicketTimeEntryBody(input), input.workspaceId)
 }

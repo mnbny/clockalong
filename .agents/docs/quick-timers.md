@@ -16,6 +16,8 @@ Right-clicking opens completed-time entry with the same variables. Saving comple
 
 Presets and saved template values are application settings in the native Tauri store. SVG data does not consume browser localStorage capacity. Settings backup and import support presets and their form values.
 
-The active association links one preset to one Clockify entry. A preset appears active only when that entry matches the current running response. When the user stops or deletes the matching entry, the app clears the association. When Clockify disconnects, the app also clears the association.
+The dashboard's active association links one preset to one real Clockify entry. Preset highlighting requires that entry to match the current running response. Stopping or deleting the matching entry clears the association, as does a Clockify disconnect.
+
+Internal MCP timers retain independent preset associations in their timer records. Several timers can share a preset. Internal starts and stops do not replace or clear the real timer association. MCP work discovery also recognizes presets with active internal timers.
 
 Saved form values and the active association serve different purposes. Neither is a history of time entries. Clockify owns that history, and the local Clockify cache supplies entry views.

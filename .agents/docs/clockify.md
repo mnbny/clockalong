@@ -8,7 +8,11 @@ Generated Zodios clients cover the regular API and the separate reports host. Ge
 
 The read workspace follows the user's active workspace, then the default workspace, then the first available workspace. New source entries use the selected dashboard project override or default project and the saved billable preference.
 
+Timer occupancy checks and writes use the timer's destination workspace, which can differ from the dashboard's read workspace. Internal timers retain that destination and their billing details until saved.
+
 Provider services create both running and completed entries. Completed intervals require valid dates and cannot end before they start. Manual additions require a positive duration. Completed entries do not replace a running timer, and overlaps are allowed.
+
+Clockalong owns unsaved internal timer intervals. Clockify owns the completed entries created when those timers stop. Unsaved internal time is outside work-item totals, Clockify reports, and monetary totals.
 
 When the app resumes an entry, it preserves that entry's trackable fields in a new entry. Editing, deletion, overlap repair, and entry collapse change Clockify-owned records. Clockalong does not create a separate authoritative time ledger.
 

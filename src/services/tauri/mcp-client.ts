@@ -11,12 +11,13 @@ export type McpServerStatus = {
 }
 
 export type McpStartTimerArguments = {
+  callerId?: string
   id: string
   source: 'github' | 'linear' | 'quick_timer'
   variables?: Record<string, string>
 }
 
-export type McpAddTimeEntryArguments = McpStartTimerArguments & {
+export type McpAddTimeEntryArguments = Omit<McpStartTimerArguments, 'callerId'> & {
   durationMinutes: number
   endedAt?: string
 }
@@ -39,7 +40,7 @@ export type McpTelegramDestinations = {
 
 export type McpTelegramMessageResult = { groupId: string; topicId: number | null; messageId: number }
 
-export type McpCommandPayload =
+export type McpCommandPayload = { deadlineAt?: number } & (
   | McpTelegramCommand
   | {
       arguments: McpStartTimerArguments
@@ -54,24 +55,28 @@ export type McpCommandPayload =
   | {
       arguments: Record<string, never>
       requestId: string
-      tool: 'stop_timer' | 'fix_overlaps' | 'collapse_entries'
+      tool: 'fix_overlaps' | 'collapse_entries'
     }
+  | { arguments: { timerId: string }; requestId: string; tool: 'stop_timer' }
   | {
       arguments: Record<string, never>
       requestId: string
       tool: 'refresh'
     }
+)
 
 export type McpStartTimerResult = {
   billable: boolean
   description: string
-  entryId: string
+  entryId: string | null
   projectName: string | null
   startedAt: string
-  stoppedPrevious: boolean
+  timerId: string
+  callerId: string | null
+  mode: 'clockify' | 'internal'
 }
 
-export type McpStopTimerResult = {
+type McpCompletedEntryResult = {
   description: string
   durationSeconds: number
   endedAt: string
@@ -79,7 +84,9 @@ export type McpStopTimerResult = {
   startedAt: string
 }
 
-export type McpAddTimeEntryResult = McpStopTimerResult & {
+export type McpStopTimerResult = McpCompletedEntryResult & { timerId: string; mode: 'clockify' | 'internal' }
+
+export type McpAddTimeEntryResult = McpCompletedEntryResult & {
   billable: boolean
   projectName: string | null
 }

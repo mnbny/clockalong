@@ -2,7 +2,7 @@
 
 Read [.agents/docs/index.md](./.agents/docs/index.md).
 
-After a feature or change is complete, use the `ir-living-docs` skill to update the living documentation. Do this during verification or before a commit. Do not update the documentation before the change is complete.
+After a feature or change is complete, use the woof token `code.workflows.living_docs` to update the living documentation. Do this during verification or before a commit. Do not update the documentation before the change is complete.
 
 Keep research documents in `.agents/research/`. This directory is gitignored. Never stage or commit research documents.
 
