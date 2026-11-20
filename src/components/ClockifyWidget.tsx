@@ -504,7 +504,7 @@ export function ClockifyWidget() {
           </header>
 
           <div className="divide-base-content/5 grid divide-y lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)] lg:divide-x lg:divide-y-0">
-            <div className="grid min-h-44 content-center gap-2 px-4 py-3">
+            <div className="grid min-h-44 grid-cols-1 content-center gap-2 px-4 py-3">
               {runningEntry ? (
                 <RunningTimerView
                   key={runningEntry.id ?? runningEntry.timeInterval?.start ?? 'running-entry'}
