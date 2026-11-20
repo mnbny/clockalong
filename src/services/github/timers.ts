@@ -1,8 +1,8 @@
 import type { SyncedGithubWorkItem } from './sync'
 
 import { internalRefTemplateToken } from '../../utils/templates'
-import { clockify } from '../clockify/client'
 import { type CreateTimeEntryRequest, type TimeEntryDtoImplV1 } from '../clockify/generated/clockify'
+import { createClockifyTimeEntry, stopClockifyTimeEntry } from '../clockify/time-entries'
 import { type ClockifyTimeEntryInterval, getClockifyTimeEntryTiming } from '../clockify/time-entry-interval'
 import {
   formatGithubIssueDescriptionTemplate,
@@ -66,7 +66,7 @@ export function getGithubPullRequestDescriptionValues(item: Extract<SyncedGithub
   } satisfies GithubPullRequestDescriptionTemplateValues
 }
 
-export async function createClockifyTimeEntryForGithubWorkItem({
+export function getGithubTimeEntryBody({
   interval,
   billable,
   description,
@@ -80,7 +80,7 @@ export async function createClockifyTimeEntryForGithubWorkItem({
   item: SyncedGithubWorkItem
   projectId: string
   workspaceId: string
-}): Promise<TimeEntryDtoImplV1> {
+}) {
   const body = {
     billable,
     description,
@@ -98,7 +98,7 @@ export async function createClockifyTimeEntryForGithubWorkItem({
     workspaceId,
   })
 
-  return clockify.createTimeEntry(body, { params: { workspaceId } })
+  return body
 }
 
 export async function stopClockifyTimerForEntry({
@@ -107,7 +107,7 @@ export async function stopClockifyTimerForEntry({
 }: {
   entry: TimeEntryDtoImplV1
   item: SyncedGithubWorkItem
-}): Promise<TimeEntryDtoImplV1> {
+}) {
   if (!entry.userId || !entry.workspaceId) {
     throw new Error('Running Clockify timer is missing user or workspace information.')
   }
@@ -119,10 +119,7 @@ export async function stopClockifyTimerForEntry({
     workspaceId: entry.workspaceId,
   })
 
-  return clockify.stopRunningTimeEntry(
-    { end: new Date().toISOString() },
-    { params: { userId: entry.userId, workspaceId: entry.workspaceId } },
-  )
+  return stopClockifyTimeEntry(entry)
 }
 
 function githubTimerLog(message: string, details?: unknown) {
@@ -132,4 +129,8 @@ function githubTimerLog(message: string, details?: unknown) {
   }
 
   console.info(`[github api] timer ${message}`, details)
+}
+
+export function createClockifyTimeEntryForGithubWorkItem(input: Parameters<typeof getGithubTimeEntryBody>[0]) {
+  return createClockifyTimeEntry(getGithubTimeEntryBody(input), input.workspaceId)
 }
