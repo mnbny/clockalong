@@ -33,8 +33,8 @@ Add each document using this format:
 
 #### [time-tracking.md](./time-tracking.md)
 
-- Description: Dashboard timers, entry management, overlap repair, and collapse.
-- Tags: `time-tracking`, `dashboard`, `overlap`, `collapse`
+- Description: Dashboard timers, concurrent agent tracking, entry management, and repairs.
+- Tags: `time-tracking`, `dashboard`, `concurrency`, `overlap`, `collapse`
 
 #### [quick-timers.md](./quick-timers.md)
 
@@ -58,8 +58,8 @@ Add each document using this format:
 
 #### [mcp-server.md](./mcp-server.md)
 
-- Description: Local agent capabilities, command ownership, and trust boundaries.
-- Tags: `mcp`
+- Description: Local agent capabilities, timer ownership, command handling, and trust boundaries.
+- Tags: `mcp`, `time-tracking`
 
 #### [storage.md](./storage.md)
 

@@ -4,7 +4,7 @@ Clockalong separates preferences, secrets, provider data, and image bytes by own
 
 - The native Tauri store holds small, versioned settings, including Quick Timer presets, SVG icons, and Paseo trigger definitions.
 - Stronghold holds Clockify and GitHub credentials, Linear tokens, and the Telegram session and private group reference.
-- Dexie manages IndexedDB for Clockify entries, collapse progress, Linear issues, GitHub work items, Telegram notifications, and Paseo execution records.
+- Dexie manages IndexedDB for Clockify entries, active agent timers, collapse progress, Linear issues, GitHub work items, Telegram notifications, and Paseo execution records.
 - TanStack Query holds remote request state and scoped memory caches.
 - A bounded native cache holds Telegram image bytes.
 
@@ -39,6 +39,16 @@ A complete provider fetch commits its applicable updates and deletions in one tr
 Dexie owns schema upgrades and live subscriptions. Upgrade failure rolls back the upgrade transaction. Local read errors expose retry; retry reopens the database before repeating the read.
 
 Clockify rows belong to a user and workspace. Linear rows belong to a verified viewer. GitHub reads apply selected repositories and enabled types. Tracking-provider disconnect clears its cached rows and invalidates in-flight writes.
+
+## Agent timer records
+
+Local timer records belong to unfinished tracking operations. They retain identity, caller, mode, source, account, destination workspace, original billing details, and interval boundaries.
+
+Active timers survive app restarts. The first stop fixes the interval end, including after a failed save. Interrupted writes remain uncertain and do not automatically repeat.
+
+A confirmed Clockalong stop removes its local record even if the display cache cannot refresh. A manual UI stop or switch can end the real entry while retaining its managed record for a later agent stop.
+
+These records remain outside provider cache cleanup and settings backups. Disconnect preserves them. Saving requires the original Clockify account. Saved project and description details do not change when preferences or source data change.
 
 ## Clockify collapse progress
 

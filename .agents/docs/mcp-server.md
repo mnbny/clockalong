@@ -7,7 +7,7 @@ Clockalong exposes local agent tools for tracking context, Clockify timer contro
 - Work discovery lists Linear issues, GitHub issues and pull requests, and Quick Timer presets with tracked totals.
 - Refresh synchronizes tracking data without listing work.
 - Tracking status, recent completed entries, and project listings provide cached Clockify context.
-- Timer actions start work from a listed item or stop the running timer.
+- Timer actions start distinct timers from listed work items and stop a specified timer by its returned identity.
 - Completed-time entry adds time for a listed item without changing the running timer.
 - Overlap repair uses the dashboard's current-month operation for the active Clockify workspace, across all projects.
 - Entry collapse uses the dashboard's current-month operation and saved duration, chunk size, and invoice exclusion settings.
@@ -31,6 +31,18 @@ Overlap repair takes no arguments and needs no selected timer project. It return
 Entry collapse also takes no arguments and needs no selected timer project. It returns counts of created replacements and deleted originals, plus final refresh failure status. A month without eligible groups succeeds with zero changes. Matching concurrent requests share the active collapse. Interrupted deletions resume from saved progress.
 
 Both actions plan from the local cache and sync afterward. Collapse permits overlaps and does not invoke repair. Callers request the two actions separately.
+
+## Timer ownership
+
+A start returns a unique Clockalong timer identity and its fixed Clockify or internal mode. The Clockalong identity is separate from any Clockify entry identity. Stop requests select the Clockalong identity and cannot fall back to the current running timer.
+
+An optional caller identifier labels a timer for agent discovery. It is not authentication or a deduplication key. Multiple starts for the same work item or caller remain separate. Repeating a completed stop reports that the timer is no longer active and creates no additional time.
+
+Tracking status separates the current real Clockify entry from Clockalong's managed timer records. It can show a UI or external timer without a Clockalong stop identity. Internal timers remain discoverable when Clockify is idle. Work discovery recognizes active internal timers even though their unsaved time is absent from tracked totals.
+
+A timeout does not prove that a start or save failed. Unconfirmed internal saves cannot be repeated through MCP. Explicit retries in the app reuse the frozen interval and can duplicate an earlier remote success. Automatic replacement entries are outside the timer contract.
+
+Manual UI starts retain sequential switching and can end an agent's real Clockify timer. A later agent stop returns that entry's actual interval and completes its local record. Internal timers remain independent. Coordination covers callers of one Clockalong instance.
 
 ## Read and refresh ownership
 
