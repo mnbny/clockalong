@@ -1,12 +1,15 @@
-import type { TimeEntryWithRatesDtoV1, UserDtoV1, WorkspaceDtoV1 } from '../clockify/generated/clockify'
+import type {
+  CreateTimeEntryRequest,
+  TimeEntryWithRatesDtoV1,
+  UserDtoV1,
+  WorkspaceDtoV1,
+} from '../clockify/generated/clockify'
 import type { ClockifyProject } from '../storage/config'
 import type {
   McpAddTimeEntryResult,
   McpCommandPayload,
   McpCommandResult,
   McpStartTimerArguments,
-  McpStartTimerResult,
-  McpStopTimerResult,
 } from '../tauri/mcp-client'
 
 import { isTauri } from '@tauri-apps/api/core'
@@ -18,25 +21,26 @@ import { collapseClockifyMonthEntries } from '../clockify/collapse-entries'
 import { clockifyEntryCache } from '../clockify/entry-cache'
 import { fixClockifyMonthOverlaps } from '../clockify/overlap-repair'
 import { cacheClockifyEntryResult } from '../clockify/sync'
-import { stopClockifyTimeEntry } from '../clockify/time-entries'
+import { createClockifyTimeEntry } from '../clockify/time-entries'
 import {
   type ClockifyTimeEntryInterval,
   getClockifyTimeEntryIntervalFromMinutes,
 } from '../clockify/time-entry-interval'
 import { selectClockifyWorkspace } from '../clockify/workspaces'
 import { db } from '../db'
-import { createClockifyTimeEntryForGithubWorkItem, formatGithubWorkItemDescription } from '../github/timers'
+import { formatGithubWorkItemDescription, getGithubTimeEntryBody } from '../github/timers'
 import { isGithubItemInScope } from '../github/work-item-cache'
 import { linearTicketCache } from '../linear/ticket-cache'
 import { toLinearTicket } from '../linear/tickets'
-import { createClockifyTimeEntryForTicket } from '../linear/timers'
+import { getTicketTimeEntryBody } from '../linear/timers'
 import {
-  createQuickTimerTimeEntry,
+  getQuickTimerTimeEntryBody,
   persistQuickTimerActiveEntry,
   persistQuickTimerValues,
   resolveQuickTimerValues,
 } from '../quick-timers/timers'
 import { storage } from '../storage/config'
+import { invalidateTracking, refreshStoppedTimer, startTrackedTimer, stopTrackedTimer } from '../tracking/coordinator'
 
 export type McpCommandErrorCode =
   | 'clockify_disconnected'
@@ -73,7 +77,6 @@ export type ExecuteMcpCommandContext = {
 const clockifyDisconnectedMessage = 'Clockify is not connected. Connect it in Clockalong before tracking time.'
 const missingProjectMessage = 'No Clockify project is selected. Choose a default project in Clockalong settings.'
 const unknownTargetMessage = 'No trackable work item matches that id. Call list_trackable_work first.'
-const noRunningTimerMessage = 'No Clockify timer is running.'
 
 export async function executeMcpCommand(
   command: McpCommandPayload,
@@ -87,7 +90,13 @@ export async function executeMcpCommand(
   try {
     switch (command.tool) {
       case 'start_timer': {
-        const execution = await executeCreateTimeEntry(command.arguments, context, lifecycle)
+        const execution = await executeCreateTimeEntry(
+          command.arguments,
+          context,
+          lifecycle,
+          undefined,
+          command.deadlineAt,
+        )
         return execution
       }
       case 'add_time_entry': {
@@ -99,7 +108,7 @@ export async function executeMcpCommand(
         return execution
       }
       case 'stop_timer': {
-        const execution = await executeStopTimer(context, lifecycle)
+        const execution = await executeStopTimer(command.arguments.timerId, lifecycle)
         return execution
       }
       case 'fix_overlaps':
@@ -127,6 +136,7 @@ async function executeCreateTimeEntry(
   context: ExecuteMcpCommandContext,
   lifecycle: number,
   interval?: ClockifyTimeEntryInterval,
+  deadlineAt?: number,
 ): Promise<McpCommandExecution> {
   const project = context.clockifyTimerProject
 
@@ -135,8 +145,7 @@ async function executeCreateTimeEntry(
   }
 
   const billable = await storage.get('clockifyBillable')
-  const stoppedPrevious = Boolean(context.runningEntry)
-  let entry: TimeEntryWithRatesDtoV1 | null = null
+  let body: CreateTimeEntryRequest
 
   switch (arguments_.source) {
     case 'linear': {
@@ -159,7 +168,7 @@ async function executeCreateTimeEntry(
         linearLifecycle !== linearTicketCache.getLifecycle()
       )
         return commandError('unknown_target', unknownTargetMessage)
-      entry = await createClockifyTimeEntryForTicket({
+      body = getTicketTimeEntryBody({
         billable,
         interval,
         descriptionTemplate,
@@ -198,7 +207,7 @@ async function executeCreateTimeEntry(
       ) {
         return commandError('unknown_target', unknownTargetMessage)
       }
-      entry = await createClockifyTimeEntryForGithubWorkItem({
+      body = getGithubTimeEntryBody({
         billable,
         interval,
         description,
@@ -224,59 +233,51 @@ async function executeCreateTimeEntry(
         preset,
         values: arguments_.variables,
       })
-      entry = await createQuickTimerTimeEntry({ billable, interval, preset, project, values })
+      body = getQuickTimerTimeEntryBody({ billable, interval, preset, project, values })
       await persistQuickTimerValues({ preset, values })
 
-      if (entry.id && !interval) {
-        await persistQuickTimerActiveEntry({ entryId: entry.id, quickTimerId: preset.id })
-      }
       break
     }
   }
 
-  const result = interval ? getAddTimeEntryResult(entry, project) : getStartTimerResult(entry, project, stoppedPrevious)
-  if (interval) {
-    try {
-      await cacheClockifyEntryResult(entry, { workspaceId: project.workspaceId, timeInterval: interval }, lifecycle)
-    } catch (error) {
-      console.warn('[mcp command] Could not cache created Clockify entry:', error)
+  if (!interval) {
+    const result = await startTrackedTimer(
+      {
+        body,
+        workspaceId: project.workspaceId,
+        projectName: project.projectName,
+        callerId: arguments_.callerId ?? null,
+        source: arguments_.source,
+        sourceId: arguments_.id,
+      },
+      deadlineAt,
+      lifecycle,
+    )
+    if (arguments_.source === 'quick_timer' && result.mode === 'clockify' && result.entryId) {
+      try {
+        await persistQuickTimerActiveEntry({ entryId: result.entryId, quickTimerId: arguments_.id })
+      } catch {
+        console.warn('[mcp command] Could not save Quick Timer display association.')
+      }
     }
+    return { ok: true, result }
   }
-  invalidateClockifyTimerData()
+  const entry = await createClockifyTimeEntry(body, project.workspaceId)
+  const result = getAddTimeEntryResult(entry, project)
+  try {
+    await cacheClockifyEntryResult(entry, { workspaceId: project.workspaceId, timeInterval: interval }, lifecycle)
+  } catch (error) {
+    console.warn('[mcp command] Could not cache created Clockify entry:', error)
+  }
+  invalidateTracking()
 
   return { ok: true, result }
 }
 
-async function executeStopTimer(context: ExecuteMcpCommandContext, lifecycle: number): Promise<McpCommandExecution> {
-  const runningEntry = context.runningEntry
-
-  if (!runningEntry) {
-    return commandError('no_running_timer', noRunningTimerMessage)
-  }
-
-  const stoppedResponse = await stopClockifyTimeEntry(runningEntry)
-  const stoppedEntry = {
-    ...runningEntry,
-    ...stoppedResponse,
-    timeInterval: {
-      ...runningEntry.timeInterval,
-      ...stoppedResponse.timeInterval,
-    },
-  } satisfies TimeEntryWithRatesDtoV1
-
-  if (runningEntry.userId && runningEntry.workspaceId) {
-    try {
-      await cacheClockifyEntryResult(stoppedEntry, runningEntry, lifecycle)
-    } catch (error) {
-      console.warn('[mcp command] Could not cache stopped Clockify entry:', error)
-    }
-  }
-
-  await storage.set('quickTimersActiveEntry', null)
-  const result = getStopTimerResult(stoppedEntry)
-  invalidateClockifyTimerData()
-
-  return { ok: true, result }
+async function executeStopTimer(timerId: string, lifecycle: number): Promise<McpCommandExecution> {
+  const entry = await stopTrackedTimer(timerId)
+  await refreshStoppedTimer(entry, lifecycle)
+  return { ok: true, result: { ...getStopTimerResult(entry), timerId, mode: entry.mode } }
 }
 
 async function getLinearTicket(id: string, viewerId: string | null) {
@@ -306,26 +307,7 @@ async function getGithubWorkItem(id: string) {
   return item
 }
 
-function getStartTimerResult(
-  entry: TimeEntryWithRatesDtoV1 | null,
-  project: ClockifyProject,
-  stoppedPrevious: boolean,
-): McpStartTimerResult {
-  if (!entry?.id || !entry.timeInterval?.start) {
-    throw new Error('Clockify returned an incomplete running entry.')
-  }
-
-  return {
-    billable: entry.billable ?? false,
-    description: entry.description ?? '',
-    entryId: entry.id,
-    projectName: project.projectName,
-    startedAt: entry.timeInterval.start,
-    stoppedPrevious,
-  }
-}
-
-function getStopTimerResult(entry: TimeEntryWithRatesDtoV1): McpStopTimerResult {
+function getStopTimerResult(entry: TimeEntryWithRatesDtoV1) {
   const entryId = entry.id
   const startedAt = entry.timeInterval?.start
   const endedAt = entry.timeInterval?.end
@@ -364,12 +346,6 @@ function getDurationSeconds(startedAt: string, endedAt: string) {
   }
 
   return Math.max(0, Math.round((end - start) / 1000))
-}
-
-function invalidateClockifyTimerData() {
-  void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
-  void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
-  void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.entrySync() })
 }
 
 function commandError(code: McpCommandErrorCode, message: string): McpCommandExecution {

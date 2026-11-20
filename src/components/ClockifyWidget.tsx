@@ -43,6 +43,7 @@ import { useStorage } from '../services/storage/useStorage'
 import { getErrorMessage } from '../utils/errors'
 import { appToast } from './AppToaster'
 import { ClockifyEntryTimeDialog } from './ClockifyEntryTimeDialog'
+import { ConcurrentTimers } from './ConcurrentTimers'
 import { ClockifyIcon } from './icons/ClockifyIcon'
 
 const clockifyReportPeriods = [
@@ -362,7 +363,7 @@ export function ClockifyWidget() {
         console.warn('[clockify sync] Could not cache stopped entry:', error)
         appToast.warning('Timer stopped, but the local cache could not be updated.')
       }
-      void setQuickTimersActiveEntry(null)
+      void setQuickTimersActiveEntry(current => (current?.entryId === original.id ? null : current))
       appToast.success('Stopped Clockify timer')
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.runningEntry() })
       void queryClient.invalidateQueries({ queryKey: queryKeys.clockify.summaryReport() })
@@ -518,9 +519,10 @@ export function ClockifyWidget() {
                     Timer
                   </div>
                   <div className="text-3xl leading-none font-semibold tabular-nums">0s</div>
-                  <div className="text-base-content/60 text-sm">No timer running</div>
+                  <div className="text-base-content/60 text-sm">No Clockify timer running</div>
                 </>
               )}
+              <ConcurrentTimers userId={userQuery.data?.id} />
             </div>
 
             <div className="divide-base-content/5 grid grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">

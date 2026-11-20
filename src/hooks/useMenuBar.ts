@@ -162,7 +162,7 @@ export function useMenuBar() {
       if (tray) {
         setMenuBarTitle(tray, '')
       }
-      void setQuickTimersActiveEntry(null)
+      void setQuickTimersActiveEntry(current => (current?.entryId === original.id ? null : current))
       void invalidateClockifyTimerData()
     },
   })

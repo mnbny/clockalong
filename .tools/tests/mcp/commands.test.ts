@@ -1,8 +1,10 @@
 import type { McpCommandPayload } from '../../../src/services/tauri/mcp-client'
 
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { queryClient, queryKeys } from '../../../src/lib/query-client'
+import * as clockifyAuth from '../../../src/services/clockify/auth'
+import * as clockifyClient from '../../../src/services/clockify/client'
 import { clockify } from '../../../src/services/clockify/client'
 import * as collapseEntries from '../../../src/services/clockify/collapse-entries'
 import * as overlapRepair from '../../../src/services/clockify/overlap-repair'
@@ -194,6 +196,7 @@ test('invalid duration, missing project, disconnected Clockify, and unknown work
 })
 
 test('GitHub commands resolve cached IDs and reject missing IDs without creating time', async () => {
+  queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user' })
   const item = {
     id: 'owner/repo:issue:7',
     type: 'issue' as const,
@@ -274,15 +277,17 @@ test('GitHub commands resolve cached IDs and reject missing IDs without creating
 afterEach(async () => {
   vi.restoreAllMocks()
   queryClient.clear()
+  await db.trackedTimers.clear()
   await clearSyncedClockifyTimeEntries()
 })
 
 test('stopping through MCP caches a partial response immediately', async () => {
+  await seedRealTimer()
   vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(async () => {})
   vi.spyOn(storage, 'set').mockImplementation(async () => {})
-  vi.spyOn(clockify, 'stopRunningTimeEntry').mockResolvedValue({ timeInterval: { end: '2026-01-01T11:00:00Z' } })
+  vi.spyOn(clockify, 'updateTimeEntry').mockResolvedValue({ timeInterval: { end: '2026-01-01T11:00:00Z' } })
   const result = await executeMcpCommand(
-    { tool: 'stop_timer', requestId: 'stop', arguments: {} },
+    { tool: 'stop_timer', requestId: 'stop', arguments: { timerId: 'tracked' } },
     {
       ...context,
       runningEntry: {
@@ -302,16 +307,17 @@ test('stopping through MCP caches a partial response immediately', async () => {
 })
 
 test('a timer response received after disconnect cannot repopulate the local cache', async () => {
+  await seedRealTimer()
   vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(async () => {})
   vi.spyOn(storage, 'set').mockImplementation(async () => {})
   let finish!: (value: { timeInterval: { end: string } }) => void
-  const stop = vi.spyOn(clockify, 'stopRunningTimeEntry').mockReturnValue(
+  const stop = vi.spyOn(clockify, 'updateTimeEntry').mockReturnValue(
     new Promise(resolve => {
       finish = resolve
     }),
   )
   const pending = executeMcpCommand(
-    { tool: 'stop_timer', requestId: 'late-stop', arguments: {} },
+    { tool: 'stop_timer', requestId: 'late-stop', arguments: { timerId: 'tracked' } },
     {
       ...context,
       runningEntry: {
@@ -328,3 +334,38 @@ test('a timer response received after disconnect cannot repopulate the local cac
   expect((await pending).ok).toBe(true)
   expect(await db.clockifyEntries.count()).toBe(0)
 })
+
+beforeEach(() => {
+  vi.spyOn(clockifyAuth, 'getTauriClockifyApiKey').mockResolvedValue({ apiKey: 'test-key' })
+  vi.spyOn(clockifyClient, 'createClockifyClient').mockReturnValue(clockify)
+  vi.spyOn(clockify, 'getTimeEntries').mockResolvedValue([])
+})
+
+async function seedRealTimer() {
+  queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user' })
+  const entry = {
+    id: 'timer',
+    userId: 'user',
+    workspaceId: 'workspace',
+    description: 'Tracked',
+    timeInterval: { start: '2026-01-01T10:00:00Z' },
+  }
+  vi.spyOn(clockify, 'getTimeEntry').mockResolvedValue(entry)
+  await db.trackedTimers.put({
+    timerId: 'tracked',
+    userId: 'user',
+    workspaceId: 'workspace',
+    projectName: 'Project',
+    callerId: null,
+    source: 'quick_timer',
+    sourceId: 'preset',
+    mode: 'clockify',
+    body: { start: entry.timeInterval.start, description: 'Tracked' },
+    entryId: 'timer',
+    startedAt: entry.timeInterval.start,
+    endedAt: null,
+    state: 'active',
+    uncertain: false,
+    error: null,
+  })
+}

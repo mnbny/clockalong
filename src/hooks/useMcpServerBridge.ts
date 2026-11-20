@@ -26,6 +26,7 @@ import { listMcpWork, type McpListWorkArguments } from '../services/mcp/work-lis
 import { useStorage } from '../services/storage/useStorage'
 import { clockalongMcpCommandEvent, mcp } from '../services/tauri/mcp-client'
 import { useTelegram } from '../services/telegram/session-provider'
+import { restoreTrackedTimers } from '../services/tracking/coordinator'
 import { getErrorMessage } from '../utils/errors'
 import { useAppAuth } from './useAppAuth'
 import { useAppInit } from './useAppInit'
@@ -39,6 +40,9 @@ type IncomingMcpCommand = {
 }
 
 export function useMcpServerBridge() {
+  useEffect(() => {
+    void restoreTrackedTimers().catch(() => mcpBridgeLog('could not restore local timers'))
+  }, [])
   const telegram = useTelegram()
   const telegramRef = useRef(telegram)
   telegramRef.current = telegram
@@ -57,12 +61,13 @@ export function useMcpServerBridge() {
   const revisions = useLiveQuery(async () => {
     if (!mcpServerEnabled) return
     try {
-      const [github, linear, clockify] = await Promise.all([
+      const [github, linear, clockify, timers] = await Promise.all([
         db.githubCacheMeta.get('revision'),
         db.linearCacheMeta.get('state'),
         db.clockifyCacheMeta.get('revision'),
+        db.trackedTimers.toArray(),
       ])
-      return { github: github?.revision, linear: linear?.revision, clockify: clockify?.revision }
+      return { github: github?.revision, linear: linear?.revision, clockify: clockify?.revision, timers }
     } catch {
       mcpBridgeLog('could not read database revisions')
       return undefined
@@ -141,6 +146,7 @@ export function useMcpServerBridge() {
     [
       clockifyConnected,
       revisions?.clockify,
+      revisions?.timers,
       clockifyProjects,
       clockifyTimerProject,
       githubConnected,
@@ -368,6 +374,7 @@ async function handleMcpCommand(
   }
 
   const command = {
+    deadlineAt: typeof incoming.deadlineAt === 'number' ? incoming.deadlineAt : undefined,
     arguments: isCommandArguments(incoming.arguments) ? incoming.arguments : {},
     requestId,
     tool,
@@ -379,6 +386,14 @@ async function handleMcpCommand(
     } catch {
       execution.result = { ...execution.result, refreshFailed: true }
       mcpBridgeLog('snapshot publish failed after entry changes', { tool })
+    }
+  }
+
+  if (tool === 'start_timer' || tool === 'stop_timer') {
+    try {
+      await publishMcpSnapshot(snapshotInputRef.current)
+    } catch {
+      mcpBridgeLog('snapshot publish failed after timer operation', { tool })
     }
   }
 
