@@ -66,9 +66,7 @@ function ConcurrentTimerRow({ timer }: { timer: TrackedTimer }) {
           <div className="truncate" title={title}>
             {title}
           </div>
-          <div className="text-base-content/60 truncate text-xs">
-            {[timer.callerId, timer.projectName].filter(Boolean).join(' · ')}
-          </div>
+          {!!timer.callerId && <div className="text-base-content/60 truncate text-xs">{timer.callerId}</div>}
         </div>
         <span className={`font-mono tabular-nums ${failed ? 'text-error' : ''}`}>{elapsed}</span>
         {(failed || !timer.endedAt) && (
