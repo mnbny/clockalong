@@ -1041,7 +1041,7 @@ fn tool_catalog() -> Vec<Value> {
         }),
         json!({
             "name": "get_tracking_status",
-            "description": "Returns Clockify status and timers: active and unresolved Clockalong timers with timerId, callerId, source, mode, state and elapsedSeconds. Internal timers remain listed when Clockify is idle. Frozen endedAt intervals no longer accrue time.",
+            "description": "Returns Clockify status and timers: Clockify timers matching cached running entries, unresolved Clockify starts, and active or unresolved internal timers, with timerId, callerId, source, mode, state and elapsedSeconds. Internal timers remain listed when Clockify is idle. Frozen endedAt intervals no longer accrue time.",
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
         }),
         json!({

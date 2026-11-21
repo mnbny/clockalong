@@ -1,5 +1,6 @@
 import type { TimeEntryWithRatesDtoV1 } from '../../../src/services/clockify/generated/clockify'
 
+import { AxiosError, AxiosHeaders } from 'axios'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { queryClient, queryKeys } from '../../../src/lib/query-client'
@@ -7,10 +8,14 @@ import * as auth from '../../../src/services/clockify/auth'
 import * as clients from '../../../src/services/clockify/client'
 import { clockify } from '../../../src/services/clockify/client'
 import { clearSyncedClockifyTimeEntries } from '../../../src/services/clockify/sync'
-import { createClockifyTimeEntry } from '../../../src/services/clockify/time-entries'
+import {
+  createClockifyTimeEntry,
+  getRunningClockifyTimeEntries,
+  stopClockifyTimeEntry,
+} from '../../../src/services/clockify/time-entries'
 import { DB, db } from '../../../src/services/db'
 import { storage } from '../../../src/services/storage/config'
-import { startTrackedTimer, stopTrackedTimer } from '../../../src/services/tracking/coordinator'
+import { dismissTrackedTimer, startTrackedTimer, stopTrackedTimer } from '../../../src/services/tracking/coordinator'
 import { describeTrackedTimer } from '../../../src/services/tracking/store'
 
 let running: TimeEntryWithRatesDtoV1 | null
@@ -176,8 +181,8 @@ test('a sequential UI start replaces only the real timer; an agent stop never to
   )
   expect(running?.id).toBe(replacement.id)
   expect((await db.trackedTimers.get(internal.timerId))?.endedAt).toBeNull()
-  const stopped = await stopTrackedTimer(real.timerId)
-  expect(stopped.id).toBe(real.entryId)
+  expect(await db.trackedTimers.get(real.timerId)).toBeUndefined()
+  await expect(stopTrackedTimer(real.timerId)).rejects.toThrow('no longer active')
   expect(running?.id).toBe(replacement.id)
   expect(clockify.updateTimeEntry).not.toHaveBeenCalled()
 })
@@ -199,7 +204,123 @@ test('UI and MCP starts share the critical section, while UI starts always remai
   expect(first.mode).toBe('clockify')
   expect(running?.id).toBe(second.id)
   expect(clockify.createTimeEntry).toHaveBeenCalledTimes(2)
-  expect(await db.trackedTimers.count()).toBe(1)
+  expect(await db.trackedTimers.count()).toBe(0)
+})
+
+test('a UI stop retires the Clockify reference so a late agent stop cannot resurrect a deleted entry', async () => {
+  const real = await startTrackedTimer(draft())
+  const internal = await startTrackedTimer(draft())
+  await stopClockifyTimeEntry(entries.get(real.entryId!)!)
+  entries.delete(real.entryId!)
+  const reads = vi.mocked(clockify.getTimeEntry).mock.calls.length
+  await expect(stopTrackedTimer(real.timerId)).rejects.toThrow('no longer active')
+  expect(clockify.getTimeEntry).toHaveBeenCalledTimes(reads)
+  expect(await db.trackedTimers.get(real.timerId)).toBeUndefined()
+  expect((await db.trackedTimers.get(internal.timerId))?.state).toBe('active')
+  expect(clockify.createTimeEntry).toHaveBeenCalledTimes(1)
+})
+
+test.each([400, undefined])('a failed Clockify lookup (%s) leaves its reference unchanged', async status => {
+  const real = await startTrackedTimer(draft())
+  const original = await db.trackedTimers.get(real.timerId)
+  const error = new AxiosError('Entry lookup failed')
+  if (status)
+    error.response = {
+      status,
+      data: {},
+      statusText: 'Bad Request',
+      headers: {},
+      config: { headers: new AxiosHeaders() },
+    }
+  vi.mocked(clockify.getTimeEntry).mockRejectedValueOnce(error)
+  await expect(stopTrackedTimer(real.timerId)).rejects.toBe(error)
+  expect(await db.trackedTimers.get(real.timerId)).toEqual(original)
+  expect(clockify.updateTimeEntry).not.toHaveBeenCalled()
+  expect(clockify.createTimeEntry).toHaveBeenCalledTimes(1)
+})
+
+test('a failed Clockify stop does not freeze local time; a retry reads the confirmed remote interval', async () => {
+  const real = await startTrackedTimer(draft())
+  const original = await db.trackedTimers.get(real.timerId)
+  vi.mocked(clockify.updateTimeEntry).mockImplementationOnce(async body => {
+    entries.get(real.entryId!)!.timeInterval!.end = body.end
+    throw new Error('Response lost')
+  })
+  await expect(stopTrackedTimer(real.timerId)).rejects.toThrow('Response lost')
+  expect(await db.trackedTimers.get(real.timerId)).toEqual(original)
+  const result = await stopTrackedTimer(real.timerId)
+  expect(result.timeInterval?.end).toBe(entries.get(real.entryId!)!.timeInterval!.end)
+  expect(clockify.updateTimeEntry).toHaveBeenCalledTimes(1)
+  expect(await db.trackedTimers.get(real.timerId)).toBeUndefined()
+})
+
+test('running refresh retires ended and legacy Clockify references only in its confirmed scope', async () => {
+  const real = await startTrackedTimer(draft())
+  const internal = await startTrackedTimer(draft())
+  const record = (await db.trackedTimers.get(real.timerId))!
+  await db.trackedTimers.bulkPut([
+    { ...record, timerId: 'old-failure', entryId: 'deleted-entry', state: 'failed', endedAt: record.startedAt },
+    { ...record, timerId: 'other-workspace', workspaceId: 'other-workspace' },
+    { ...record, timerId: 'other-user', userId: 'other-user' },
+  ])
+  vi.mocked(clockify.getTimeEntries).mockRejectedValueOnce(new Error('Offline'))
+  await expect(getRunningClockifyTimeEntries('user', 'workspace')).rejects.toThrow('Offline')
+  expect(await db.trackedTimers.count()).toBe(5)
+  await getRunningClockifyTimeEntries('user', 'workspace')
+  expect(await db.trackedTimers.get('old-failure')).toBeUndefined()
+  expect(await db.trackedTimers.get(real.timerId)).toBeDefined()
+  running = null // Stopped or deleted in another Clockify client.
+  await getRunningClockifyTimeEntries('user', 'workspace')
+  expect((await db.trackedTimers.toArray()).map(timer => timer.timerId).sort()).toEqual(
+    [internal.timerId, 'other-workspace', 'other-user'].sort(),
+  )
+})
+
+test('a running refresh cannot retire a timer started while its response was pending', async () => {
+  let release!: () => void
+  vi.mocked(clockify.getTimeEntries).mockImplementationOnce(async () => {
+    await new Promise<void>(resolve => {
+      release = resolve
+    })
+    return []
+  })
+  const refresh = getRunningClockifyTimeEntries('user', 'workspace')
+  await vi.waitFor(() => expect(release).toBeDefined())
+  const start = startTrackedTimer(draft())
+  release()
+  await refresh
+  const timer = await start
+  expect((await db.trackedTimers.get(timer.timerId))?.entryId).toBe(running?.id)
+})
+
+test('dismiss only removes failed internal time and cannot race a pending retry', async () => {
+  const real = await startTrackedTimer(draft())
+  const internal = await startTrackedTimer(draft())
+  await expect(dismissTrackedTimer(real.timerId)).rejects.toThrow('Only failed internal')
+  await expect(dismissTrackedTimer(internal.timerId)).rejects.toThrow('Only failed internal')
+  await db.trackedTimers.update(internal.timerId, { state: 'failed', endedAt: new Date().toISOString() })
+  let fail!: (error: Error) => void
+  vi.mocked(auth.getTauriClockifyApiKey).mockImplementationOnce(
+    () =>
+      new Promise((_, reject) => {
+        fail = reject
+      }),
+  )
+  const retry = stopTrackedTimer(internal.timerId)
+  const rejected = expect(retry).rejects.toThrow('Offline')
+  await expect(dismissTrackedTimer(internal.timerId)).rejects.toThrow('finish saving')
+  await vi.waitFor(() => expect(fail).toBeDefined())
+  fail(new Error('Offline'))
+  await rejected
+  queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'other-user' })
+  await expect(dismissTrackedTimer(internal.timerId)).rejects.toThrow('original Clockify account')
+  queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user' })
+  await dismissTrackedTimer(internal.timerId)
+  expect(await db.trackedTimers.get(internal.timerId)).toBeUndefined()
+  expect(await db.trackedTimers.get(real.timerId)).toBeDefined()
+  await expect(stopTrackedTimer(internal.timerId)).rejects.toThrow('no longer active')
+  expect(clockify.createTimeEntry).toHaveBeenCalledTimes(1)
+  expect(clockify.updateTimeEntry).not.toHaveBeenCalled()
 })
 
 test('internal timers survive another database connection and cannot save under another account', async () => {

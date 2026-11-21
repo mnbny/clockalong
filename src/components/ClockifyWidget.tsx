@@ -35,11 +35,13 @@ import {
   createClockifyTimeEntryFromEntry,
   getClockifyTimeEntryTitle,
   getClockifyTimeEntryUpdateBody,
+  getRunningClockifyTimeEntries,
   stopClockifyTimeEntry,
 } from '../services/clockify/time-entries'
 import { selectClockifyWorkspace } from '../services/clockify/workspaces'
 import { db } from '../services/db'
 import { useStorage } from '../services/storage/useStorage'
+import { removeClockifyTimerReference } from '../services/tracking/store'
 import { getErrorMessage } from '../utils/errors'
 import { appToast } from './AppToaster'
 import { ClockifyEntryTimeDialog } from './ClockifyEntryTimeDialog'
@@ -154,16 +156,7 @@ export function ClockifyWidget() {
     queryKey: queryKeys.clockify.runningEntry({
       params: { userId: userQuery.data?.id, workspaceId: selectedWorkspace?.id },
     }),
-    queryFn: () =>
-      clockify.getTimeEntries({
-        params: { workspaceId: selectedWorkspace!.id!, userId: userQuery.data!.id! },
-        queries: {
-          hydrated: true,
-          'in-progress': 'true',
-          page: 1,
-          'page-size': 1,
-        },
-      }),
+    queryFn: () => getRunningClockifyTimeEntries(userQuery.data!.id!, selectedWorkspace!.id!),
     refetchInterval: 15 * 60_000,
     staleTime: 60_000,
   })
@@ -378,6 +371,11 @@ export function ClockifyWidget() {
       appToast.error('Could not delete Clockify entry', { description: getErrorMessage(error) })
     },
     onSuccess: async (_, entry, lifecycle) => {
+      try {
+        await removeClockifyTimerReference(entry)
+      } catch (error) {
+        console.warn('[clockify sync] Could not retire deleted timer reference:', error)
+      }
       try {
         await clockifyEntryCache.remove(entry.id, entry, lifecycle)
       } catch (error) {

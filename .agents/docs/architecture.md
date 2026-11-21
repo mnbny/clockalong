@@ -30,7 +30,7 @@ Tailwind and daisyUI supply styling; daisyUI supplies classes rather than React 
 
 Settings sections appear in this order: Quick Timers, Clockify, Linear, GitHub, Telegram, Paseo, App. Provider-specific description templates belong with their source's settings.
 
-Ordinary feedback uses Sonner. Persistent Telegram cards have their own surface. The shared image lightbox uses a dark backdrop and controls styled with the active theme.
+Ordinary feedback uses Sonner. Confirmation prompts use modal dialogs. Persistent Telegram cards have their own surface. The shared image lightbox uses a dark backdrop and controls styled with the active theme.
 
 ## Engineering conventions
 

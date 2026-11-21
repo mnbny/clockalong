@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import type { TrackedTimer } from '../../../src/services/tracking/store'
 import type { Root } from 'react-dom/client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -14,6 +15,7 @@ import * as collapseEntries from '../../../src/services/clockify/collapse-entrie
 import { clockifyEntryCache } from '../../../src/services/clockify/entry-cache'
 import * as overlapRepair from '../../../src/services/clockify/overlap-repair'
 import { db } from '../../../src/services/db'
+import { stopTrackedTimer } from '../../../src/services/tracking/coordinator'
 
 vi.mock('../../../src/services/clockify/client', () => ({
   clockify: {
@@ -74,6 +76,7 @@ afterEach(async () => {
   vi.useRealTimers()
   await clockifyEntryCache.clear()
   await db.clockifyCollapses.clear()
+  await db.trackedTimers.clear()
 })
 
 test('widget reads current date ranges live and recovers from a local read failure', async () => {
@@ -372,6 +375,29 @@ test('deleting an entry requires confirmation, supports cancellation and removes
   const getDelete = () => container!.querySelector<HTMLButtonElement>('button[aria-label="Delete Disposable entry"]')!
   await vi.waitFor(() => expect(getDelete()).not.toBeNull())
   expect(getDelete().previousElementSibling?.getAttribute('aria-label')).toBe('Edit Disposable entry')
+  const tracked: TrackedTimer = {
+    ...scope,
+    timerId: 'deleted-timer',
+    entryId: entry.id,
+    mode: 'clockify',
+    state: 'failed',
+    projectName: 'Project',
+    callerId: null,
+    source: 'quick_timer',
+    sourceId: 'preset',
+    body: { description: entry.description },
+    startedAt: entry.timeInterval.start,
+    endedAt: entry.timeInterval.end,
+    uncertain: false,
+    error: 'Old failure',
+  }
+  await act(async () => {
+    await db.trackedTimers.bulkPut([
+      tracked,
+      { ...tracked, timerId: 'other-workspace', workspaceId: 'other-workspace' },
+      { ...tracked, timerId: 'internal', mode: 'internal' },
+    ])
+  })
 
   await act(async () => getDelete().click())
   const getDialog = () => container!.querySelector('dialog')!
@@ -397,11 +423,16 @@ test('deleting an entry requires confirmation, supports cancellation and removes
     params: { workspaceId: scope.workspaceId, id: entry.id },
   })
   expect(await db.clockifyEntries.get([scope.userId, scope.workspaceId, entry.id])).toBeDefined()
+  expect(await db.trackedTimers.get(tracked.timerId)).toBeDefined()
 
   await act(async () => finish())
   await vi.waitFor(() => expect(getDialog()).toBeNull())
   await vi.waitFor(() => expect(getDelete()).toBeNull())
   expect(await db.clockifyEntries.get([scope.userId, scope.workspaceId, entry.id])).toBeUndefined()
+  expect(await db.trackedTimers.get(tracked.timerId)).toBeUndefined()
+  expect(await db.trackedTimers.get('other-workspace')).toBeDefined()
+  expect(await db.trackedTimers.get('internal')).toBeDefined()
+  await expect(stopTrackedTimer(tracked.timerId)).rejects.toThrow('no longer active')
   expect(container!.textContent).toContain('Keep entry')
   expect(container!.textContent).toContain('Running entry')
   expect(refresh).toHaveBeenCalledWith({ queryKey: queryKeys.clockify.entrySync() })

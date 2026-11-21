@@ -38,11 +38,11 @@ A start returns a unique Clockalong timer identity and its fixed Clockify or int
 
 An optional caller identifier labels a timer for agent discovery. It is not authentication or a deduplication key. Multiple starts for the same work item or caller remain separate. Repeating a completed stop reports that the timer is no longer active and creates no additional time.
 
-Tracking status separates the current real Clockify entry from Clockalong's managed timer records. It can show a UI or external timer without a Clockalong stop identity. Internal timers remain discoverable when Clockify is idle. Work discovery recognizes active internal timers even though their unsaved time is absent from tracked totals.
+Tracking status separates the current real Clockify entry from Clockalong's managed timer records. Known Clockify entries appear only when the cached running response for their account and workspace identifies the same entry. Unconfirmed Clockify starts without an entry identity remain listed for review. Status can show a UI or external timer without a Clockalong stop identity. Internal timers remain discoverable when Clockify is idle. Work discovery recognizes active internal timers even though their unsaved time is absent from tracked totals.
 
 A timeout does not prove that a start or save failed. Unconfirmed internal saves cannot be repeated through MCP. Explicit retries in the app reuse the frozen interval and can duplicate an earlier remote success. Automatic replacement entries are outside the timer contract.
 
-Manual UI starts retain sequential switching and can end an agent's real Clockify timer. A later agent stop returns that entry's actual interval and completes its local record. Internal timers remain independent. Coordination covers callers of one Clockalong instance.
+Manual UI starts retain sequential switching and can end an agent's real Clockify timer. Confirmed stops, switches, and deletions remove the real timer reference. A later agent stop reports that the timer is no longer active. Failed Clockify stops return errors without changing local timer state or creating internal rows. Failed internal saves also return errors, but retain their frozen intervals for retry or dismissal in the app. Internal timers remain independent. Coordination covers callers of one Clockalong instance.
 
 ## Read and refresh ownership
 

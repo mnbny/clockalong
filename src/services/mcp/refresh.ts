@@ -129,9 +129,16 @@ async function captureAndPublish(input: BuildMcpSnapshotInput, deadlineAt: numbe
       ])
     : ([[], [], { issues: false, pullRequests: false }] as const)
   const githubScope = { repositories: repositories.map(repository => repository.fullName), visibleWorkItemTypes }
+  const trackedTimers = input.clockifyConnected && user?.id ? await readTrackedTimers(user.id) : []
   const snapshot = buildMcpSnapshot({
     ...input,
-    trackedTimers: input.clockifyConnected && user?.id ? await readTrackedTimers(user.id) : [],
+    trackedTimers: trackedTimers.filter(timer => {
+      if (timer.mode === 'internal' || !timer.entryId) return true
+      const running = queryClient.getQueryData<TimeEntryWithRatesDtoV1[]>(
+        queryKeys.clockify.runningEntry({ params: { userId: timer.userId, workspaceId: timer.workspaceId } }),
+      )
+      return running?.some(entry => entry.id === timer.entryId && !entry.timeInterval?.end)
+    }),
     now,
     clockifyProjects: queryClient.getQueryData<ProjectDtoImplV1[]>(
       queryKeys.clockify.projects({ params: { workspaceId: workspace?.id } }),

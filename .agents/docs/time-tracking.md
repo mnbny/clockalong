@@ -22,9 +22,11 @@ A fresh check of the destination workspace determines whether an MCP start can u
 
 Each MCP start has a separate timer identity, even for the same work item or caller. Caller labels help agents recognize their timers without merging them or enforcing ownership.
 
-Stopping an internal timer creates a completed Clockify entry from its saved interval and billing details. A real timer stop targets its original Clockify entry. If that entry already ended, Clockalong returns its actual interval without changing a replacement timer.
+Stopping an internal timer creates a completed Clockify entry from its saved interval and billing details. A real timer stop targets its original Clockify entry. If that entry already ended, Clockalong returns its actual interval without changing a replacement timer. A failed Clockify stop returns an error without creating local unsaved time.
 
-The Clockify widget lists internal timers below its main stopwatch. A stop hides its row while the frozen interval saves. Failed saves return as compact rows with red elapsed time and an icon-only retry control. Retries use the original interval; retrying an unconfirmed save can duplicate time.
+Confirmed stops, manual switches, and deletions remove the corresponding real timer references. Successful running-timer reads remove references to entries that ended outside the app. This cleanup applies only to the requested account and workspace. Later stops of removed references report that the timer is no longer active.
+
+The Clockify widget lists only internal timers below its main stopwatch. A stop hides its row while the frozen interval saves. Failed saves return as compact rows with retry and dismiss controls. Retries use the original interval; retrying an unconfirmed save can duplicate time. Confirmed dismissal discards the failed internal record without a Clockify request. Dismissal cannot interrupt a save or remove time already in Clockify.
 
 One frontend coordinator owns timer state and orders Clockify timer operations across UI and MCP callers. Callers refresh display caches after a confirmed stop. A failed display refresh does not reopen a completed timer. Other app instances and external Clockify clients remain outside this coordination.
 

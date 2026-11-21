@@ -1,4 +1,5 @@
-import type { CreateTimeEntryRequest } from '../clockify/generated/clockify'
+import type { ClockifyScope } from '../clockify/entry-cache'
+import type { CreateTimeEntryRequest, TimeEntryWithRatesDtoV1 } from '../clockify/generated/clockify'
 
 import { db } from '../db'
 
@@ -22,6 +23,24 @@ export type TrackedTimer = {
 
 export function readTrackedTimers(userId: string) {
   return db.trackedTimers.where('userId').equals(userId).sortBy('startedAt')
+}
+
+export function removeClockifyTimerReference({ id, userId, workspaceId }: TimeEntryWithRatesDtoV1) {
+  if (!id || !userId || !workspaceId) return Promise.resolve(0)
+  return db.trackedTimers
+    .where('[userId+workspaceId]')
+    .equals([userId, workspaceId])
+    .filter(timer => timer.mode === 'clockify' && timer.entryId === id)
+    .delete()
+}
+
+/** Call with a confirmed running response while holding the Clockify operation queue. */
+export function removeStoppedClockifyTimerReferences(scope: ClockifyScope, running: TimeEntryWithRatesDtoV1[]) {
+  return db.trackedTimers
+    .where('[userId+workspaceId]')
+    .equals([scope.userId, scope.workspaceId])
+    .filter(timer => timer.mode === 'clockify' && !!timer.entryId && !running.some(entry => entry.id === timer.entryId))
+    .delete()
 }
 
 export function describeTrackedTimer(timer: TrackedTimer, now = Date.now()) {
