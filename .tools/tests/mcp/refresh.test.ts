@@ -1,4 +1,5 @@
 import type { McpSnapshot } from '../../../src/services/mcp/snapshot'
+import type { TrackedTimer } from '../../../src/services/tracking/store'
 
 import { QueryObserver } from '@tanstack/react-query'
 import { afterEach, expect, onTestFinished, test, vi } from 'vitest'
@@ -6,6 +7,7 @@ import { afterEach, expect, onTestFinished, test, vi } from 'vitest'
 import { queryClient, queryKeys } from '../../../src/lib/query-client'
 import { clockify } from '../../../src/services/clockify/client'
 import { cacheClockifyEntryResult, clearSyncedClockifyTimeEntries } from '../../../src/services/clockify/sync'
+import { db } from '../../../src/services/db'
 import { githubWorkItemCache } from '../../../src/services/github/work-item-cache'
 import { clearSyncedLinearTickets } from '../../../src/services/linear/sync'
 import { linearTicketCache } from '../../../src/services/linear/ticket-cache'
@@ -18,6 +20,52 @@ afterEach(async () => {
   queryClient.clear()
   await clearSyncedClockifyTimeEntries()
   await clearSyncedLinearTickets()
+  await db.trackedTimers.clear()
+})
+
+test('status includes confirmed running references and unresolved starts but excludes stopped Clockify entries', async () => {
+  const scope = { userId: 'user', workspaceId: 'workspace' }
+  const startedAt = new Date().toISOString()
+  queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user', activeWorkspace: 'workspace' })
+  queryClient.setQueryData(queryKeys.clockify.workspaces, [{ id: 'workspace' }])
+  queryClient.setQueryData(queryKeys.clockify.runningEntry({ params: scope }), [
+    { ...scope, id: 'running-entry', timeInterval: { start: startedAt } },
+  ])
+  queryClient.setQueryData(queryKeys.clockify.runningEntry({ params: { ...scope, workspaceId: 'other' } }), [
+    { ...scope, workspaceId: 'other', id: 'other-entry', timeInterval: { start: startedAt } },
+  ])
+  const timer: TrackedTimer = {
+    ...scope,
+    timerId: 'running',
+    entryId: 'running-entry',
+    mode: 'clockify',
+    state: 'active',
+    projectName: 'Project',
+    callerId: null,
+    source: 'quick_timer',
+    sourceId: 'preset',
+    body: { start: startedAt },
+    startedAt,
+    endedAt: null,
+    uncertain: false,
+    error: null,
+  }
+  await db.trackedTimers.bulkPut([
+    timer,
+    { ...timer, timerId: 'other-running', workspaceId: 'other', entryId: 'other-entry' },
+    { ...timer, timerId: 'stale', entryId: 'stopped-entry' },
+    { ...timer, timerId: 'phantom', entryId: 'deleted-entry', state: 'failed', endedAt: startedAt },
+    { ...timer, timerId: 'unconfirmed', entryId: null, state: 'failed', uncertain: true },
+    { ...timer, timerId: 'internal', mode: 'internal', entryId: null, state: 'failed', endedAt: startedAt },
+  ])
+  vi.spyOn(mcp, 'publishSnapshot').mockResolvedValue()
+  const snapshot = await publishMcpSnapshot({ clockifyConnected: true })
+  expect(snapshot.trackingStatus.timers.map(timer => timer.timerId).sort()).toEqual([
+    'internal',
+    'other-running',
+    'running',
+    'unconfirmed',
+  ])
 })
 
 test('refresh publishes current provider caches and Clockify reads before completing', async () => {

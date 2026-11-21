@@ -306,6 +306,28 @@ test('stopping through MCP caches a partial response immediately', async () => {
   })
 })
 
+test('an internal save failure returns an MCP error and retains the unsaved interval', async () => {
+  await seedRealTimer()
+  await db.trackedTimers.update('tracked', { mode: 'internal', entryId: null })
+  const create = vi.spyOn(clockify, 'createTimeEntry').mockRejectedValue(new Error('Connection lost'))
+  const result = await executeMcpCommand(
+    { tool: 'stop_timer', requestId: 'failed-save', arguments: { timerId: 'tracked' } },
+    context,
+  )
+  expect(result).toMatchObject({
+    ok: false,
+    error: { code: 'clockify_error', message: expect.stringContaining('unconfirmed') },
+  })
+  expect(await db.trackedTimers.get('tracked')).toMatchObject({
+    mode: 'internal',
+    state: 'failed',
+    endedAt: expect.any(String),
+    uncertain: true,
+  })
+  expect(create).toHaveBeenCalledTimes(1)
+  expect(clockify.getTimeEntry).not.toHaveBeenCalled()
+})
+
 test('a timer response received after disconnect cannot repopulate the local cache', async () => {
   await seedRealTimer()
   vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(async () => {})
