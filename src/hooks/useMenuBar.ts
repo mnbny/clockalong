@@ -22,6 +22,7 @@ import { cacheClockifyEntryResult } from '../services/clockify/sync'
 import {
   createClockifyTimeEntryFromEntry,
   getClockifyTimeEntryTitle,
+  getRunningClockifyTimeEntries,
   stopClockifyTimeEntry,
 } from '../services/clockify/time-entries'
 import { selectClockifyWorkspace } from '../services/clockify/workspaces'
@@ -81,16 +82,7 @@ export function useMenuBar() {
     queryKey: queryKeys.clockify.runningEntry({
       params: { userId, workspaceId },
     }),
-    queryFn: () =>
-      clockify.getTimeEntries({
-        params: { workspaceId: workspaceId!, userId: userId! },
-        queries: {
-          hydrated: true,
-          'in-progress': 'true',
-          page: 1,
-          'page-size': 1,
-        },
-      }),
+    queryFn: () => getRunningClockifyTimeEntries(userId!, workspaceId!),
     refetchInterval: 15 * 60_000,
     staleTime: 60_000,
   })

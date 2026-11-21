@@ -21,7 +21,7 @@ import { clockify } from '../services/clockify/client'
 import { clockifyEntryCache } from '../services/clockify/entry-cache'
 import { queryClockifySummaries } from '../services/clockify/entry-queries'
 import { cacheClockifyEntryResult } from '../services/clockify/sync'
-import { MissingClockifyProjectError } from '../services/clockify/time-entries'
+import { getRunningClockifyTimeEntries, MissingClockifyProjectError } from '../services/clockify/time-entries'
 import { selectClockifyWorkspace } from '../services/clockify/workspaces'
 import { db } from '../services/db'
 import { createGithubClient } from '../services/github/client'
@@ -289,16 +289,7 @@ function GitHubWidgetContent() {
     queryKey: queryKeys.clockify.runningEntry({
       params: { userId: clockifyUserQuery.data?.id, workspaceId: selectedClockifyWorkspace?.id },
     }),
-    queryFn: () =>
-      clockify.getTimeEntries({
-        params: { workspaceId: selectedClockifyWorkspace!.id!, userId: clockifyUserQuery.data!.id! },
-        queries: {
-          hydrated: true,
-          'in-progress': 'true',
-          page: 1,
-          'page-size': 1,
-        },
-      }),
+    queryFn: () => getRunningClockifyTimeEntries(clockifyUserQuery.data!.id!, selectedClockifyWorkspace!.id!),
     refetchInterval: 15 * 60_000,
     staleTime: 60_000,
   })
