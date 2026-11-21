@@ -11,7 +11,7 @@ import { endClockifyTimeEntry } from '../clockify/time-entries'
 import { db } from '../db'
 import { storage } from '../storage/config'
 import { coordinateClockifyTimer, getTrackingSession } from './mutations'
-import { describeTrackedTimer, readTrackedTimers } from './store'
+import { describeTrackedTimer, readTrackedTimers, removeStoppedClockifyTimerReferences } from './store'
 
 const stops = new Map<string, ReturnType<typeof finishTimer>>()
 let restoration: Promise<void> | undefined
@@ -49,6 +49,7 @@ export async function startTrackedTimer(
       queries: { 'in-progress': 'true', 'page-size': 1, page: 1 },
     })
     check()
+    await removeStoppedClockifyTimerReferences({ userId: session.userId, workspaceId: input.workspaceId }, running)
     const unresolvedStart = (await readTrackedTimers(session.userId)).some(
       timer =>
         timer.workspaceId === input.workspaceId && timer.mode === 'clockify' && !timer.entryId && timer.uncertain,
@@ -118,7 +119,7 @@ async function finishTimer(timerId: string, requestedEnd: string, retryUncertain
   }
   timer = { ...timer, endedAt: timer.endedAt ?? requestedEnd }
   const needsReview = (timer.uncertain || timer.state === 'saving') && !retryUncertain && timer.mode === 'internal'
-  await db.trackedTimers.put({ ...timer, state: needsReview ? 'failed' : 'saving' })
+  if (timer.mode === 'internal') await db.trackedTimers.put({ ...timer, state: needsReview ? 'failed' : 'saving' })
   if (needsReview) {
     throw new Error(
       'The previous save is unconfirmed. Check Clockify before retrying in the app; do not add time manually through MCP.',
@@ -132,7 +133,8 @@ async function finishTimer(timerId: string, requestedEnd: string, retryUncertain
       session.assertCurrent()
       if (record.mode === 'clockify' && !record.entryId)
         throw new Error('The Clockify start is unconfirmed. Check Clockify and handle this interval manually.')
-      await db.trackedTimers.update(timerId, { state: 'saving', uncertain: true, error: null })
+      if (record.mode === 'internal')
+        await db.trackedTimers.update(timerId, { state: 'saving', uncertain: true, error: null })
       session.assertCurrent()
       sent = true
       const entry =
@@ -151,6 +153,7 @@ async function finishTimer(timerId: string, requestedEnd: string, retryUncertain
       await db.trackedTimers.delete(timerId)
       return { ...entry, mode: record.mode, userId: record.userId, workspaceId: record.workspaceId }
     } catch (error) {
+      if (record.mode === 'clockify') throw error
       const uncertain = sent ? !isRejectedWrite(error) : record.uncertain
       await db.trackedTimers.update(timerId, {
         state: 'failed',
@@ -168,6 +171,18 @@ async function finishTimer(timerId: string, requestedEnd: string, retryUncertain
     }
   }
   return record.mode === 'clockify' ? coordinateClockifyTimer(save) : save()
+}
+
+export function dismissTrackedTimer(timerId: string) {
+  return db.transaction('rw', db.trackedTimers, async () => {
+    const timer = await db.trackedTimers.get(timerId)
+    if (stops.has(timerId)) throw new Error('Wait for this timer to finish saving before dismissing it.')
+    if (!timer || timer.mode !== 'internal' || timer.state !== 'failed')
+      throw new Error('Only failed internal timers can be dismissed.')
+    if (queryClient.getQueryData<UserDtoV1>(queryKeys.clockify.loggedUser)?.id !== timer.userId)
+      throw new Error('Reconnect the original Clockify account before dismissing this timer.')
+    await db.trackedTimers.delete(timerId)
+  })
 }
 
 export async function refreshStoppedTimer(entry: Awaited<ReturnType<typeof stopTrackedTimer>>, lifecycle: number) {

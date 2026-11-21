@@ -1,8 +1,8 @@
 import type { ClockifyProject } from '../storage/config'
 import type { CreateTimeEntryRequest, TimeEntryWithRatesDtoV1, UpdateTimeEntryRequest } from './generated/clockify'
 
-import { db } from '../db'
 import { coordinateClockifyTimer } from '../tracking/mutations'
+import { removeClockifyTimerReference, removeStoppedClockifyTimerReferences } from '../tracking/store'
 import { clockify } from './client'
 import { type ClockifyTimeEntryInterval, getClockifyTimeEntryTiming } from './time-entry-interval'
 
@@ -14,6 +14,21 @@ export class MissingClockifyProjectError extends Error {
 
 export function getClockifyTimeEntryTitle(entry: TimeEntryWithRatesDtoV1) {
   return entry.description?.trim() || 'Untitled time entry'
+}
+
+export function getRunningClockifyTimeEntries(userId: string, workspaceId: string) {
+  return coordinateClockifyTimer(async () => {
+    const entries = await clockify.getTimeEntries({
+      params: { workspaceId, userId },
+      queries: { hydrated: true, 'in-progress': 'true', page: 1, 'page-size': 1 },
+    })
+    try {
+      await removeStoppedClockifyTimerReferences({ userId, workspaceId }, entries)
+    } catch {
+      console.warn('[clockify sync] Could not retire stopped timer references.')
+    }
+    return entries
+  })
 }
 
 export async function createClockifyTimeEntryFromEntry(
@@ -38,16 +53,9 @@ export function createClockifyTimeEntry(body: CreateTimeEntryRequest, workspaceI
         const entry = await create()
         if (entry.userId && entry.id && entry.timeInterval?.start) {
           try {
-            await db.trackedTimers
-              .where('[userId+workspaceId]')
-              .equals([entry.userId, workspaceId])
-              .filter(
-                timer =>
-                  timer.mode === 'clockify' && timer.entryId !== entry.id && timer.state === 'active' && !timer.endedAt,
-              )
-              .modify({ endedAt: entry.timeInterval.start })
+            await removeStoppedClockifyTimerReferences({ userId: entry.userId, workspaceId }, [entry])
           } catch {
-            console.warn('[clockify sync] Could not update replaced timer display.')
+            console.warn('[clockify sync] Could not retire replaced timer references.')
           }
         }
         return entry
@@ -59,17 +67,9 @@ export function stopClockifyTimeEntry(entry: TimeEntryWithRatesDtoV1) {
   return coordinateClockifyTimer(async () => {
     const result = await endClockifyTimeEntry(clockify, entry, end)
     try {
-      await db.trackedTimers
-        .filter(
-          timer =>
-            timer.mode === 'clockify' &&
-            timer.entryId === entry.id &&
-            timer.userId === entry.userId &&
-            timer.workspaceId === entry.workspaceId,
-        )
-        .modify({ endedAt: result.timeInterval?.end ?? end.toISOString() })
+      await removeClockifyTimerReference(entry)
     } catch {
-      console.warn('[clockify sync] Could not update stopped timer display.')
+      console.warn('[clockify sync] Could not retire stopped timer reference.')
     }
     return result
   })

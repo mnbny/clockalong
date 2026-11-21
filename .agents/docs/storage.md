@@ -42,11 +42,11 @@ Clockify rows belong to a user and workspace. Linear rows belong to a verified v
 
 ## Agent timer records
 
-Local timer records belong to unfinished tracking operations. They retain identity, caller, mode, source, account, destination workspace, original billing details, and interval boundaries.
+Internal timer records own unsaved time. They retain identity, caller, source, account, destination workspace, original billing details, and interval boundaries. Clockify timer records link agent identities to their original entries; Clockify owns the time.
 
-Active timers survive app restarts. The first stop fixes the interval end, including after a failed save. Interrupted writes remain uncertain and do not automatically repeat.
+Active timers survive app restarts. The first internal stop fixes the interval end, including after a failed save. Interrupted internal saves remain uncertain and do not automatically repeat. Failed internal records remain until saved or explicitly dismissed.
 
-A confirmed Clockalong stop removes its local record even if the display cache cannot refresh. A manual UI stop or switch can end the real entry while retaining its managed record for a later agent stop.
+A confirmed stop removes its local record even if the display cache cannot refresh. Manual stops, switches, and confirmed deletions also remove real timer references. Successful running-timer reads retire references to ended entries in that account and workspace. Failed Clockify stops leave their references unchanged. Unconfirmed Clockify starts remain unresolved and do not automatically repeat.
 
 These records remain outside provider cache cleanup and settings backups. Disconnect preserves them. Saving requires the original Clockify account. Saved project and description details do not change when preferences or source data change.
 
