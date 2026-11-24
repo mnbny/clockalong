@@ -18,13 +18,13 @@ The app header owns manual tracking sync and its activity indicator. Individual 
 
 Manual starts and resumes represent sequential work. They use Clockify and replace its current timer. MCP starts represent concurrent agent work and preserve the existing timer.
 
-A fresh check of the destination workspace determines whether an MCP start can use Clockify. An occupied workspace or an unconfirmed earlier Clockify start requires internal tracking. Internal timers keep their mode when Clockify becomes idle.
+A fresh check of the destination workspace determines whether an MCP start can use Clockify. If the workspace has a running entry, the start uses internal tracking. If the workspace has a real timer reference that Clockify did not confirm as ended, the start also uses internal tracking. Clockify's running list can omit a new entry for a short time, so the check does not rely on that list alone. Internal timers keep their mode when Clockify becomes idle.
 
 Each MCP start has a separate timer identity, even for the same work item or caller. Caller labels help agents recognize their timers without merging them or enforcing ownership.
 
 Stopping an internal timer creates a completed Clockify entry from its saved interval and billing details. A real timer stop targets its original Clockify entry. If that entry already ended, Clockalong returns its actual interval without changing a replacement timer. A failed Clockify stop returns an error without creating local unsaved time.
 
-Confirmed stops, manual switches, and deletions remove the corresponding real timer references. Successful running-timer reads remove references to entries that ended outside the app. This cleanup applies only to the requested account and workspace. Later stops of removed references report that the timer is no longer active.
+Confirmed stops and deletions remove the corresponding real timer references. Clockalong retires other references only when Clockify confirms that the entry ended or no longer exists. Absence from the running list does not retire a reference. A Clockify start without a confirmed entry expires after the running list settles. Retirement applies only to the requested account and workspace. A stop of a removed reference adds no time.
 
 The Clockify widget lists only internal timers below its main stopwatch. A stop hides its row while the frozen interval saves. Failed saves return as compact rows with retry and dismiss controls. Retries use the original interval; retrying an unconfirmed save can duplicate time. Confirmed dismissal discards the failed internal record without a Clockify request. Dismissal cannot interrupt a save or remove time already in Clockify.
 

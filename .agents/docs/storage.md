@@ -44,9 +44,9 @@ Clockify rows belong to a user and workspace. Linear rows belong to a verified v
 
 Internal timer records own unsaved time. They retain identity, caller, source, account, destination workspace, original billing details, and interval boundaries. Clockify timer records link agent identities to their original entries; Clockify owns the time.
 
-Active timers survive app restarts. The first internal stop fixes the interval end, including after a failed save. Interrupted internal saves remain uncertain and do not automatically repeat. Failed internal records remain until saved or explicitly dismissed.
+Active timers survive app restarts. The first internal stop fixes the interval end, including after a failed save. An internal save that stops after it sends its request remains uncertain and does not automatically repeat. The app can retry a save that stopped before its request. Failed internal records remain until saved or explicitly dismissed.
 
-A confirmed stop removes its local record even if the display cache cannot refresh. Manual stops, switches, and confirmed deletions also remove real timer references. Successful running-timer reads retire references to ended entries in that account and workspace. Failed Clockify stops leave their references unchanged. Unconfirmed Clockify starts remain unresolved and do not automatically repeat.
+A confirmed stop removes its local record even if the display cache cannot refresh. Manual stops and confirmed deletions also remove real timer references. Clockalong retires other real timer references only when Clockify confirms that the entry ended or no longer exists. Clockify's running list can omit a new entry for a short time, so absence from that list does not retire a reference. Failed Clockify stops leave their references unchanged. Unconfirmed Clockify starts do not automatically repeat. Their records expire after the running list settles.
 
 These records remain outside provider cache cleanup and settings backups. Disconnect preserves them. Saving requires the original Clockify account. Saved project and description details do not change when preferences or source data change.
 
