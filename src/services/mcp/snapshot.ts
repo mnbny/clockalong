@@ -58,6 +58,7 @@ export type McpRunningEntry = {
   source: McpWorkSource | null
   sourceId: string | null
   startedAt: string
+  stopArguments: { timerId: string } | { entryId: string }
 }
 
 export type McpTrackingStatus = {
@@ -214,12 +215,9 @@ export function buildMcpSnapshot({
         }) satisfies McpTrackableWorkRow & { isClosed: boolean },
     ),
   ]
+  const userTimers = clockifyConnected ? trackedTimers.filter(timer => timer.userId === clockifyUserId) : []
   const trackingStatus = {
-    timers: clockifyConnected
-      ? trackedTimers
-          .filter(timer => timer.userId === clockifyUserId)
-          .map(timer => describeTrackedTimer(timer, now.getTime()))
-      : [],
+    timers: userTimers.map(timer => describeTrackedTimer(timer, now.getTime())),
     capturedAt,
     clockifyConnected,
     githubConnected,
@@ -231,6 +229,7 @@ export function buildMcpSnapshot({
       now,
       projectNames,
       source: runningSource,
+      timerId: userTimers.find(timer => timer.mode === 'clockify' && timer.entryId === scopedRunningEntry?.id)?.timerId,
     }),
     today: getClockifyReportTotals(clockifyConnected ? clockifyReports.today : undefined),
     week: getClockifyReportTotals(clockifyConnected ? clockifyReports.week : undefined),
@@ -444,11 +443,13 @@ function getRunningEntry({
   now,
   projectNames,
   source,
+  timerId,
 }: {
   entry: TimeEntryWithRatesDtoV1 | null
   now: Date
   projectNames: Map<string, string>
   source: { source: McpWorkSource | null; sourceId: string | null }
+  timerId?: string
 }): McpRunningEntry | null {
   const entryId = entry?.id
   const startedAt = entry?.timeInterval?.start
@@ -467,6 +468,7 @@ function getRunningEntry({
     source: source.source,
     sourceId: source.sourceId,
     startedAt,
+    stopArguments: timerId ? { timerId } : { entryId },
   }
 }
 

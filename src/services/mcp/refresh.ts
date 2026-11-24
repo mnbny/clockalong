@@ -11,6 +11,7 @@ import type { BuildMcpSnapshotInput, McpTrackableWorkRow, McpTrackingStatus } fr
 
 import { queryClient, queryKeys } from '../../lib/query-client'
 import { getInternalRefKeys } from '../../utils/templates'
+import { clockify } from '../clockify/client'
 import { clockifyEntriesInRange } from '../clockify/entry-queries'
 import { getClockifyEntryTableRange } from '../clockify/ranges'
 import { selectClockifyWorkspace } from '../clockify/workspaces'
@@ -20,7 +21,7 @@ import { linearTicketCache } from '../linear/ticket-cache'
 import { storage } from '../storage/config'
 import { syncProviders } from '../sync'
 import { mcp } from '../tauri/mcp-client'
-import { readTrackedTimers } from '../tracking/store'
+import { readTrackedTimers, retireEndedClockifyTimers } from '../tracking/store'
 import { buildMcpSnapshot } from './snapshot'
 
 type McpCapture = {
@@ -47,6 +48,17 @@ export function getMcpCapture(capturedAt: string) {
 
 export async function refreshMcpSnapshot(getInput: () => BuildMcpSnapshotInput): Promise<McpRefreshResult> {
   const result = await syncProviders()
+  const user = queryClient.getQueryData<UserDtoV1>(queryKeys.clockify.loggedUser)
+  const workspace =
+    user && selectClockifyWorkspace(user, queryClient.getQueryData<WorkspaceDtoV1[]>(queryKeys.clockify.workspaces))
+  if (user?.id && workspace?.id) {
+    const scope = { userId: user.id, workspaceId: workspace.id }
+    const running = queryClient.getQueryData<TimeEntryWithRatesDtoV1[]>(
+      queryKeys.clockify.runningEntry({ params: scope }),
+    )
+    // Retire timers that ended outside Clockalong so agents do not see them as running.
+    if (running) await retireEndedClockifyTimers(clockify, scope, running)
+  }
   const snapshot = await publishMcpSnapshot(getInput())
   return { ...result, capturedAt: snapshot.capturedAt }
 }
@@ -132,13 +144,7 @@ async function captureAndPublish(input: BuildMcpSnapshotInput, deadlineAt: numbe
   const trackedTimers = input.clockifyConnected && user?.id ? await readTrackedTimers(user.id) : []
   const snapshot = buildMcpSnapshot({
     ...input,
-    trackedTimers: trackedTimers.filter(timer => {
-      if (timer.mode === 'internal' || !timer.entryId) return true
-      const running = queryClient.getQueryData<TimeEntryWithRatesDtoV1[]>(
-        queryKeys.clockify.runningEntry({ params: { userId: timer.userId, workspaceId: timer.workspaceId } }),
-      )
-      return running?.some(entry => entry.id === timer.entryId && !entry.timeInterval?.end)
-    }),
+    trackedTimers,
     now,
     clockifyProjects: queryClient.getQueryData<ProjectDtoImplV1[]>(
       queryKeys.clockify.projects({ params: { workspaceId: workspace?.id } }),

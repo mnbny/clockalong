@@ -23,7 +23,7 @@ afterEach(async () => {
   await db.trackedTimers.clear()
 })
 
-test('status includes confirmed running references and unresolved starts but excludes stopped Clockify entries', async () => {
+test('status lists every stored timer with stop arguments, even when the running cache omits it', async () => {
   const scope = { userId: 'user', workspaceId: 'workspace' }
   const startedAt = new Date().toISOString()
   queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user', activeWorkspace: 'workspace' })
@@ -60,12 +60,18 @@ test('status includes confirmed running references and unresolved starts but exc
   ])
   vi.spyOn(mcp, 'publishSnapshot').mockResolvedValue()
   const snapshot = await publishMcpSnapshot({ clockifyConnected: true })
-  expect(snapshot.trackingStatus.timers.map(timer => timer.timerId).sort()).toEqual([
+  expect(snapshot.trackingStatus.timers.map(timer => timer.stopArguments.timerId).sort()).toEqual([
     'internal',
     'other-running',
+    'phantom',
     'running',
+    'stale',
     'unconfirmed',
   ])
+  expect(snapshot.trackingStatus.running?.stopArguments).toEqual({ timerId: 'running' })
+  await db.trackedTimers.delete('running')
+  const untracked = await publishMcpSnapshot({ clockifyConnected: true })
+  expect(untracked.trackingStatus.running?.stopArguments).toEqual({ entryId: 'running-entry' })
 })
 
 test('refresh publishes current provider caches and Clockify reads before completing', async () => {
