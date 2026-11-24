@@ -5,7 +5,7 @@ use tauri::{AppHandle, Runtime};
 
 const CURRENT_PROTOCOL_VERSION: &str = "2025-06-18";
 const PREVIOUS_PROTOCOL_VERSION: &str = "2025-03-26";
-const SERVER_INSTRUCTIONS: &str = "Clockalong tracks time in Clockify against Linear tickets, GitHub issues and pull requests, and local Quick Timer presets. Call `list_trackable_work` to sync all connected providers and see what can be tracked; pass refresh: false for cached results. Use `refresh` to sync without listing work, including before reading tracking status or recent entries. Use `start_timer` to begin billing against a listed item. It returns a timerId: pass that exact ID to `stop_timer`. Starts automatically use an internal concurrent timer when Clockify is occupied; existing timers are untouched. Optional callerId identifies your worktree or session but does not deduplicate starts. Multiple timers for the same task are allowed. Use `get_tracking_status` to find your timers. Internal timers become completed entries when stopped and never change mode. After an uncertain result, inspect status and Clockify; never compensate by automatically adding time or repeating a start. Use `add_time_entry` to add completed time in minutes for a listed item without changing the running timer. Overlaps are allowed. Use `fix_overlaps` with no arguments to repair completed-entry overlaps in the current calendar month using cached entries. Use `collapse_entries` with no arguments to combine short cached entries using the saved collapse settings. Both actions use the dashboard operations and resync afterward. Collapse allows overlaps; repair them separately if requested. Use `list_telegram_destinations` and `send_telegram_message` for the selected Telegram group only. No other Telegram groups are exposed. A send with unconfirmed delivery must not be automatically retried.";
+const SERVER_INSTRUCTIONS: &str = "Clockalong tracks time in Clockify against Linear tickets, GitHub issues and pull requests, and local Quick Timer presets. Call `list_trackable_work` to sync all connected providers and see what can be tracked; pass refresh: false for cached results. Use `refresh` to sync without listing work, including before reading tracking status or recent entries. Use `start_timer` to begin billing against a listed item. It returns a timerId for `stop_timer`. If you no longer have it, call `get_tracking_status` and pass a timer's stopArguments to `stop_timer`, or call `stop_timer` with no arguments to stop the only running timer. Starts automatically use an internal concurrent timer when Clockify is occupied; existing timers are untouched. Optional callerId identifies your worktree or session but does not deduplicate starts. Multiple timers for the same task are allowed. Use `get_tracking_status` to find your timers. Internal timers become completed entries when stopped and never change mode. After an uncertain result, inspect status and Clockify; never compensate by automatically adding time or repeating a start. Use `add_time_entry` to add completed time in minutes for a listed item without changing the running timer. Overlaps are allowed. Use `fix_overlaps` with no arguments to repair completed-entry overlaps in the current calendar month using cached entries. Use `collapse_entries` with no arguments to combine short cached entries using the saved collapse settings. Both actions use the dashboard operations and resync afterward. Collapse allows overlaps; repair them separately if requested. Use `list_telegram_destinations` and `send_telegram_message` for the selected Telegram group only. No other Telegram groups are exposed. A send with unconfirmed delivery must not be automatically retried.";
 const STARTUP_ERROR: &str = "Clockalong is still starting up. Try again in a moment.";
 const TIMEOUT_ERROR: &str = "Clockalong did not respond in time.";
 const CLOCKIFY_ERROR: &str =
@@ -564,8 +564,12 @@ fn validate_start_timer(arguments: &Value) -> Result<(), ProtocolError> {
 }
 
 fn validate_stop_timer(arguments: &Value) -> Result<(), ProtocolError> {
-    let arguments = validate_object_keys(arguments, &["timerId"])?;
-    required_string(arguments, "timerId")?;
+    let arguments = validate_object_keys(arguments, &["timerId", "entryId"])?;
+    for key in ["timerId", "entryId"] {
+        if optional_string(arguments, key)?.is_some_and(|id| id.trim().is_empty()) {
+            return Err(invalid_params());
+        }
+    }
     Ok(())
 }
 
@@ -788,7 +792,7 @@ fn bridge_error_message(error: McpBridgeError) -> String {
         McpBridgeError::Timeout { tool, .. } if tool == "start_timer" =>
             "Timer start is unconfirmed. Check get_tracking_status for your callerId before starting again; another start creates another timer.".to_string(),
         McpBridgeError::Timeout { tool, .. } if tool == "stop_timer" =>
-            "Timer save is unconfirmed. Check get_tracking_status and Clockify. Retry only the same timerId; do not backfill automatically.".to_string(),
+            "Timer stop is unconfirmed. Check get_tracking_status and Clockify before retrying. Retry only with an explicit timerId or entryId, never without arguments; do not backfill automatically.".to_string(),
         McpBridgeError::Timeout { .. } => TIMEOUT_ERROR.to_string(),
         McpBridgeError::Webview(message) | McpBridgeError::Internal(message) => message,
     }
@@ -1026,8 +1030,15 @@ fn tool_catalog() -> Vec<Value> {
         }),
         json!({
             "name": "stop_timer",
-            "description": "Stops only the specified timer. Internal timers save a completed entry. Supply timerId from start_timer or get_tracking_status. Repeating a stop never creates another entry. Unconfirmed saves require inspection in Clockify, not automatic backfill.",
-            "inputSchema": { "type": "object", "properties": { "timerId": { "type": "string", "minLength": 1 } }, "required": ["timerId"], "additionalProperties": false },
+            "description": "Stops one timer. Pass timerId from start_timer, or copy stopArguments from get_tracking_status. entryId stops a running Clockify entry, including one without a Clockalong timer; a timerId that matches no timer is also tried as an entry ID. Both may be passed when they name the same timer; different timers stop nothing. With no arguments, stops the only running timer; when several run, nothing stops and the candidates' stopArguments are returned. A repeated stop without arguments can select a different timer, so retry only with the returned timerId or entryId. Internal timers save a completed entry. Stopping an entry that already ended returns its recorded interval. Repeating a stop never creates another entry. Unconfirmed saves require inspection in Clockify, not automatic backfill.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "timerId": { "type": "string", "minLength": 1, "description": "Clockalong timer ID from start_timer or get_tracking_status." },
+                    "entryId": { "type": "string", "minLength": 1, "description": "Clockify entry ID, for example running.entryId from get_tracking_status." },
+                },
+                "additionalProperties": false,
+            },
         }),
         json!({
             "name": "fix_overlaps",
@@ -1041,7 +1052,7 @@ fn tool_catalog() -> Vec<Value> {
         }),
         json!({
             "name": "get_tracking_status",
-            "description": "Returns Clockify status and timers: Clockify timers matching cached running entries, unresolved Clockify starts, and active or unresolved internal timers, with timerId, callerId, source, mode, state and elapsedSeconds. Internal timers remain listed when Clockify is idle. Frozen endedAt intervals no longer accrue time.",
+            "description": "Returns Clockify status and every Clockalong timer for the connected account, with timerId, callerId, source, sourceId, description, mode, state, elapsedSeconds and stopArguments. running is the current Clockify entry, with stopArguments even when no Clockalong timer owns it. Use callerId, source and description to recognize your timer, then pass its stopArguments to stop_timer. Internal timers remain listed when Clockify is idle. Frozen endedAt intervals no longer accrue time.",
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
         }),
         json!({
@@ -1073,7 +1084,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn timers_require_specific_stops_and_allow_optional_caller_labels() {
+    fn stops_accept_timer_entry_or_no_identity_and_starts_allow_caller_labels() {
         assert!(validate_start_timer(
             &json!({"source":"github", "id":"item", "callerId":"worktree"})
         )
@@ -1085,9 +1096,12 @@ mod tests {
         assert!(
             validate_start_timer(&json!({"source":"github", "id":"item", "callerId":42})).is_err()
         );
-        assert!(validate_stop_timer(&json!({})).is_err());
+        assert!(validate_stop_timer(&json!({})).is_ok());
         assert!(validate_stop_timer(&json!({"timerId":""})).is_err());
+        assert!(validate_stop_timer(&json!({"entryId":" "})).is_err());
         assert!(validate_stop_timer(&json!({"timerId":"local-timer"})).is_ok());
+        assert!(validate_stop_timer(&json!({"entryId":"clockify-entry"})).is_ok());
+        assert!(validate_stop_timer(&json!({"timerId":"a", "entryId":"b"})).is_ok());
         assert!(
             validate_stop_timer(&json!({"timerId":"local-timer", "callerId":"owner"})).is_err()
         );
