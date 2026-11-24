@@ -2,7 +2,7 @@ import type { ClockifyProject } from '../storage/config'
 import type { CreateTimeEntryRequest, TimeEntryWithRatesDtoV1, UpdateTimeEntryRequest } from './generated/clockify'
 
 import { coordinateClockifyTimer } from '../tracking/mutations'
-import { removeClockifyTimerReference, removeStoppedClockifyTimerReferences } from '../tracking/store'
+import { removeClockifyTimerReference } from '../tracking/store'
 import { clockify } from './client'
 import { type ClockifyTimeEntryInterval, getClockifyTimeEntryTiming } from './time-entry-interval'
 
@@ -17,17 +17,9 @@ export function getClockifyTimeEntryTitle(entry: TimeEntryWithRatesDtoV1) {
 }
 
 export function getRunningClockifyTimeEntries(userId: string, workspaceId: string) {
-  return coordinateClockifyTimer(async () => {
-    const entries = await clockify.getTimeEntries({
-      params: { workspaceId, userId },
-      queries: { hydrated: true, 'in-progress': 'true', page: 1, 'page-size': 1 },
-    })
-    try {
-      await removeStoppedClockifyTimerReferences({ userId, workspaceId }, entries)
-    } catch {
-      console.warn('[clockify sync] Could not retire stopped timer references.')
-    }
-    return entries
+  return clockify.getTimeEntries({
+    params: { workspaceId, userId },
+    queries: { hydrated: true, 'in-progress': 'true', page: 1, 'page-size': 1 },
   })
 }
 
@@ -47,19 +39,7 @@ export async function createClockifyTimeEntryFromEntry(
 
 export function createClockifyTimeEntry(body: CreateTimeEntryRequest, workspaceId: string) {
   const create = () => clockify.createTimeEntry(body, { params: { workspaceId } })
-  return body.end
-    ? create()
-    : coordinateClockifyTimer(async () => {
-        const entry = await create()
-        if (entry.userId && entry.id && entry.timeInterval?.start) {
-          try {
-            await removeStoppedClockifyTimerReferences({ userId: entry.userId, workspaceId }, [entry])
-          } catch {
-            console.warn('[clockify sync] Could not retire replaced timer references.')
-          }
-        }
-        return entry
-      })
+  return body.end ? create() : coordinateClockifyTimer(create)
 }
 
 export function stopClockifyTimeEntry(entry: TimeEntryWithRatesDtoV1) {

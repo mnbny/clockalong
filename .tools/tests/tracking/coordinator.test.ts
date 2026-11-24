@@ -8,15 +8,11 @@ import * as auth from '../../../src/services/clockify/auth'
 import * as clients from '../../../src/services/clockify/client'
 import { clockify } from '../../../src/services/clockify/client'
 import { clearSyncedClockifyTimeEntries } from '../../../src/services/clockify/sync'
-import {
-  createClockifyTimeEntry,
-  getRunningClockifyTimeEntries,
-  stopClockifyTimeEntry,
-} from '../../../src/services/clockify/time-entries'
+import { createClockifyTimeEntry, stopClockifyTimeEntry } from '../../../src/services/clockify/time-entries'
 import { DB, db } from '../../../src/services/db'
 import { storage } from '../../../src/services/storage/config'
 import { dismissTrackedTimer, startTrackedTimer, stopTrackedTimer } from '../../../src/services/tracking/coordinator'
-import { describeTrackedTimer } from '../../../src/services/tracking/store'
+import { describeTrackedTimer, retireEndedClockifyTimers } from '../../../src/services/tracking/store'
 
 let running: TimeEntryWithRatesDtoV1 | null
 const entries = new Map<string, TimeEntryWithRatesDtoV1>()
@@ -181,10 +177,21 @@ test('a sequential UI start replaces only the real timer; an agent stop never to
   )
   expect(running?.id).toBe(replacement.id)
   expect((await db.trackedTimers.get(internal.timerId))?.endedAt).toBeNull()
-  expect(await db.trackedTimers.get(real.timerId)).toBeUndefined()
-  await expect(stopTrackedTimer(real.timerId)).rejects.toThrow('no longer active')
+  const stopped = await stopTrackedTimer(real.timerId)
+  expect(stopped).toMatchObject({ id: real.entryId, timeInterval: { end: replacement.timeInterval?.start } })
   expect(running?.id).toBe(replacement.id)
   expect(clockify.updateTimeEntry).not.toHaveBeenCalled()
+  expect(await db.trackedTimers.get(real.timerId)).toBeUndefined()
+})
+
+test('a stale empty running list right after a start keeps the timer stoppable and the next start internal', async () => {
+  const first = await startTrackedTimer(draft())
+  vi.mocked(clockify.getTimeEntries).mockResolvedValue([]) // Clockify's list lags behind the new entry.
+  const second = await startTrackedTimer(draft())
+  expect(second.mode).toBe('internal')
+  expect(running?.id).toBe(first.entryId)
+  expect(await stopTrackedTimer(first.timerId)).toMatchObject({ id: first.entryId, mode: 'clockify' })
+  expect(running).toBeNull()
 })
 
 test('UI and MCP starts share the critical section, while UI starts always remain real', async () => {
@@ -204,7 +211,6 @@ test('UI and MCP starts share the critical section, while UI starts always remai
   expect(first.mode).toBe('clockify')
   expect(running?.id).toBe(second.id)
   expect(clockify.createTimeEntry).toHaveBeenCalledTimes(2)
-  expect(await db.trackedTimers.count()).toBe(0)
 })
 
 test('a UI stop retires the Clockify reference so a late agent stop cannot resurrect a deleted entry', async () => {
@@ -254,43 +260,38 @@ test('a failed Clockify stop does not freeze local time; a retry reads the confi
   expect(await db.trackedTimers.get(real.timerId)).toBeUndefined()
 })
 
-test('running refresh retires ended and legacy Clockify references only in its confirmed scope', async () => {
+test('retirement removes only references Clockify confirms ended, never mere absence from the running list', async () => {
   const real = await startTrackedTimer(draft())
   const internal = await startTrackedTimer(draft())
-  const record = (await db.trackedTimers.get(real.timerId))!
+  const startedAt = new Date(Date.now() - 120_000).toISOString()
+  const record = { ...(await db.trackedTimers.get(real.timerId))!, startedAt }
+  entries.set('ended-entry', { ...running!, id: 'ended-entry', timeInterval: { start: startedAt, end: startedAt } })
   await db.trackedTimers.bulkPut([
-    { ...record, timerId: 'old-failure', entryId: 'deleted-entry', state: 'failed', endedAt: record.startedAt },
-    { ...record, timerId: 'other-workspace', workspaceId: 'other-workspace' },
-    { ...record, timerId: 'other-user', userId: 'other-user' },
+    record,
+    { ...record, timerId: 'ended', entryId: 'ended-entry' },
+    { ...record, timerId: 'deleted', entryId: 'deleted-entry' },
+    { ...record, timerId: 'rejected', entryId: 'rejected-entry' },
+    { ...record, timerId: 'unconfirmed', entryId: null, state: 'failed', uncertain: true },
+    { ...record, timerId: 'other-workspace', workspaceId: 'other-workspace', entryId: 'ended-entry' },
+    { ...record, timerId: 'other-user', userId: 'other-user', entryId: 'ended-entry' },
   ])
-  vi.mocked(clockify.getTimeEntries).mockRejectedValueOnce(new Error('Offline'))
-  await expect(getRunningClockifyTimeEntries('user', 'workspace')).rejects.toThrow('Offline')
-  expect(await db.trackedTimers.count()).toBe(5)
-  await getRunningClockifyTimeEntries('user', 'workspace')
-  expect(await db.trackedTimers.get('old-failure')).toBeUndefined()
-  expect(await db.trackedTimers.get(real.timerId)).toBeDefined()
-  running = null // Stopped or deleted in another Clockify client.
-  await getRunningClockifyTimeEntries('user', 'workspace')
-  expect((await db.trackedTimers.toArray()).map(timer => timer.timerId).sort()).toEqual(
-    [internal.timerId, 'other-workspace', 'other-user'].sort(),
-  )
-})
-
-test('a running refresh cannot retire a timer started while its response was pending', async () => {
-  let release!: () => void
-  vi.mocked(clockify.getTimeEntries).mockImplementationOnce(async () => {
-    await new Promise<void>(resolve => {
-      release = resolve
+  const missing = (status: number) =>
+    new AxiosError('Missing', String(status), undefined, undefined, {
+      status,
+      data: {},
+      statusText: '',
+      headers: {},
+      config: { headers: new AxiosHeaders() },
     })
-    return []
+  vi.mocked(clockify.getTimeEntry).mockImplementation(async ({ params }) => {
+    const entry = entries.get(params.id)
+    if (!entry) throw missing(params.id === 'rejected-entry' ? 400 : 404)
+    return structuredClone(entry)
   })
-  const refresh = getRunningClockifyTimeEntries('user', 'workspace')
-  await vi.waitFor(() => expect(release).toBeDefined())
-  const start = startTrackedTimer(draft())
-  release()
-  await refresh
-  const timer = await start
-  expect((await db.trackedTimers.get(timer.timerId))?.entryId).toBe(running?.id)
+  await retireEndedClockifyTimers(clockify, { userId: 'user', workspaceId: 'workspace' }, []) // The list omits a running entry.
+  expect((await db.trackedTimers.toArray()).map(timer => timer.timerId).sort()).toEqual(
+    [real.timerId, internal.timerId, 'other-workspace', 'other-user'].sort(),
+  )
 })
 
 test('dismiss only removes failed internal time and cannot race a pending retry', async () => {

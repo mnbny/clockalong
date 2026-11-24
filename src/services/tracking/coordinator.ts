@@ -11,7 +11,7 @@ import { endClockifyTimeEntry } from '../clockify/time-entries'
 import { db } from '../db'
 import { storage } from '../storage/config'
 import { coordinateClockifyTimer, getTrackingSession } from './mutations'
-import { describeTrackedTimer, readTrackedTimers, removeStoppedClockifyTimerReferences } from './store'
+import { describeTrackedTimer, retireEndedClockifyTimers } from './store'
 
 const stops = new Map<string, ReturnType<typeof finishTimer>>()
 let restoration: Promise<void> | undefined
@@ -19,12 +19,21 @@ let restoration: Promise<void> | undefined
 export function restoreTrackedTimers() {
   return (restoration ??= db.trackedTimers
     .filter(timer => timer.state === 'starting' || timer.state === 'saving')
-    .modify({
-      state: 'failed',
-      uncertain: true,
-      error: 'The previous request was interrupted. Check Clockify before retrying.',
+    .modify(timer => {
+      // Internal saves become uncertain just before their request; earlier interruptions sent nothing.
+      if (timer.state === 'starting') timer.uncertain = true
+      timer.state = 'failed'
+      timer.error = timer.uncertain
+        ? 'The previous request was interrupted. Check Clockify before retrying.'
+        : 'Saving was interrupted before reaching Clockify. Retry to save this time.'
     })
-    .then(() => {}))
+    .then(
+      () => {},
+      error => {
+        restoration = undefined
+        throw error
+      },
+    ))
 }
 
 export async function startTrackedTimer(
@@ -49,12 +58,18 @@ export async function startTrackedTimer(
       queries: { 'in-progress': 'true', 'page-size': 1, page: 1 },
     })
     check()
-    await removeStoppedClockifyTimerReferences({ userId: session.userId, workspaceId: input.workspaceId }, running)
-    const unresolvedStart = (await readTrackedTimers(session.userId)).some(
-      timer =>
-        timer.workspaceId === input.workspaceId && timer.mode === 'clockify' && !timer.entryId && timer.uncertain,
-    )
-    const mode = running.length || unresolvedStart ? 'internal' : 'clockify'
+    // A stale empty list must not let a second start replace a timer Clockalong already started.
+    const occupied =
+      running.length > 0 ||
+      (
+        await retireEndedClockifyTimers(
+          session.client,
+          { userId: session.userId, workspaceId: input.workspaceId },
+          running,
+        )
+      ).length > 0
+    check()
+    const mode = occupied ? 'internal' : 'clockify'
     let timer: TrackedTimer = {
       ...input,
       body: { ...input.body, start: startedAt },
@@ -117,8 +132,15 @@ async function finishTimer(timerId: string, requestedEnd: string, retryUncertain
   if (queryClient.getQueryData<UserDtoV1>(queryKeys.clockify.loggedUser)?.id !== timer.userId) {
     throw new Error('Reconnect the original Clockify account before saving this timer.')
   }
+  if (timer.mode === 'clockify' && !timer.entryId) {
+    if (timer.state === 'starting') throw new Error('This timer is still starting. Try again in a moment.')
+    await db.trackedTimers.delete(timerId)
+    throw new Error(
+      'This Clockify start was never confirmed, so nothing was stopped and its local record was cleared. If get_tracking_status shows the entry running, stop it with its stopArguments.',
+    )
+  }
   timer = { ...timer, endedAt: timer.endedAt ?? requestedEnd }
-  const needsReview = (timer.uncertain || timer.state === 'saving') && !retryUncertain && timer.mode === 'internal'
+  const needsReview = timer.uncertain && !retryUncertain && timer.mode === 'internal'
   if (timer.mode === 'internal') await db.trackedTimers.put({ ...timer, state: needsReview ? 'failed' : 'saving' })
   if (needsReview) {
     throw new Error(
@@ -131,8 +153,6 @@ async function finishTimer(timerId: string, requestedEnd: string, retryUncertain
     try {
       const session = await getTrackingSession(record.userId)
       session.assertCurrent()
-      if (record.mode === 'clockify' && !record.entryId)
-        throw new Error('The Clockify start is unconfirmed. Check Clockify and handle this interval manually.')
       if (record.mode === 'internal')
         await db.trackedTimers.update(timerId, { state: 'saving', uncertain: true, error: null })
       session.assertCurrent()
@@ -153,7 +173,14 @@ async function finishTimer(timerId: string, requestedEnd: string, retryUncertain
       await db.trackedTimers.delete(timerId)
       return { ...entry, mode: record.mode, userId: record.userId, workspaceId: record.workspaceId }
     } catch (error) {
-      if (record.mode === 'clockify') throw error
+      if (record.mode === 'clockify') {
+        if (!axios.isAxiosError(error) || error.response?.status !== 404) throw error
+        await db.trackedTimers.delete(timerId)
+        throw Object.assign(
+          new Error('The Clockify entry for this timer no longer exists. Nothing was stopped and no time was added.'),
+          { cause: error },
+        )
+      }
       const uncertain = sent ? !isRejectedWrite(error) : record.uncertain
       await db.trackedTimers.update(timerId, {
         state: 'failed',

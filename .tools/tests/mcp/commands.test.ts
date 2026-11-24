@@ -1,5 +1,6 @@
 import type { McpCommandPayload } from '../../../src/services/tauri/mcp-client'
 
+import { AxiosError, AxiosHeaders } from 'axios'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { queryClient, queryKeys } from '../../../src/lib/query-client'
@@ -306,6 +307,61 @@ test('stopping through MCP caches a partial response immediately', async () => {
   })
 })
 
+test('stop_timer recovers without the original timerId and never guesses between running timers', async () => {
+  await seedRealTimer()
+  queryClient.setQueryData(queryKeys.clockify.workspaces, [{ id: 'workspace' }])
+  vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(async () => {})
+  vi.spyOn(storage, 'set').mockImplementation(async () => {})
+  const stopped = new Set<string>()
+  const remote = (id: string) => ({
+    id,
+    userId: 'user',
+    workspaceId: 'workspace',
+    description: id,
+    timeInterval: { start: '2026-01-01T10:00:00Z' },
+  })
+  vi.mocked(clockify.getTimeEntry).mockImplementation(async ({ params }) => {
+    if (params.id === 'missing') throw new AxiosError('Not found', '404', undefined, undefined, notFound)
+    return remote(params.id)
+  })
+  const update = vi.spyOn(clockify, 'updateTimeEntry').mockImplementation(async (body, { params }) => {
+    stopped.add(params.id)
+    return { ...remote(params.id), timeInterval: { start: body.start, end: body.end } }
+  })
+  vi.mocked(clockify.getTimeEntries).mockImplementation(async () => (stopped.has('manual') ? [] : [remote('manual')]))
+  const stop = (arguments_: Record<string, string>) =>
+    executeMcpCommand({ tool: 'stop_timer', requestId: 'stop', arguments: arguments_ }, context)
+
+  expect(await stop({})).toMatchObject({
+    ok: false,
+    error: { message: expect.stringMatching(/Several timers.*"timerId":"tracked".*"entryId":"manual"/) },
+  })
+  expect(update).not.toHaveBeenCalled()
+  expect(await stop({ entryId: 'manual' })).toMatchObject({ ok: true, result: { timerId: null, entryId: 'manual' } })
+  expect(await stop({})).toMatchObject({ ok: true, result: { timerId: 'tracked', entryId: 'timer' } })
+  expect(await stop({})).toMatchObject({
+    ok: false,
+    error: { message: expect.stringContaining('No timer is running') },
+  })
+  update.mockRejectedValueOnce(new AxiosError('Rejected', '400', undefined, undefined, { ...notFound, status: 400 }))
+  expect(await stop({ entryId: 'other' })).toMatchObject({ ok: false, error: { message: 'Rejected' } })
+  expect(await stop({ timerId: 'missing' })).toMatchObject({
+    ok: false,
+    error: { message: expect.stringContaining('get_tracking_status') },
+  })
+  await seedRealTimer() // An entry ID passed as timerId still finds the timer that owns it.
+  expect(await stop({ timerId: 'timer' })).toMatchObject({ ok: true, result: { timerId: 'tracked', entryId: 'timer' } })
+  await seedRealTimer() // Both IDs may name one timer; IDs of different timers stop nothing.
+  expect(await stop({ timerId: 'tracked', entryId: 'manual' })).toMatchObject({
+    ok: false,
+    error: { message: expect.stringContaining('different timers') },
+  })
+  expect(await stop({ timerId: 'tracked', entryId: 'timer' })).toMatchObject({
+    ok: true,
+    result: { timerId: 'tracked' },
+  })
+})
+
 test('an internal save failure returns an MCP error and retains the unsaved interval', async () => {
   await seedRealTimer()
   await db.trackedTimers.update('tracked', { mode: 'internal', entryId: null })
@@ -362,6 +418,8 @@ beforeEach(() => {
   vi.spyOn(clockifyClient, 'createClockifyClient').mockReturnValue(clockify)
   vi.spyOn(clockify, 'getTimeEntries').mockResolvedValue([])
 })
+
+const notFound = { status: 404, data: {}, statusText: '', headers: {}, config: { headers: new AxiosHeaders() } }
 
 async function seedRealTimer() {
   queryClient.setQueryData(queryKeys.clockify.loggedUser, { id: 'user' })

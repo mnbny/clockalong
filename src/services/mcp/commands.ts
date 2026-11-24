@@ -10,18 +10,21 @@ import type {
   McpCommandPayload,
   McpCommandResult,
   McpStartTimerArguments,
+  McpStopTimerArguments,
 } from '../tauri/mcp-client'
 
 import { isTauri } from '@tauri-apps/api/core'
+import axios from 'axios'
 
 import { getClockalongAuthState } from '../../hooks/useAppAuth'
 import { queryClient, queryKeys } from '../../lib/query-client'
 import { getErrorMessage } from '../../utils/errors'
+import { clockify } from '../clockify/client'
 import { collapseClockifyMonthEntries } from '../clockify/collapse-entries'
 import { clockifyEntryCache } from '../clockify/entry-cache'
 import { fixClockifyMonthOverlaps } from '../clockify/overlap-repair'
 import { cacheClockifyEntryResult } from '../clockify/sync'
-import { createClockifyTimeEntry } from '../clockify/time-entries'
+import { createClockifyTimeEntry, getRunningClockifyTimeEntries, stopClockifyTimeEntry } from '../clockify/time-entries'
 import {
   type ClockifyTimeEntryInterval,
   getClockifyTimeEntryIntervalFromMinutes,
@@ -41,6 +44,7 @@ import {
 } from '../quick-timers/timers'
 import { storage } from '../storage/config'
 import { invalidateTracking, refreshStoppedTimer, startTrackedTimer, stopTrackedTimer } from '../tracking/coordinator'
+import { readTrackedTimers, retireEndedClockifyTimers } from '../tracking/store'
 
 export type McpCommandErrorCode =
   | 'clockify_disconnected'
@@ -108,7 +112,7 @@ export async function executeMcpCommand(
         return execution
       }
       case 'stop_timer': {
-        const execution = await executeStopTimer(command.arguments.timerId, lifecycle)
+        const execution = await executeStopTimer(command.arguments, lifecycle)
         return execution
       }
       case 'fix_overlaps':
@@ -274,10 +278,80 @@ async function executeCreateTimeEntry(
   return { ok: true, result }
 }
 
-async function executeStopTimer(timerId: string, lifecycle: number): Promise<McpCommandExecution> {
-  const entry = await stopTrackedTimer(timerId)
+async function executeStopTimer(arguments_: McpStopTimerArguments, lifecycle: number): Promise<McpCommandExecution> {
+  const { entry, timerId } = await resolveAndStopTimer(arguments_)
   await refreshStoppedTimer(entry, lifecycle)
   return { ok: true, result: { ...getStopTimerResult(entry), timerId, mode: entry.mode } }
+}
+
+// Agents lose timer IDs, so a timerId that matches no timer is also tried as a Clockify entry ID.
+async function resolveAndStopTimer({ timerId, entryId = timerId }: McpStopTimerArguments) {
+  const tracked = timerId ? await db.trackedTimers.get(timerId) : undefined
+  if (tracked) {
+    // Both IDs may name one timer. Different IDs could stop a second timer when the request is retried.
+    if (entryId !== timerId && tracked.entryId !== entryId)
+      throw new Error('timerId and entryId name different timers, so nothing was stopped. Pass only one of them.')
+    return { timerId: tracked.timerId, entry: await stopTrackedTimer(tracked.timerId) }
+  }
+  const user = queryClient.getQueryData<UserDtoV1>(queryKeys.clockify.loggedUser)
+  const workspace = selectClockifyWorkspace(
+    user,
+    queryClient.getQueryData<WorkspaceDtoV1[]>(queryKeys.clockify.workspaces),
+  )
+  if (!user?.id || !workspace?.id) throw new Error('Clockify account or workspace is not ready. Refresh and try again.')
+  const userId = user.id
+  const workspaceId = workspace.id
+  const stopEntry = async (id: string) => {
+    const timer = (await readTrackedTimers(userId)).find(timer => timer.mode === 'clockify' && timer.entryId === id)
+    if (timer) return { timerId: timer.timerId, entry: await stopTrackedTimer(timer.timerId) }
+    // Only a failed lookup means nothing matched; other failures keep their own reason.
+    await clockify.getTimeEntry({ params: { id, workspaceId } }).catch((error: unknown) => {
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined
+      if (status !== 400 && status !== 404) throw error
+      throw Object.assign(
+        new Error(
+          `No timer or Clockify entry matches ${id}. No time was added; do not backfill automatically. Call get_tracking_status and use the stopArguments it lists.`,
+        ),
+        { cause: error },
+      )
+    })
+    const entry = await stopClockifyTimeEntry({ id, userId, workspaceId })
+    return { timerId: null, entry: { ...entry, mode: 'clockify' as const, userId, workspaceId } }
+  }
+  if (entryId) return stopEntry(entryId)
+
+  const running = await getRunningClockifyTimeEntries(userId, workspaceId)
+  await retireEndedClockifyTimers(clockify, { userId, workspaceId }, running)
+  const timers = (await readTrackedTimers(userId)).filter(timer => timer.state === 'active' && !timer.endedAt)
+  const candidates = [
+    ...timers.map(timer => ({
+      stopArguments: { timerId: timer.timerId },
+      callerId: timer.callerId,
+      description: timer.body.description ?? '',
+      startedAt: timer.startedAt,
+    })),
+    ...running.flatMap(entry =>
+      entry.id && !timers.some(timer => timer.entryId === entry.id)
+        ? [
+            {
+              stopArguments: { entryId: entry.id },
+              callerId: null,
+              description: entry.description ?? '',
+              startedAt: entry.timeInterval?.start ?? null,
+            },
+          ]
+        : [],
+    ),
+  ]
+  const [candidate] = candidates
+  if (!candidate) throw new Error('No timer is running. Nothing was stopped.')
+  if (candidates.length > 1)
+    throw new Error(
+      `Several timers are running, so nothing was stopped. Call stop_timer with the stopArguments of the timer to stop: ${JSON.stringify(candidates)}`,
+    )
+  return 'timerId' in candidate.stopArguments
+    ? { timerId: candidate.stopArguments.timerId, entry: await stopTrackedTimer(candidate.stopArguments.timerId) }
+    : stopEntry(candidate.stopArguments.entryId)
 }
 
 async function getLinearTicket(id: string, viewerId: string | null) {

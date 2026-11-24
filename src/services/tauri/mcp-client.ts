@@ -57,7 +57,7 @@ export type McpCommandPayload = { deadlineAt?: number } & (
       requestId: string
       tool: 'fix_overlaps' | 'collapse_entries'
     }
-  | { arguments: { timerId: string }; requestId: string; tool: 'stop_timer' }
+  | { arguments: McpStopTimerArguments; requestId: string; tool: 'stop_timer' }
   | {
       arguments: Record<string, never>
       requestId: string
@@ -84,7 +84,10 @@ type McpCompletedEntryResult = {
   startedAt: string
 }
 
-export type McpStopTimerResult = McpCompletedEntryResult & { timerId: string; mode: 'clockify' | 'internal' }
+export type McpStopTimerArguments = { timerId?: string; entryId?: string }
+
+/** timerId is null when the stopped Clockify entry had no Clockalong timer. */
+export type McpStopTimerResult = McpCompletedEntryResult & { timerId: string | null; mode: 'clockify' | 'internal' }
 
 export type McpAddTimeEntryResult = McpCompletedEntryResult & {
   billable: boolean
